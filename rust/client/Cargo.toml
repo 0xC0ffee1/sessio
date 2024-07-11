@@ -1,0 +1,67 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../common" }
+coordinator = { path = "../coordinator" }
+tokio = { version = "1.0", features = ["full"] }
+quinn = "0.10.2"
+tokio-util = { version = "0.6", features = ["io"] }
+russh = "0.44.0-beta.2"
+russh-keys = "0.44.0-beta.2"
+async-trait = "0.1.80"
+env_logger = "0.10"
+anyhow = "1.0.86"
+log = "0.4"
+rand = { version = "0.8", features = ["std"] }
+ssh-key = { version = "0.6.6", features = ["ed25519"] }
+
+
+clap = { version = "4.5.6", features = ["derive"] }
+url = "2.5.0"
+rustls = { version = "0.21.12", features = ["quic","dangerous_configuration"] }
+rustls-pemfile = "2.1.2"
+rcgen = "0.12.1"
+
+log4rs = "1.2.0"
+serde = "1.0.203"
+toml = "0.8.14"
+crossterm = "0.27.0"
+shell-escape = "0.1.5"
+futures = "0.3.30"
+bytes = "1.6.0"
+serde_json = "1.0.118"
+socket2 = "0.5.7"
+tonic = "0.11.0"
+prost = "0.12"
+android_logger = "0.10"
+tokio-stream = { version = "0.1.15", features = ["net"] }
+async-stream = "0.3.5"
+
+[target.'cfg(target_os="android")'.dependencies]
+jni = { version = "0.5", default-features = false }
+
+
+[target.'cfg(windows)'.dependencies]
+uds_windows = "1.1.0"
+
+futures-util = "0.3.30"
+
+[dependencies.uuid]
+version = "1.9.1"
+features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]
+
+
+[build-dependencies]
+tonic-build = "0.11"
+
+
+[lib]
+name = "grpc_server"
+crate-type =  ["cdylib"]

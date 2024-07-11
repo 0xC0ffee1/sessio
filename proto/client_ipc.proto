@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "net.c0ffee1.sessio.clientipc";
+option java_outer_classname = "SessioClientIPC";
+
+package clientipc;
+
+
+
+service ClientIPC {
+    rpc NewConnection(NewConnectionRequest) returns (NewConnectionResponse);
+    rpc NewSession(NewSessionRequest) returns (NewSessionResponse);
+
+    rpc GenKeys(GenKeysRequest) returns (GenKeysResponse);
+
+    //Open a SSH channel and a bi-directional stream
+    rpc OpenChannel(stream Msg) returns (stream Msg);
+}
+
+message Msg{
+    oneof type{
+        Data data = 1;
+        PtyRequest pty_request = 2;
+        ShellRequest shell_request = 3;
+        ChannelInit channel_init = 4;
+    }
+
+    message Data{
+        bytes payload = 1;
+    }
+
+    message PtyRequest{
+        uint32 col_width = 1;
+        uint32 row_height = 2;
+    }
+
+    message ShellRequest{
+        
+    }
+
+    message ChannelInit{
+        string session_id = 1;
+    }
+}
+
+
+message PtyRequestResponse{
+    string channel_id = 1;
+}
+
+message GenKeysRequest{
+    string key_path = 1;
+}
+message GenKeysResponse{
+    string key_path = 1;
+}
+
+message StreamRequest {
+    string session_id = 2;
+    bytes data = 1;
+}
+
+message StreamResponse {
+    bytes data = 1;
+}
+
+
+message NewSessionRequest {
+    string connection_id = 1;
+    string username = 2;
+    string private_key = 3;
+}
+
+message NewSessionResponse {
+    string session_id = 1;
+}
+
+//Opening a new connection locally
+message NewConnectionRequest {
+    string coordinator_url = 1;
+    string target_id = 2;
+}
+
+message NewConnectionResponse {
+    string connection_id = 1;
+}
