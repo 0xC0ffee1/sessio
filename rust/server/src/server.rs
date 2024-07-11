@@ -190,7 +190,7 @@ fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error:
         if path != Path::new("keys/ssh_host_ed25519_key") {
             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "Specified private key file doesn't exist.")));
         }
-        generate_keypair(path, Algorithm::Ed25519, "ssh_host_ed25519_key");
+        generate_keypair("keys/", Algorithm::Ed25519, "ssh_host_ed25519_key");
     }
     let private_key = russh_keys::load_secret_key(path.to_str().unwrap(), None)?;
     Ok(private_key)
