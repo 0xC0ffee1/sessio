@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::io::{Read, Write};
 use ssh_key::{Algorithm, LineEnding, PrivateKey};
 use tokio::io;
+use log::info;
 use rand::rngs::OsRng;
 
 
@@ -42,6 +43,8 @@ pub fn generate_keypair<P: AsRef<Path>>(path: P, algorithm: Algorithm, file_name
         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to create public key file: {}", e)))?;
     public_key_file.write_all(public_key_ssh.as_bytes())
         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to write public key to file: {}", e)))?;
+
+    info!("Generated public key: {}", public_key_ssh);
 
     Ok(())
 }

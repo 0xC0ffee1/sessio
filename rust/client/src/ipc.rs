@@ -29,11 +29,9 @@ use tokio::sync::Mutex;
 use crate::client::Client;
 
 #[cfg(windows)]
-use crate::platform::windows::UnixListenerStream;
+use tokio_stream::wrappers::TcpListenerStream;
 #[cfg(windows)]
-use uds_windows::UnixListener;
-
-use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
 
 #[cfg(unix)]
 use tokio_stream::wrappers::UnixListenerStream;
@@ -96,10 +94,15 @@ impl ClientIpc for ClientIpcHandler {
     async fn new_session(&self, request: Request<NewSessionRequest>) 
     -> Result<Response<NewSessionResponse>, Status> {
         let request = request.into_inner();
-
+        info!("IPC: Requesting new session!");
         let mut client = self.client.lock().await;
 
-        let res = client.new_session(uuid::Uuid::parse_str(&request.connection_id).unwrap(), request.username, request.private_key).await;
+        let res = client.new_session(uuid::Uuid::parse_str(&request.connection_id).unwrap(), 
+        request.username, 
+        request.private_key, 
+        request.known_hosts_path).await;
+        
+        info!("IPC: Session requested!");
         match res {
             Ok(id) => {
                 Ok(Response::new(NewSessionResponse{
@@ -165,17 +168,26 @@ impl ClientIpc for ClientIpcHandler {
                             match msg.r#type {
                                 Some(Type::Data(data)) => {
                                     //Sends the data to the shell stream
+                                    info!("IPC: Forwarding data!");
                                     input_tx.send(data.payload).await.unwrap();
                                 }
                                 Some(Type::PtyRequest(req)) => {
+                                    info!("IPC: Opening a pty!");
                                     let mut session = session_clone.lock().await;
-                                    let _ = session.request_pty(req.col_width, req.row_height).await;
+                                    let _ = session.request_pty(&channel_id, req.col_width, req.row_height).await;
                                 }
                                 Some(Type::ShellRequest(req)) => {
-                                    let mut session = session_clone.lock().await;
-
+                                    info!("IPC: Opening a shell!");
+                                    
+                                    let session = session_clone.clone();
                                     //ignoring until tests complete
-                                    let _ = session.request_shell(&channel_id, input_guard.clone(), o_clone.clone()).await;
+                                    let input = input_guard.clone();
+                                    let output = o_clone.clone();
+                                    tokio::spawn(async move {
+                                        let mut session = session.lock().await;
+                                        let _ = session.request_shell(&channel_id, input, output).await;
+                                    });
+                                    
                                 }
                                 _ => {
                                     // Handle other cases
@@ -188,7 +200,9 @@ impl ClientIpc for ClientIpcHandler {
                         }
                     }
                 }
+                info!("Message listening loop broken");
             });
+            
 
             // Process output from the shell and send back to the ipc listener
             while let Some(data) = output_rx.recv().await {
@@ -197,6 +211,7 @@ impl ClientIpc for ClientIpcHandler {
                 };
                 yield msg;
             }
+            info!("Message sending loop broken");
         };
 
         Ok(Response::new(Box::pin(res) as Self::OpenChannelStream))        
@@ -204,78 +219,59 @@ impl ClientIpc for ClientIpcHandler {
 }
 
 
+#[cfg(unix)]
+pub async fn start_grpc_server(path_str: &str) {
+    let path = path_str.to_string();
+    let _ = std::fs::remove_file(path_str);
 
-#[derive(Debug, Default)]
-pub struct MyGreeter {}
-
-#[tonic::async_trait]
-impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>, // Accept request of type HelloRequest
-    ) -> Result<Response<HelloReply>, Status> { // Return an instance of type HelloReply
-        println!("Got a request: {:?}", request);
-
-        let reply = HelloReply {
-            message: format!("Hello {}!", request.into_inner().name), // We must use .into_inner() as the fields of gRPC requests and responses are private
-        };
-
-        Ok(Response::new(reply)) // Send back our formatted greeting
-    }
-}
-
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = "/tmp/tonic/helloworld";
-
-    std::fs::create_dir_all(Path::new(path).parent().unwrap())?;
-
-    let uds = UnixListener::bind(path)?;
+    let uds_res = UnixListener::bind(&path);
+    let Ok(uds) = uds_res else {
+            info!("Is err {}", uds_res.err().unwrap());
+            return;
+    };
+    
     let uds_stream = UnixListenerStream::new(uds);
 
     let greeter = ClientIpcHandler {
         client: Arc::new(Mutex::new(Client::default()))
     };
 
-    Server::builder()
+    info!("Starting grpc server!");
+    let res = Server::builder()
         .add_service(ClientIpcServer::new(greeter))
         .serve_with_incoming(uds_stream)
-        .await?;
+        .await;
 
-    Ok(())
+    info!("exited grpc server, is err {}", res.is_err());
+}
+
+#[cfg(windows)]
+pub async fn start_grpc_server(path_str: &str) {
+    let _ = std::fs::remove_file(path_str);
+
+    let greeter = ClientIpcHandler {
+        client: Arc::new(Mutex::new(Client::default()))
+    };
+
+    info!("Starting grpc server!");
+    let res = Server::builder()
+        .add_service(ClientIpcServer::new(greeter))
+        .serve(path_str.parse().unwrap())
+        .await;
+
+
+    info!("exited grpc server, is err {}", res.is_err());
 }
 
 
-pub fn start_grpc_server(path_str: &str) {
+
+pub fn start_server_new_runtime(path_str: &str) {
     let path = path_str.to_string();
-    info!("Here 1");
     let _ = std::fs::remove_file(path_str);
     std::thread::spawn(move || {
-        info!("Here 2");
-        //Static runtime: https://stackoverflow.com/questions/68317698/how-to-reuse-tokio-runtime-in-rust-ffi-library
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            info!("Here 3");
-            let uds_res = UnixListener::bind(&path);
-            let Ok(uds) = uds_res else {
-                 info!("Is err {}", uds_res.err().unwrap());
-                 return;
-            };
-            
-            let uds_stream = UnixListenerStream::new(uds);
-
-            let greeter = ClientIpcHandler {
-                client: Arc::new(Mutex::new(Client::default()))
-            };
-
-            info!("Starting grpc server!");
-            let res = Server::builder()
-                .add_service(ClientIpcServer::new(greeter))
-                .serve_with_incoming(uds_stream)
-                .await;
-
-            info!("exited grpc server, is err {}", res.is_err());
+            start_grpc_server(&path).await;
         });
     });
 }

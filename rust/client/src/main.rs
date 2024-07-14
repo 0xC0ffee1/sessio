@@ -6,11 +6,10 @@ use clap::{Parser, Subcommand};
 mod client;
 use client::Opt;
 
-pub mod platform;
 pub mod ipc;
 
-
-fn main() {
-    let args = Opt::parse();
-    let err = client::run(args);
+#[tokio::main]
+async fn main() {
+    log::info!("Hello!");
+    ipc::start_grpc_server("127.0.0.1:53051").await;
 }

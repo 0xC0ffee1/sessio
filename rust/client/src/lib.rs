@@ -1,5 +1,4 @@
 
-pub mod platform;
 pub mod ipc;
 pub mod client;
 

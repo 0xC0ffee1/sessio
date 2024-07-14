@@ -97,7 +97,12 @@ impl ClientStream {
 
         let mut send_stream = self.send_stream.lock().await;
 
-        send_stream.write_all(serialized_packet.as_bytes())
+        let message_length = serialized_packet.len() as u32;
+        let mut buffer = Vec::new();
+        buffer.extend(&message_length.to_be_bytes());
+        buffer.extend(serialized_packet.as_bytes());
+
+        send_stream.write_all(&buffer)
             .await
             .map_err(|e| anyhow!("failed to send request: {}", e))?;
 

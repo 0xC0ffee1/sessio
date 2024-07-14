@@ -65,11 +65,11 @@ message StreamResponse {
     bytes data = 1;
 }
 
-
 message NewSessionRequest {
     string connection_id = 1;
     string username = 2;
     string private_key = 3;
+    string known_hosts_path = 4;
 }
 
 message NewSessionResponse {

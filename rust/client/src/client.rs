@@ -6,6 +6,7 @@ use russh::client::Handle;
 use key::KeyPair;
 use quinn::{ClientConfig, Connection, Endpoint, VarInt};
 use serde_json::json;
+use ssh_key::known_hosts;
 use tokio::fs::File;
 use tokio::sync::oneshot::channel;
 use uuid::Uuid;
@@ -74,6 +75,9 @@ pub struct Opt {
     #[clap(long, short = 'k')]
     private_key: PathBuf,
 
+    #[clap(long, short = 'k', default_value = "known_hosts")]
+    known_hosts_path: PathBuf,
+
     //The identifier of the target machine
     target_id: String
 }
@@ -95,7 +99,8 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
     let session_id = client.new_session(
         connection_id.clone(),
         "asd".to_string(),
-        cli.private_key.clone()
+        cli.private_key.clone(),
+        cli.known_hosts_path.clone()
     )
     .await?;
 
@@ -113,7 +118,7 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
         execute!(stdout_std, EnterAlternateScreen, Clear(ClearType::All)).unwrap();
         let (w, h) = terminal_size()?;
 
-        let channel_id = session.request_pty(w as u32, h as u32).await?;
+        //let channel_id = session.request_pty(w as u32, h as u32).await?;
         //let result = session.request_shell(&channel_id, stdin, stdout).await?;
 
         disable_raw_mode().unwrap();
@@ -207,7 +212,8 @@ pub struct Session {
 }
 
 pub struct ClientHandler {
-    remote_addr: SocketAddr
+    remote_addr: SocketAddr,
+    known_hosts_path: PathBuf
 }
 
 
@@ -235,11 +241,15 @@ impl Client {
         &mut self,
         connection_id: Uuid,
         username: String,
-        private_key_path: T
+        private_key_path: T,
+        known_hosts_path: T
     )  -> anyhow::Result<Uuid> where T: AsRef<Path> {
 
+        let res = load_secret_key(private_key_path, None);
         //Supports RSA since russh 0.44-beta.1
-        let key_pair = load_secret_key(private_key_path, None).unwrap();
+        let Ok(key_pair) = res else {
+             bail!("Failed to load key at! {}", res.err().unwrap().to_string());
+        };
 
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(60 * 60)),
@@ -265,11 +275,11 @@ impl Client {
             .map_err(|e| format!("failed to open stream: {}", e)).unwrap();
 
         
-        
         let bi_stream = BiStream {recv_stream: recv, send_stream: send};
 
         let session_handler = ClientHandler {
             remote_addr: connection.remote_address(),
+            known_hosts_path: known_hosts_path.as_ref().to_path_buf()
         };
 
         let mut handle = russh::client::connect_stream(config, bi_stream, session_handler).await?;
@@ -314,12 +324,13 @@ impl russh::client::Handler for ClientHandler {
         let host = &self.remote_addr.ip().to_string();
         let port = self.remote_addr.port();
 
-        let is_known: bool = russh_keys::check_known_hosts(host, port, _server_public_key)?;
+
+        let is_known: bool = russh_keys::check_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path)?;
 
         info!("Is known {}", is_known);
 
         if is_known { 
-            let found_key = russh_keys::known_host_key(host, port)?.unwrap();
+            let found_key = russh_keys::known_host_key_path(host, port, &self.known_hosts_path)?.unwrap();
             if found_key.1 != *_server_public_key {
                 //Keys did not match
                 return Ok(false);
@@ -328,7 +339,7 @@ impl russh::client::Handler for ClientHandler {
         else {
             //Save it
             info!("Learned new host {}:{}", host, port);
-            russh_keys::learn_known_hosts(host, port, _server_public_key)?;
+            russh_keys::learn_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path)?;
         }
 
         Ok(true)
@@ -399,6 +410,8 @@ impl Session {
         let channel_guard = self.channels.get(id).unwrap();
         let mut channel = channel_guard.lock().await;
 
+        let _ = channel.request_shell(false).await;
+
         let code;
 
         let mut stdin_closed = false;
@@ -449,8 +462,9 @@ impl Session {
         self.channels.get(id).unwrap().clone()
     }
 
-    pub async fn request_pty(&mut self, col_width: u32, row_height: u32) -> Result<ChannelId>{
-        let channel = self.handle.channel_open_session().await?;
+    pub async fn request_pty(&mut self, channel_id: &ChannelId, col_width: u32, row_height: u32) -> Result<()>{
+        let channel_guard = self.channels.get(&channel_id).unwrap();
+        let mut channel = channel_guard.lock().await;
 
         channel
             .request_pty(
@@ -464,11 +478,7 @@ impl Session {
             )
             .await?;
 
-        let channel_id = channel.id();
-        let channel_guard = Arc::new(Mutex::new(channel));
-
-        self.channels.insert(channel_id, channel_guard);
-        Ok(channel_id)
+        Ok(())
     }
 
     async fn close(&mut self) -> Result<()> {

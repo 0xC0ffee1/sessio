@@ -516,6 +516,7 @@ dependencies = [
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "log 0.4.22",
  "quinn",
  "rand",
  "ssh-key",

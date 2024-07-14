@@ -95,26 +95,38 @@ impl CoordinatorClient {
         let conn = connection.clone();
 
         tokio::spawn(async move {
-            let mut buffer = vec![0; 1024];
             loop {
-                match recv_stream.read(&mut buffer).await {
-                    Ok(Some(n)) => {
-                        let data = &buffer[..n];
-                        let string = String::from_utf8_lossy(data);
-                        match serde_json::from_str::<serde_json::Value>(&string) {
-                            Ok(json_resp) => {
-                                if response_tx.send(json_resp).await.is_err() {
-                                    break;
+                let mut buffer = vec![0; 4]; // Buffer to read the message length
+                // Read the length of the next JSON message
+                match recv_stream.read_exact(&mut buffer).await {
+                    Ok(_) => {
+                        let message_length = u32::from_be_bytes(buffer.try_into().unwrap()) as usize;
+                        let mut json_buffer = vec![0; message_length];
+
+                        // Read the actual JSON message
+                        match recv_stream.read_exact(&mut json_buffer).await {
+                            Ok(_) => {
+                                let json_string = String::from_utf8_lossy(&json_buffer);
+                                match serde_json::from_str::<serde_json::Value>(&json_string) {
+                                    Ok(json_resp) => {
+                                        if response_tx.send(json_resp).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("failed to parse JSON: {}:{}", json_string, e);
+                                    }
                                 }
                             }
                             Err(e) => {
-                                eprintln!("failed to parse JSON: {}:{}", string, e);
+                                eprintln!("failed to read JSON message: {}", e);
+                                connection.close(0u32.into(), b"err");
+                                break;
                             }
                         }
                     }
-                    Ok(None) => break, // Stream closed
                     Err(e) => {
-                        eprintln!("failed to read from stream: {}", e);
+                        eprintln!("failed to read message length: {}", e);
                         connection.close(0u32.into(), b"err");
                         break;
                     }
@@ -176,6 +188,8 @@ impl CoordinatorClient {
         self.send_stream.write_all(serialized_packet.as_bytes())
             .await
             .map_err(|e| anyhow!("failed to send request: {}", e))?;
+
+        info!("Sent {}", serialized_packet);
 
         Ok(())
     }
