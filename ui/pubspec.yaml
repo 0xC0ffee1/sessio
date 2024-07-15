@@ -32,6 +32,12 @@ dependencies:
     sdk: flutter
   xterm: ^4.0.0
   grpc: ^3.2.4
+  get_it: ^7.7.0
+  provider: ^6.0.0
+  injectable: ^2.4.2
+  shared_preferences: ^2.2.3
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.0
 
 
   # The following adds the Cupertino Icons font to your application.
@@ -41,6 +47,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  
+  injectable_generator: ^2.6.1
+
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -48,7 +57,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^3.0.0
-
+  build_runner: ^2.4.11
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

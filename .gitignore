@@ -3,4 +3,5 @@ build
 target
 jniLibs
 authorized_keys
+known_hosts
 keys
