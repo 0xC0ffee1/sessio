@@ -264,6 +264,7 @@ impl Client {
 
         //Reusing the same session
         if(self.sessions.contains_key(&target_id)) {
+            log::info!("Reusing session {}", target_id);
             return Ok(());
         }
 
@@ -294,7 +295,7 @@ impl Client {
         let session_handler = ClientHandler {
             remote_addr: connection.remote_address(),
             connection: connection.clone(),
-            known_hosts_path: known_hosts_path.as_ref().to_path_buf()
+            known_hosts_path: known_hosts_path.as_ref().to_path _buf()
         };
 
         let mut handle = russh::client::connect_stream(config, bi_stream, session_handler).await?;
