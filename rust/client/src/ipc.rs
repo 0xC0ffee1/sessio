@@ -98,6 +98,7 @@ impl ClientIpc for ClientIpcHandler {
         let mut client = self.client.lock().await;
 
         let username = request.username.clone();
+
         let res = client.new_session(request.connection_id.clone(), 
         request.username, 
         request.private_key, 

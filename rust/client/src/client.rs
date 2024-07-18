@@ -262,6 +262,11 @@ impl Client {
              bail!("Failed to load key at! {}", res.err().unwrap().to_string());
         };
 
+        //Reusing the same session
+        if(self.sessions.contains_key(&target_id)) {
+            return Ok(());
+        }
+
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(60 * 60)),
             ..<_>::default()
