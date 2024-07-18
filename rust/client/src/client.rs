@@ -1,5 +1,6 @@
 // #![cfg(feature = "rustls")]
 
+use chrono::Utc;
 use clap::Parser;
 use client::Msg;
 use russh::client::Handle;
@@ -92,12 +93,10 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
 
     let mut client = Client::default();
 
-    let connection_id = client.new_connection(cli.target_id, cli.coordinator).await?;
-
-    info!("New connection {}", connection_id.to_string());
+    let connection_id = client.new_connection(cli.target_id.clone(), cli.coordinator).await?;
 
     let session_id = client.new_session(
-        connection_id.clone(),
+        cli.target_id,
         "asd".to_string(),
         cli.private_key.clone(),
         cli.known_hosts_path.clone()
@@ -106,7 +105,7 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
 
     info!("Connected");
 
-    let session_guard = client.sessions.get_mut(&session_id).unwrap();
+    let session_guard = client.sessions.get_mut("asd").unwrap();
     let mut session = session_guard.lock().await;
 
     let stdout: Stdout = tokio::io::stdout();   
@@ -200,18 +199,19 @@ pub fn make_client_endpoint() -> Result<Endpoint, Box<dyn Error>> {
 #[derive(Default)]
 pub struct Client {
     //Map of active connections
-    pub connections: HashMap<Uuid, Connection>,
+    pub connections: HashMap<String, Connection>,
 
-    pub sessions: HashMap<Uuid, Arc<Mutex<Session>>>
+    pub sessions: HashMap<String, Arc<Mutex<Session>>>
 }
 
 pub struct Session {
     handle: Handle<ClientHandler>,
-    id: Uuid,
+    id: String,
     channels: HashMap<ChannelId, Arc<Mutex<Channel<Msg>>>>
 }
 
 pub struct ClientHandler {
+    connection: Connection,
     remote_addr: SocketAddr,
     known_hosts_path: PathBuf
 }
@@ -219,32 +219,43 @@ pub struct ClientHandler {
 
 impl Client {
     //Create a new connection and on success return the its ID
-    pub async fn new_connection(&mut self, target_id: String, coordinator: Url) -> anyhow::Result<Uuid> {
+    pub async fn new_connection(&mut self, target_id: String, coordinator: Url) -> anyhow::Result<()> {
         let endpoint = make_client_endpoint().unwrap();
 
-        let addr = attempt_holepunch(target_id, coordinator, endpoint.clone()).await?;
+        if let Some(conn) = self.connections.get_mut(&target_id) {
+            if let None = conn.close_reason() {
+                //Connection is still open, reusing the old one
+                info!("Reusing connection for {}", target_id);
+                return Ok(());
+            }
+        }
+        
+        let start_time = Utc::now();
+        let addr = attempt_holepunch(target_id.clone(), coordinator, endpoint.clone()).await?;
+        let end_time = Utc::now();
+        let elapsed_time = end_time - start_time;
+        println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
 
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(60 * 60)),
             ..<_>::default()
         };
-        let id = Uuid::new_v4();
 
         let conn: Connection = endpoint.connect(addr, "server").unwrap().await?;
 
-        self.connections.insert(id, conn);
+        self.connections.insert(target_id.clone(), conn);
 
-        Ok(id)
+        Ok(())
     }
 
     pub async fn new_session<T>(
         &mut self,
-        connection_id: Uuid,
+        target_id: String,
         username: String,
         private_key_path: T,
         known_hosts_path: T
-    )  -> anyhow::Result<Uuid> where T: AsRef<Path> {
-
+    )  -> anyhow::Result<()> where T: AsRef<Path> {
+        let start_time = Utc::now();
         let res = load_secret_key(private_key_path, None);
         //Supports RSA since russh 0.44-beta.1
         let Ok(key_pair) = res else {
@@ -258,11 +269,9 @@ impl Client {
 
         let config = Arc::new(config);
 
-
-        let Some(connection) = self.connections.get(&connection_id) else {
-            bail!("No such connection {}", connection_id);
+        let Some(connection) = self.connections.get(&target_id) else {
+            bail!("No connection made for {}", target_id);
         };
-
         
         info!(
             "[client] Connected to: {}",
@@ -279,34 +288,35 @@ impl Client {
 
         let session_handler = ClientHandler {
             remote_addr: connection.remote_address(),
+            connection: connection.clone(),
             known_hosts_path: known_hosts_path.as_ref().to_path_buf()
         };
 
         let mut handle = russh::client::connect_stream(config, bi_stream, session_handler).await?;
 
-        let signal_thread = create_signal_thread();
+        //let signal_thread = create_signal_thread();
 
         info!("Authenticating!");
 
         // use publickey authentication, with or without certificate
         let auth_res = handle
-            .authenticate_publickey(username, Arc::new(key_pair))
+            .authenticate_publickey(username.clone(), Arc::new(key_pair))
             .await?;
 
         if !auth_res {
             anyhow::bail!("Authentication (with publickey) failed");
         }
 
-        let id: Uuid = Uuid::new_v4();
+
         let session = Session {
-            id,
+            id: username.clone(),
             handle,
             channels: HashMap::new(),
         };
 
-        self.sessions.insert(id, Arc::new(Mutex::new(session)));
+        self.sessions.insert(username, Arc::new(Mutex::new(session)));
 
-        Ok(id)
+        Ok(())
     }
 }
 
@@ -325,21 +335,23 @@ impl russh::client::Handler for ClientHandler {
         let port = self.remote_addr.port();
 
 
-        let is_known: bool = russh_keys::check_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path)?;
+        let is_known_res = russh_keys::check_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path);
 
-        info!("Is known {}", is_known);
-
-        if is_known { 
-            let found_key = russh_keys::known_host_key_path(host, port, &self.known_hosts_path)?.unwrap();
-            if found_key.1 != *_server_public_key {
-                //Keys did not match
-                return Ok(false);
+        if let Ok(known) = is_known_res {
+            if(!known){
+                info!("Learned new host {}:{}", host, port);
+                russh_keys::learn_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path)?;
             }
-        }
-        else {
-            //Save it
-            info!("Learned new host {}:{}", host, port);
-            russh_keys::learn_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path)?;
+        } 
+        else if let Err(e) = is_known_res {
+            match e {
+                russh_keys::Error::KeyChanged {line} => {
+                    error!("Key changed at line: {}", line);
+                }
+                _ => {
+                    error!("Unknown error: {}", e.to_string());
+                }
+            }
         }
 
         Ok(true)
@@ -352,6 +364,19 @@ impl russh::client::Handler for ClientHandler {
     ) -> Result<(), Self::Error> {
         info!("Channel closed!");
         Ok(())
+    }
+
+    async fn channel_accept_stream(&mut self, 
+        id: ChannelId) -> Result<Option<Box<dyn SubStream>>, Self::Error> {
+
+        info!("Waiting on new channel stream!");
+        let res = self.connection.accept_bi().await.unwrap();
+
+        let option = Option::from(Box::new(BiStream {send_stream: res.0, recv_stream: res.1}));
+
+        info!("Accepted new channel substream!");
+
+        return Ok(option.map(|b| b as Box<dyn russh::SubStream>))
     }
 }
 

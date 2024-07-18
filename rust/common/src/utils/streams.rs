@@ -3,6 +3,7 @@ use std::task::Poll;
 use std::task::Context;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::io;
+use russh::SubStream;
 
 
 pub struct BiStream {
@@ -21,6 +22,8 @@ impl tokio::io::AsyncRead for BiStream {
         std::pin::Pin::new(&mut self_mut.recv_stream).poll_read(cx, buf)
     }
 }
+
+impl SubStream for BiStream {}
 
 impl tokio::io::AsyncWrite for BiStream {
     fn poll_write(

@@ -63,11 +63,11 @@ impl ClientIpc for ClientIpcHandler {
         };
 
         let mut client = self.client.lock().await;
-        let res = client.new_connection(request.target_id, url).await;
+        let res = client.new_connection(request.target_id.clone(), url).await;
         match res {
             Ok(id) => {
                 Ok(Response::new(NewConnectionResponse{
-                    connection_id: id.to_string()
+                    connection_id: request.target_id
                 }))
             }
             Err(e) => {
@@ -97,7 +97,8 @@ impl ClientIpc for ClientIpcHandler {
         info!("IPC: Requesting new session!");
         let mut client = self.client.lock().await;
 
-        let res = client.new_session(uuid::Uuid::parse_str(&request.connection_id).unwrap(), 
+        let username = request.username.clone();
+        let res = client.new_session(request.connection_id.clone(), 
         request.username, 
         request.private_key, 
         request.known_hosts_path).await;
@@ -106,7 +107,7 @@ impl ClientIpc for ClientIpcHandler {
         match res {
             Ok(id) => {
                 Ok(Response::new(NewSessionResponse{
-                    session_id: id.to_string()
+                    session_id: username
                 }))
             }
             Err(e) => {
@@ -129,16 +130,11 @@ impl ClientIpc for ClientIpcHandler {
             return Err(Status::new(tonic::Code::InvalidArgument, "Initial message must be of type ChannelInit"));  
         };
 
-        let session_id = match uuid::Uuid::parse_str(&channel_init.session_id) {
-            Ok(id) => id,
-            Err(_) => return Err(Status::new(tonic::Code::InvalidArgument, "Invalid session ID format")),
-        };
-        
         let client_clone = self.client.clone();
 
         let mut client = client_clone.lock().await;
         
-        let session_guard = match client.sessions.get_mut(&session_id) {
+        let session_guard = match client.sessions.get_mut(&channel_init.session_id) {
             Some(session) => Arc::new(Mutex::new(session)),
             None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
         };

@@ -27,7 +27,7 @@ use log::{debug, error, info};
 use tokio::fs::read_to_string;
 use std::net::{Ipv4Addr, SocketAddr};
 use clap::Parser;
-use quinn::{crypto, Endpoint, ServerConfig, VarInt};
+use quinn::{crypto, Connection, Endpoint, ServerConfig, VarInt};
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtyPair, PtySize, PtySystem, SlavePty};
 use anyhow::Error;
@@ -172,12 +172,7 @@ pub async fn run(opt: Opt) {
     });
 
     let config = Arc::new(config);
-    let mut sh = Server {
-        clients: Arc::new(Mutex::new(HashMap::new())),
-        command_buffer: HashMap::new(),
-        ptys: Arc::new(Mutex::new(HashMap::new())),
-        id: Arc::new(AtomicUsize::new(0)),
-    };
+    let mut sh = Server {};
 
     println!("Started!");
     sh.run_quic(config, &endpoint).await.unwrap();
@@ -196,14 +191,16 @@ fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error:
     Ok(private_key)
 }
 
-
+//A session
 #[derive(Clone, Default)]
-struct Server {
+struct ServerSession {
     clients: Arc<Mutex<HashMap<(usize, ChannelId), Channel<Msg>>>>,
-    command_buffer: HashMap<ChannelId, String>,
     ptys: Arc<Mutex<HashMap<ChannelId, Arc<PtyStream>>>>,
     id: Arc<AtomicUsize>,
+    connection: Option<Connection>
 }
+
+struct Server {}
 
 struct PtyStream{
     reader: Mutex<Box<dyn Read + Send>>,
@@ -222,11 +219,10 @@ trait QuicServer{
 
 #[async_trait::async_trait]
 impl server::Server for Server {
-    type Handler = Self;
-    fn new_client(&mut self, _: Option<std::net::SocketAddr>) -> Self {
-
+    type Handler = ServerSession;
+    fn new_client(&mut self, _: Option<std::net::SocketAddr>) -> ServerSession {
         
-        Server::default()
+        ServerSession::default()
     }
 }
 
@@ -284,7 +280,10 @@ impl QuicServer for Server {
                     
                     let mut bi_stream = BiStream {recv_stream: quinn_recv, send_stream: quinn_send};
 
-                    let handler = Server::default();
+                    let handler = ServerSession {
+                        connection: Option::from(conn.clone()),
+                        ..Default::default()
+                    };
 
                     info!("New client connected!");
 
@@ -346,8 +345,10 @@ async fn read_authorized_keys<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<key
     Ok(keys)
 }
 
+
+
 #[async_trait]
-impl server::Handler for Server {
+impl server::Handler for ServerSession {
     type Error = anyhow::Error;
 
     async fn channel_open_session(
@@ -364,6 +365,21 @@ impl server::Handler for Server {
         Ok(true)
     }
 
+    async fn open_channel_stream(&mut self, 
+        channel: ChannelId) 
+        -> Result<Option<Box<dyn SubStream>>, Self::Error> {
+
+        if let Some(conn) = self.connection.as_ref() {
+            let res = conn.open_bi().await?;
+            let option = Option::from(Box::new(BiStream {send_stream: res.0, recv_stream: res.1}));
+
+            info!("Opened a new channel stream!");
+            return Ok(option.map(|b| b as Box<dyn russh::SubStream>))
+        }
+        
+        Ok(None)
+    }
+
     async fn shell_request(
         &mut self,
         channel_id: ChannelId,
@@ -372,6 +388,7 @@ impl server::Handler for Server {
 
         let handle_reader = session.handle();
         let handle_waiter = session.handle();
+
 
         let ptys = self.ptys.clone();
 

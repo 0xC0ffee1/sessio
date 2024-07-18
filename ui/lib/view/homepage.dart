@@ -118,6 +118,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       final service = Provider.of<GrpcService>(context, listen: false);
       service.connect(clientId, sessionState);
       _tabController!.animateTo(myTabs.length - 2);
+      //setState(() {});
     });
   }
 

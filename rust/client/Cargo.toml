@@ -9,15 +9,15 @@ coordinator = { path = "../coordinator" }
 tokio = { version = "1.0", features = ["full"] }
 quinn = "0.10.2"
 tokio-util = { version = "0.6", features = ["io"] }
-russh = "0.44.0-beta.2"
-russh-keys = "0.44.0-beta.2"
+russh = { path = "../../../russh/russh" }
+russh-keys = { path = "../../../russh/russh-keys" }
 async-trait = "0.1.80"
 env_logger = "0.10"
 anyhow = "1.0.86"
 log = "0.4"
 rand = { version = "0.8", features = ["std"] }
 ssh-key = { version = "0.6.6", features = ["ed25519"] }
-
+chrono = "0.4"
 
 clap = { version = "4.5.6", features = ["derive"] }
 url = "2.5.0"

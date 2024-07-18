@@ -38,22 +38,22 @@ class GrpcService {
   }
 
   void connect(String clientId, SessioTerminalState state) async {
+    final t = DateTime.now().millisecondsSinceEpoch;
     NewConnectionResponse connectionResponse =
         await client.newConnection(NewConnectionRequest()
-          ..coordinatorUrl = "quic://157.90.127.19:2223"
+          ..coordinatorUrl = "quic://127.0.0.1:2223"
           ..targetId = clientId);
-
-    state.terminal.write(
-        "Connected! Session ID is: ${connectionResponse.connectionId} \r\n");
 
     NewSessionResponse sessionResponse =
         await client.newSession(NewSessionRequest()
           ..connectionId = connectionResponse.connectionId
           ..privateKey = "keys/id_ed25519"
           ..knownHostsPath = "known_hosts"
-          ..username = "test");
+          ..username = "test-ses");
 
     final streamController = StreamController<Msg>();
+    state.terminal
+        .write("Connected! Session ID is: ${sessionResponse.sessionId} \r\n");
 
     final responseStream = client.openChannel(streamController.stream);
 
@@ -71,14 +71,21 @@ class GrpcService {
           .add(Msg()..data = (Msg_Data()..payload = data.codeUnits));
     };
 
-    state.terminal.buffer.clear();
-    state.terminal.buffer.setCursor(0, 0);
+    bool pinged = false;
+
+    //state.terminal.buffer.clear();
+    //state.terminal.buffer.setCursor(0, 0);
 
     streamController.add(Msg()..shellRequest = (Msg_ShellRequest()));
     // Handle responses
     await for (var response in responseStream) {
       // Handle the response
       if (response.hasData()) {
+        if (!pinged) {
+          state.terminal.write(
+              "Took ${DateTime.now().millisecondsSinceEpoch - t}ms to connect.\r\n");
+          pinged = true;
+        }
         state.terminal.write(utf8.decode(response.data.payload));
       }
     }
