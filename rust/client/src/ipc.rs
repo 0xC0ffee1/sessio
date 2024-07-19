@@ -26,7 +26,7 @@ use clientipc::{
 
 use log::info;
 use tokio::sync::Mutex;
-use crate::client::Client;
+use crate::client::{Client, Session};
 
 #[cfg(windows)]
 use tokio_stream::wrappers::TcpListenerStream;
@@ -131,22 +131,30 @@ impl ClientIpc for ClientIpcHandler {
             return Err(Status::new(tonic::Code::InvalidArgument, "Initial message must be of type ChannelInit"));  
         };
 
+        info!("IPC: Opening a channel!");
+
         let client_clone = self.client.clone();
 
         let mut client = client_clone.lock().await;
         
         let session_guard = match client.sessions.get_mut(&channel_init.session_id) {
-            Some(session) => Arc::new(Mutex::new(session)),
+            Some(session) => session,
             None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
         };
 
-        let session = session_guard.lock().await;
+        info!("IPC: Opening a channel! #1");
+        
+        info!("IPC: Opening a channel! #2");
 
-        let channel_id = session.lock().await.new_channel().await.unwrap();
+        let channel_id = {
+            let mut session = session_guard.lock().await;
+            info!("IPC: Opening a channel! #3");
+            session.new_channel().await.unwrap()
+        };
 
-        let channel = session.lock().await.get_channel(&channel_id);
+        info!("IPC: Opening a channel! #4");
 
-        let session_clone = session.clone();
+        let session_clone = session_guard.clone();
 
         let res = async_stream::try_stream! {
 
@@ -181,8 +189,15 @@ impl ClientIpc for ClientIpcHandler {
                                     let input = input_guard.clone();
                                     let output = o_clone.clone();
                                     tokio::spawn(async move {
-                                        let mut session = session.lock().await;
-                                        let _ = session.request_shell(&channel_id, input, output).await;
+                                        let task = {
+                                            let session = session.lock().await;
+                                            let channel_guard = session.channels.get(&channel_id);
+                                            Session::request_shell(channel_guard.unwrap().clone(), input, output)
+                                        };
+
+                                        if let Err(e) = task.await {
+                                            eprintln!("Failed to request shell: {:?}", e);
+                                        }
                                     });
                                     
                                 }

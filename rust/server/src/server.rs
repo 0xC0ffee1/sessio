@@ -411,7 +411,7 @@ impl server::Handler for ServerSession {
                         }
                         Ok(Ok((n,buffer))) => {
                             debug!("PTY read {} bytes", n);
-                            info!("Sending {}", String::from_utf8_lossy(&buffer[0..n]));
+                            //info!("Sending {}", String::from_utf8_lossy(&buffer[0..n]));
                             if let Err(e) = handle_reader.data(channel_id, CryptoVec::from_slice(&buffer[0..n])).await {
                                 error!("Error sending PTY data to client: {:?}", e);
                                 break;

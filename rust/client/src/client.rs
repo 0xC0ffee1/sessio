@@ -207,7 +207,7 @@ pub struct Client {
 pub struct Session {
     handle: Handle<ClientHandler>,
     id: String,
-    channels: HashMap<ChannelId, Arc<Mutex<Channel<Msg>>>>
+    pub channels: HashMap<ChannelId, Arc<Mutex<Channel<Msg>>>>
 }
 
 pub struct ClientHandler {
@@ -263,8 +263,8 @@ impl Client {
         };
 
         //Reusing the same session
-        if(self.sessions.contains_key(&target_id)) {
-            log::info!("Reusing session {}", target_id);
+        if(self.sessions.contains_key(&username)) {
+            log::info!("Reusing session {}", username);
             return Ok(());
         }
 
@@ -295,7 +295,7 @@ impl Client {
         let session_handler = ClientHandler {
             remote_addr: connection.remote_address(),
             connection: connection.clone(),
-            known_hosts_path: known_hosts_path.as_ref().to_path _buf()
+            known_hosts_path: known_hosts_path.as_ref().to_path_buf()
         };
 
         let mut handle = russh::client::connect_stream(config, bi_stream, session_handler).await?;
@@ -433,12 +433,10 @@ async fn attempt_holepunch(target: String, coordinator: Url, endpoint: Endpoint)
 
 impl Session {
     pub async fn request_shell(
-        &mut self,
-        id: &ChannelId,
+        channel_guard: Arc<Mutex<Channel<Msg>>>,
         mut input_rx: Arc<Mutex<mpsc::Receiver<Vec<u8>>>>,
         output_tx: Arc<Mutex<mpsc::Sender<Vec<u8>>>>,
     ) -> Result<u32> {
-        let channel_guard = self.channels.get(id).unwrap();
         let mut channel = channel_guard.lock().await;
 
         let _ = channel.request_shell(false).await;
@@ -484,6 +482,8 @@ impl Session {
         let channel = self.handle.channel_open_session().await?;
         let channel_id = channel.id();
 
+        info!("OPENING SESSION {}", channel.id());
+
         self.channels.insert(channel.id(), Arc::new(Mutex::new(channel)));
 
         Ok(channel_id)
@@ -508,6 +508,8 @@ impl Session {
                 &[], 
             )
             .await?;
+        
+        info!("PTY Requested!");
 
         Ok(())
     }
