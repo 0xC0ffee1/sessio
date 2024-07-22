@@ -11,7 +11,108 @@
 
 import 'dart:core' as $core;
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
+
+class SftpRequest extends $pb.GeneratedMessage {
+  factory SftpRequest({
+    $core.String? sessionId,
+  }) {
+    final $result = create();
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    return $result;
+  }
+  SftpRequest._() : super();
+  factory SftpRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory SftpRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'SftpRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  SftpRequest clone() => SftpRequest()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  SftpRequest copyWith(void Function(SftpRequest) updates) => super.copyWith((message) => updates(message as SftpRequest)) as SftpRequest;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SftpRequest create() => SftpRequest._();
+  SftpRequest createEmptyInstance() => create();
+  static $pb.PbList<SftpRequest> createRepeated() => $pb.PbList<SftpRequest>();
+  @$core.pragma('dart2js:noInline')
+  static SftpRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<SftpRequest>(create);
+  static SftpRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get sessionId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set sessionId($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasSessionId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSessionId() => clearField(1);
+}
+
+class SftpRequestResponse extends $pb.GeneratedMessage {
+  factory SftpRequestResponse({
+    $core.String? channelId,
+  }) {
+    final $result = create();
+    if (channelId != null) {
+      $result.channelId = channelId;
+    }
+    return $result;
+  }
+  SftpRequestResponse._() : super();
+  factory SftpRequestResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory SftpRequestResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'SftpRequestResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'channelId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  SftpRequestResponse clone() => SftpRequestResponse()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  SftpRequestResponse copyWith(void Function(SftpRequestResponse) updates) => super.copyWith((message) => updates(message as SftpRequestResponse)) as SftpRequestResponse;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SftpRequestResponse create() => SftpRequestResponse._();
+  SftpRequestResponse createEmptyInstance() => create();
+  static $pb.PbList<SftpRequestResponse> createRepeated() => $pb.PbList<SftpRequestResponse>();
+  @$core.pragma('dart2js:noInline')
+  static SftpRequestResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<SftpRequestResponse>(create);
+  static SftpRequestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get channelId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set channelId($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasChannelId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChannelId() => clearField(1);
+}
 
 class Msg_Data extends $pb.GeneratedMessage {
   factory Msg_Data({
@@ -326,6 +427,911 @@ class Msg extends $pb.GeneratedMessage {
   void clearChannelInit() => clearField(4);
   @$pb.TagNumber(4)
   Msg_ChannelInit ensureChannelInit() => $_ensure(3);
+}
+
+/// The messages a client uses to interact with the sftp session
+class ListDir extends $pb.GeneratedMessage {
+  factory ListDir({
+    $core.String? path,
+    $core.String? sessionId,
+  }) {
+    final $result = create();
+    if (path != null) {
+      $result.path = path;
+    }
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    return $result;
+  }
+  ListDir._() : super();
+  factory ListDir.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory ListDir.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ListDir', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'path')
+    ..aOS(2, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  ListDir clone() => ListDir()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  ListDir copyWith(void Function(ListDir) updates) => super.copyWith((message) => updates(message as ListDir)) as ListDir;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListDir create() => ListDir._();
+  ListDir createEmptyInstance() => create();
+  static $pb.PbList<ListDir> createRepeated() => $pb.PbList<ListDir>();
+  @$core.pragma('dart2js:noInline')
+  static ListDir getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ListDir>(create);
+  static ListDir? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get path => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set path($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasPath() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPath() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get sessionId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set sessionId($core.String v) { $_setString(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasSessionId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSessionId() => clearField(2);
+}
+
+class Path extends $pb.GeneratedMessage {
+  factory Path({
+    $core.String? path,
+    $core.String? sessionId,
+  }) {
+    final $result = create();
+    if (path != null) {
+      $result.path = path;
+    }
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    return $result;
+  }
+  Path._() : super();
+  factory Path.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory Path.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'Path', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'path')
+    ..aOS(2, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  Path clone() => Path()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  Path copyWith(void Function(Path) updates) => super.copyWith((message) => updates(message as Path)) as Path;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Path create() => Path._();
+  Path createEmptyInstance() => create();
+  static $pb.PbList<Path> createRepeated() => $pb.PbList<Path>();
+  @$core.pragma('dart2js:noInline')
+  static Path getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Path>(create);
+  static Path? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get path => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set path($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasPath() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPath() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get sessionId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set sessionId($core.String v) { $_setString(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasSessionId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSessionId() => clearField(2);
+}
+
+class FileTransferRequest extends $pb.GeneratedMessage {
+  factory FileTransferRequest({
+    $core.String? sessionId,
+    $core.String? remotePath,
+    $core.String? localPath,
+  }) {
+    final $result = create();
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    if (remotePath != null) {
+      $result.remotePath = remotePath;
+    }
+    if (localPath != null) {
+      $result.localPath = localPath;
+    }
+    return $result;
+  }
+  FileTransferRequest._() : super();
+  factory FileTransferRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileTransferRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileTransferRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'sessionId')
+    ..aOS(2, _omitFieldNames ? '' : 'remotePath')
+    ..aOS(3, _omitFieldNames ? '' : 'localPath')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileTransferRequest clone() => FileTransferRequest()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileTransferRequest copyWith(void Function(FileTransferRequest) updates) => super.copyWith((message) => updates(message as FileTransferRequest)) as FileTransferRequest;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileTransferRequest create() => FileTransferRequest._();
+  FileTransferRequest createEmptyInstance() => create();
+  static $pb.PbList<FileTransferRequest> createRepeated() => $pb.PbList<FileTransferRequest>();
+  @$core.pragma('dart2js:noInline')
+  static FileTransferRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileTransferRequest>(create);
+  static FileTransferRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get sessionId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set sessionId($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasSessionId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSessionId() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get remotePath => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set remotePath($core.String v) { $_setString(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasRemotePath() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRemotePath() => clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get localPath => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set localPath($core.String v) { $_setString(2, v); }
+  @$pb.TagNumber(3)
+  $core.bool hasLocalPath() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearLocalPath() => clearField(3);
+}
+
+class FileTransferResponse extends $pb.GeneratedMessage {
+  factory FileTransferResponse({
+    $core.String? localPath,
+  }) {
+    final $result = create();
+    if (localPath != null) {
+      $result.localPath = localPath;
+    }
+    return $result;
+  }
+  FileTransferResponse._() : super();
+  factory FileTransferResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileTransferResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileTransferResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'localPath')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileTransferResponse clone() => FileTransferResponse()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileTransferResponse copyWith(void Function(FileTransferResponse) updates) => super.copyWith((message) => updates(message as FileTransferResponse)) as FileTransferResponse;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileTransferResponse create() => FileTransferResponse._();
+  FileTransferResponse createEmptyInstance() => create();
+  static $pb.PbList<FileTransferResponse> createRepeated() => $pb.PbList<FileTransferResponse>();
+  @$core.pragma('dart2js:noInline')
+  static FileTransferResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileTransferResponse>(create);
+  static FileTransferResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get localPath => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set localPath($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasLocalPath() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearLocalPath() => clearField(1);
+}
+
+class FileWriteRequest extends $pb.GeneratedMessage {
+  factory FileWriteRequest({
+    $core.String? fileHandleId,
+    $core.List<$core.int>? data,
+    $core.String? sessionId,
+  }) {
+    final $result = create();
+    if (fileHandleId != null) {
+      $result.fileHandleId = fileHandleId;
+    }
+    if (data != null) {
+      $result.data = data;
+    }
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    return $result;
+  }
+  FileWriteRequest._() : super();
+  factory FileWriteRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileWriteRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileWriteRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fileHandleId')
+    ..a<$core.List<$core.int>>(2, _omitFieldNames ? '' : 'data', $pb.PbFieldType.OY)
+    ..aOS(3, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileWriteRequest clone() => FileWriteRequest()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileWriteRequest copyWith(void Function(FileWriteRequest) updates) => super.copyWith((message) => updates(message as FileWriteRequest)) as FileWriteRequest;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileWriteRequest create() => FileWriteRequest._();
+  FileWriteRequest createEmptyInstance() => create();
+  static $pb.PbList<FileWriteRequest> createRepeated() => $pb.PbList<FileWriteRequest>();
+  @$core.pragma('dart2js:noInline')
+  static FileWriteRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileWriteRequest>(create);
+  static FileWriteRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fileHandleId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fileHandleId($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasFileHandleId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFileHandleId() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.List<$core.int> get data => $_getN(1);
+  @$pb.TagNumber(2)
+  set data($core.List<$core.int> v) { $_setBytes(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasData() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearData() => clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get sessionId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set sessionId($core.String v) { $_setString(2, v); }
+  @$pb.TagNumber(3)
+  $core.bool hasSessionId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSessionId() => clearField(3);
+}
+
+class FileWriteResponse extends $pb.GeneratedMessage {
+  factory FileWriteResponse({
+    $core.bool? success,
+  }) {
+    final $result = create();
+    if (success != null) {
+      $result.success = success;
+    }
+    return $result;
+  }
+  FileWriteResponse._() : super();
+  factory FileWriteResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileWriteResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileWriteResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'success')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileWriteResponse clone() => FileWriteResponse()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileWriteResponse copyWith(void Function(FileWriteResponse) updates) => super.copyWith((message) => updates(message as FileWriteResponse)) as FileWriteResponse;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileWriteResponse create() => FileWriteResponse._();
+  FileWriteResponse createEmptyInstance() => create();
+  static $pb.PbList<FileWriteResponse> createRepeated() => $pb.PbList<FileWriteResponse>();
+  @$core.pragma('dart2js:noInline')
+  static FileWriteResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileWriteResponse>(create);
+  static FileWriteResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get success => $_getBF(0);
+  @$pb.TagNumber(1)
+  set success($core.bool v) { $_setBool(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasSuccess() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSuccess() => clearField(1);
+}
+
+class FileReadRequest extends $pb.GeneratedMessage {
+  factory FileReadRequest({
+    $core.String? fileHandleId,
+    $core.int? bufSize,
+    $core.String? sessionId,
+  }) {
+    final $result = create();
+    if (fileHandleId != null) {
+      $result.fileHandleId = fileHandleId;
+    }
+    if (bufSize != null) {
+      $result.bufSize = bufSize;
+    }
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    return $result;
+  }
+  FileReadRequest._() : super();
+  factory FileReadRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileReadRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileReadRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fileHandleId')
+    ..a<$core.int>(2, _omitFieldNames ? '' : 'bufSize', $pb.PbFieldType.O3)
+    ..aOS(3, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileReadRequest clone() => FileReadRequest()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileReadRequest copyWith(void Function(FileReadRequest) updates) => super.copyWith((message) => updates(message as FileReadRequest)) as FileReadRequest;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileReadRequest create() => FileReadRequest._();
+  FileReadRequest createEmptyInstance() => create();
+  static $pb.PbList<FileReadRequest> createRepeated() => $pb.PbList<FileReadRequest>();
+  @$core.pragma('dart2js:noInline')
+  static FileReadRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileReadRequest>(create);
+  static FileReadRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fileHandleId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fileHandleId($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasFileHandleId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFileHandleId() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get bufSize => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set bufSize($core.int v) { $_setSignedInt32(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasBufSize() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearBufSize() => clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get sessionId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set sessionId($core.String v) { $_setString(2, v); }
+  @$pb.TagNumber(3)
+  $core.bool hasSessionId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSessionId() => clearField(3);
+}
+
+class FileReadResponse extends $pb.GeneratedMessage {
+  factory FileReadResponse({
+    $core.List<$core.int>? data,
+  }) {
+    final $result = create();
+    if (data != null) {
+      $result.data = data;
+    }
+    return $result;
+  }
+  FileReadResponse._() : super();
+  factory FileReadResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileReadResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileReadResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..a<$core.List<$core.int>>(1, _omitFieldNames ? '' : 'data', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileReadResponse clone() => FileReadResponse()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileReadResponse copyWith(void Function(FileReadResponse) updates) => super.copyWith((message) => updates(message as FileReadResponse)) as FileReadResponse;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileReadResponse create() => FileReadResponse._();
+  FileReadResponse createEmptyInstance() => create();
+  static $pb.PbList<FileReadResponse> createRepeated() => $pb.PbList<FileReadResponse>();
+  @$core.pragma('dart2js:noInline')
+  static FileReadResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileReadResponse>(create);
+  static FileReadResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.List<$core.int> get data => $_getN(0);
+  @$pb.TagNumber(1)
+  set data($core.List<$core.int> v) { $_setBytes(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasData() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearData() => clearField(1);
+}
+
+class FileCloseResponse extends $pb.GeneratedMessage {
+  factory FileCloseResponse({
+    $core.bool? success,
+  }) {
+    final $result = create();
+    if (success != null) {
+      $result.success = success;
+    }
+    return $result;
+  }
+  FileCloseResponse._() : super();
+  factory FileCloseResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileCloseResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileCloseResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'success')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileCloseResponse clone() => FileCloseResponse()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileCloseResponse copyWith(void Function(FileCloseResponse) updates) => super.copyWith((message) => updates(message as FileCloseResponse)) as FileCloseResponse;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileCloseResponse create() => FileCloseResponse._();
+  FileCloseResponse createEmptyInstance() => create();
+  static $pb.PbList<FileCloseResponse> createRepeated() => $pb.PbList<FileCloseResponse>();
+  @$core.pragma('dart2js:noInline')
+  static FileCloseResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileCloseResponse>(create);
+  static FileCloseResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get success => $_getBF(0);
+  @$pb.TagNumber(1)
+  set success($core.bool v) { $_setBool(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasSuccess() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSuccess() => clearField(1);
+}
+
+class FileMetadataRequest extends $pb.GeneratedMessage {
+  factory FileMetadataRequest({
+    $core.String? path,
+    $core.String? sessionId,
+  }) {
+    final $result = create();
+    if (path != null) {
+      $result.path = path;
+    }
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    return $result;
+  }
+  FileMetadataRequest._() : super();
+  factory FileMetadataRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileMetadataRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileMetadataRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'path')
+    ..aOS(2, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileMetadataRequest clone() => FileMetadataRequest()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileMetadataRequest copyWith(void Function(FileMetadataRequest) updates) => super.copyWith((message) => updates(message as FileMetadataRequest)) as FileMetadataRequest;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileMetadataRequest create() => FileMetadataRequest._();
+  FileMetadataRequest createEmptyInstance() => create();
+  static $pb.PbList<FileMetadataRequest> createRepeated() => $pb.PbList<FileMetadataRequest>();
+  @$core.pragma('dart2js:noInline')
+  static FileMetadataRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileMetadataRequest>(create);
+  static FileMetadataRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get path => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set path($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasPath() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPath() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get sessionId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set sessionId($core.String v) { $_setString(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasSessionId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSessionId() => clearField(2);
+}
+
+class FileMetadataResponse extends $pb.GeneratedMessage {
+  factory FileMetadataResponse({
+    $core.String? path,
+    $fixnum.Int64? size,
+    $fixnum.Int64? lastModified,
+    $core.bool? isDirectory,
+  }) {
+    final $result = create();
+    if (path != null) {
+      $result.path = path;
+    }
+    if (size != null) {
+      $result.size = size;
+    }
+    if (lastModified != null) {
+      $result.lastModified = lastModified;
+    }
+    if (isDirectory != null) {
+      $result.isDirectory = isDirectory;
+    }
+    return $result;
+  }
+  FileMetadataResponse._() : super();
+  factory FileMetadataResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileMetadataResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileMetadataResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'path')
+    ..a<$fixnum.Int64>(2, _omitFieldNames ? '' : 'size', $pb.PbFieldType.OU6, defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(3, _omitFieldNames ? '' : 'lastModified', $pb.PbFieldType.OU6, defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOB(4, _omitFieldNames ? '' : 'isDirectory')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileMetadataResponse clone() => FileMetadataResponse()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileMetadataResponse copyWith(void Function(FileMetadataResponse) updates) => super.copyWith((message) => updates(message as FileMetadataResponse)) as FileMetadataResponse;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileMetadataResponse create() => FileMetadataResponse._();
+  FileMetadataResponse createEmptyInstance() => create();
+  static $pb.PbList<FileMetadataResponse> createRepeated() => $pb.PbList<FileMetadataResponse>();
+  @$core.pragma('dart2js:noInline')
+  static FileMetadataResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileMetadataResponse>(create);
+  static FileMetadataResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get path => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set path($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasPath() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPath() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get size => $_getI64(1);
+  @$pb.TagNumber(2)
+  set size($fixnum.Int64 v) { $_setInt64(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasSize() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSize() => clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get lastModified => $_getI64(2);
+  @$pb.TagNumber(3)
+  set lastModified($fixnum.Int64 v) { $_setInt64(2, v); }
+  @$pb.TagNumber(3)
+  $core.bool hasLastModified() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearLastModified() => clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get isDirectory => $_getBF(3);
+  @$pb.TagNumber(4)
+  set isDirectory($core.bool v) { $_setBool(3, v); }
+  @$pb.TagNumber(4)
+  $core.bool hasIsDirectory() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearIsDirectory() => clearField(4);
+}
+
+class DirMetadata extends $pb.GeneratedMessage {
+  factory DirMetadata({
+    $core.String? path,
+  }) {
+    final $result = create();
+    if (path != null) {
+      $result.path = path;
+    }
+    return $result;
+  }
+  DirMetadata._() : super();
+  factory DirMetadata.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory DirMetadata.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'DirMetadata', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'path')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  DirMetadata clone() => DirMetadata()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  DirMetadata copyWith(void Function(DirMetadata) updates) => super.copyWith((message) => updates(message as DirMetadata)) as DirMetadata;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DirMetadata create() => DirMetadata._();
+  DirMetadata createEmptyInstance() => create();
+  static $pb.PbList<DirMetadata> createRepeated() => $pb.PbList<DirMetadata>();
+  @$core.pragma('dart2js:noInline')
+  static DirMetadata getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<DirMetadata>(create);
+  static DirMetadata? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get path => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set path($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasPath() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPath() => clearField(1);
+}
+
+class FileList extends $pb.GeneratedMessage {
+  factory FileList({
+    $core.Iterable<FileData>? files,
+  }) {
+    final $result = create();
+    if (files != null) {
+      $result.files.addAll(files);
+    }
+    return $result;
+  }
+  FileList._() : super();
+  factory FileList.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileList.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileList', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..pc<FileData>(1, _omitFieldNames ? '' : 'files', $pb.PbFieldType.PM, subBuilder: FileData.create)
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileList clone() => FileList()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileList copyWith(void Function(FileList) updates) => super.copyWith((message) => updates(message as FileList)) as FileList;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileList create() => FileList._();
+  FileList createEmptyInstance() => create();
+  static $pb.PbList<FileList> createRepeated() => $pb.PbList<FileList>();
+  @$core.pragma('dart2js:noInline')
+  static FileList getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileList>(create);
+  static FileList? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.List<FileData> get files => $_getList(0);
+}
+
+class FileData extends $pb.GeneratedMessage {
+  factory FileData({
+    $core.String? fileName,
+    $fixnum.Int64? fileSize,
+    $core.String? filePath,
+    $core.bool? isDir,
+  }) {
+    final $result = create();
+    if (fileName != null) {
+      $result.fileName = fileName;
+    }
+    if (fileSize != null) {
+      $result.fileSize = fileSize;
+    }
+    if (filePath != null) {
+      $result.filePath = filePath;
+    }
+    if (isDir != null) {
+      $result.isDir = isDir;
+    }
+    return $result;
+  }
+  FileData._() : super();
+  factory FileData.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileData.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileData', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fileName')
+    ..a<$fixnum.Int64>(2, _omitFieldNames ? '' : 'fileSize', $pb.PbFieldType.OU6, defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(3, _omitFieldNames ? '' : 'filePath')
+    ..aOB(4, _omitFieldNames ? '' : 'isDir')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileData clone() => FileData()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileData copyWith(void Function(FileData) updates) => super.copyWith((message) => updates(message as FileData)) as FileData;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileData create() => FileData._();
+  FileData createEmptyInstance() => create();
+  static $pb.PbList<FileData> createRepeated() => $pb.PbList<FileData>();
+  @$core.pragma('dart2js:noInline')
+  static FileData getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileData>(create);
+  static FileData? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fileName => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fileName($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasFileName() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFileName() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get fileSize => $_getI64(1);
+  @$pb.TagNumber(2)
+  set fileSize($fixnum.Int64 v) { $_setInt64(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasFileSize() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearFileSize() => clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get filePath => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set filePath($core.String v) { $_setString(2, v); }
+  @$pb.TagNumber(3)
+  $core.bool hasFilePath() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearFilePath() => clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get isDir => $_getBF(3);
+  @$pb.TagNumber(4)
+  set isDir($core.bool v) { $_setBool(3, v); }
+  @$pb.TagNumber(4)
+  $core.bool hasIsDir() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearIsDir() => clearField(4);
 }
 
 class PtyRequestResponse extends $pb.GeneratedMessage {

@@ -37,6 +37,22 @@ class ClientIPCClient extends $grpc.Client {
       '/clientipc.ClientIPC/OpenChannel',
       ($0.Msg value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.Msg.fromBuffer(value));
+  static final _$openSftpChannel = $grpc.ClientMethod<$0.SftpRequest, $0.SftpRequestResponse>(
+      '/clientipc.ClientIPC/OpenSftpChannel',
+      ($0.SftpRequest value) => value.writeToBuffer(),
+      ($core.List<$core.int> value) => $0.SftpRequestResponse.fromBuffer(value));
+  static final _$listDirectory = $grpc.ClientMethod<$0.Path, $0.FileList>(
+      '/clientipc.ClientIPC/ListDirectory',
+      ($0.Path value) => value.writeToBuffer(),
+      ($core.List<$core.int> value) => $0.FileList.fromBuffer(value));
+  static final _$fileDownload = $grpc.ClientMethod<$0.FileTransferRequest, $0.FileTransferResponse>(
+      '/clientipc.ClientIPC/FileDownload',
+      ($0.FileTransferRequest value) => value.writeToBuffer(),
+      ($core.List<$core.int> value) => $0.FileTransferResponse.fromBuffer(value));
+  static final _$fileUpload = $grpc.ClientMethod<$0.FileTransferRequest, $0.FileTransferResponse>(
+      '/clientipc.ClientIPC/FileUpload',
+      ($0.FileTransferRequest value) => value.writeToBuffer(),
+      ($core.List<$core.int> value) => $0.FileTransferResponse.fromBuffer(value));
 
   ClientIPCClient($grpc.ClientChannel channel,
       {$grpc.CallOptions? options,
@@ -58,6 +74,22 @@ class ClientIPCClient extends $grpc.Client {
 
   $grpc.ResponseStream<$0.Msg> openChannel($async.Stream<$0.Msg> request, {$grpc.CallOptions? options}) {
     return $createStreamingCall(_$openChannel, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.SftpRequestResponse> openSftpChannel($0.SftpRequest request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$openSftpChannel, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.FileList> listDirectory($0.Path request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$listDirectory, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.FileTransferResponse> fileDownload($0.FileTransferRequest request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$fileDownload, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.FileTransferResponse> fileUpload($0.FileTransferRequest request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$fileUpload, request, options: options);
   }
 }
 
@@ -94,6 +126,34 @@ abstract class ClientIPCServiceBase extends $grpc.Service {
         true,
         ($core.List<$core.int> value) => $0.Msg.fromBuffer(value),
         ($0.Msg value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SftpRequest, $0.SftpRequestResponse>(
+        'OpenSftpChannel',
+        openSftpChannel_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.SftpRequest.fromBuffer(value),
+        ($0.SftpRequestResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.Path, $0.FileList>(
+        'ListDirectory',
+        listDirectory_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.Path.fromBuffer(value),
+        ($0.FileList value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.FileTransferRequest, $0.FileTransferResponse>(
+        'FileDownload',
+        fileDownload_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.FileTransferRequest.fromBuffer(value),
+        ($0.FileTransferResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.FileTransferRequest, $0.FileTransferResponse>(
+        'FileUpload',
+        fileUpload_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.FileTransferRequest.fromBuffer(value),
+        ($0.FileTransferResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.NewConnectionResponse> newConnection_Pre($grpc.ServiceCall call, $async.Future<$0.NewConnectionRequest> request) async {
@@ -108,8 +168,28 @@ abstract class ClientIPCServiceBase extends $grpc.Service {
     return genKeys(call, await request);
   }
 
+  $async.Future<$0.SftpRequestResponse> openSftpChannel_Pre($grpc.ServiceCall call, $async.Future<$0.SftpRequest> request) async {
+    return openSftpChannel(call, await request);
+  }
+
+  $async.Future<$0.FileList> listDirectory_Pre($grpc.ServiceCall call, $async.Future<$0.Path> request) async {
+    return listDirectory(call, await request);
+  }
+
+  $async.Future<$0.FileTransferResponse> fileDownload_Pre($grpc.ServiceCall call, $async.Future<$0.FileTransferRequest> request) async {
+    return fileDownload(call, await request);
+  }
+
+  $async.Future<$0.FileTransferResponse> fileUpload_Pre($grpc.ServiceCall call, $async.Future<$0.FileTransferRequest> request) async {
+    return fileUpload(call, await request);
+  }
+
   $async.Future<$0.NewConnectionResponse> newConnection($grpc.ServiceCall call, $0.NewConnectionRequest request);
   $async.Future<$0.NewSessionResponse> newSession($grpc.ServiceCall call, $0.NewSessionRequest request);
   $async.Future<$0.GenKeysResponse> genKeys($grpc.ServiceCall call, $0.GenKeysRequest request);
   $async.Stream<$0.Msg> openChannel($grpc.ServiceCall call, $async.Stream<$0.Msg> request);
+  $async.Future<$0.SftpRequestResponse> openSftpChannel($grpc.ServiceCall call, $0.SftpRequest request);
+  $async.Future<$0.FileList> listDirectory($grpc.ServiceCall call, $0.Path request);
+  $async.Future<$0.FileTransferResponse> fileDownload($grpc.ServiceCall call, $0.FileTransferRequest request);
+  $async.Future<$0.FileTransferResponse> fileUpload($grpc.ServiceCall call, $0.FileTransferRequest request);
 }

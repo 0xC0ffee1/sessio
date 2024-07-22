@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:grpc/grpc.dart';
 import 'package:injectable/injectable.dart';
+import 'package:sessio_ui/model/sftp/sftp.dart';
 import 'package:sessio_ui/model/terminal_state.dart';
 import 'package:sessio_ui/src/generated/client_ipc.pbgrpc.dart';
 import 'package:xterm/xterm.dart';
@@ -37,8 +38,7 @@ class GrpcService {
     return ClientIPCClient(channel);
   }
 
-  void connect(String clientId, SessioTerminalState state) async {
-    final t = DateTime.now().millisecondsSinceEpoch;
+  Future<NewSessionResponse> _newSession(String clientId) async {
     NewConnectionResponse connectionResponse =
         await client.newConnection(NewConnectionRequest()
           ..coordinatorUrl = "quic://157.90.127.19:2223"
@@ -50,6 +50,24 @@ class GrpcService {
           ..privateKey = "keys/id_ed25519"
           ..knownHostsPath = "known_hosts"
           ..username = "test-ses");
+
+    return sessionResponse;
+  }
+
+  Future<SftpBrowser> connectSFTP(String clientId) async {
+    final t = DateTime.now().millisecondsSinceEpoch;
+    NewSessionResponse sessionResponse = await _newSession(clientId);
+
+    final res = await client
+        .openSftpChannel(SftpRequest(sessionId: sessionResponse.sessionId));
+    final browser = SftpBrowser(client, sessionResponse.sessionId);
+    await browser.refreshFileList();
+    return browser;
+  }
+
+  void connectPTY(String clientId, SessioTerminalState state) async {
+    final t = DateTime.now().millisecondsSinceEpoch;
+    NewSessionResponse sessionResponse = await _newSession(clientId);
 
     final streamController = StreamController<Msg>();
     state.terminal

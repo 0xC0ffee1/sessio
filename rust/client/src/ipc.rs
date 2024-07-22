@@ -1,27 +1,15 @@
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
-}
-
 pub mod clientipc {
     tonic::include_proto!("clientipc");
 }
 
 use futures::{stream, Stream, StreamExt};
+use russh_sftp::{client::SftpSession, protocol::Stat};
 use url::Url;
 use uuid::Uuid;
-use tokio::{io::AsyncReadExt, sync::mpsc};
+use tokio::{fs::File, io::AsyncReadExt, sync::mpsc, io::AsyncWriteExt};
 use std::{pin::Pin, sync::Arc};
-use hello_world::{
-    greeter_server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
-};
-
 use clientipc::{
-    client_ipc_server::{ClientIpc, ClientIpcServer},
-    Msg, StreamResponse, msg::Type,
-    GenKeysRequest,GenKeysResponse,
-    NewSessionRequest, NewSessionResponse,
-    NewConnectionRequest, NewConnectionResponse,
+    client_ipc_server::{ClientIpc, ClientIpcServer}, msg::Type, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferResponse, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, SftpRequest, SftpRequestResponse, StreamResponse
 };
 
 use log::info;
@@ -42,6 +30,7 @@ use tonic::{Request, Status, Response, transport::Server};
 
 use std::path::Path;
 
+use russh_sftp::protocol::OpenFlags;
 use common::utils::keygen::generate_keypair;
 
 struct ClientIpcHandler {
@@ -53,6 +42,151 @@ struct ClientIpcHandler {
 impl ClientIpc for ClientIpcHandler {
     type OpenChannelStream =
         Pin<Box<dyn Stream<Item = Result<Msg, Status>> + Send  + 'static>>;
+
+    async fn open_sftp_channel(&self, request: Request<SftpRequest>) 
+    -> Result<Response<SftpRequestResponse>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+        let session_guard = match client.sessions.get_mut(&request.session_id) {
+            Some(session) => session,
+            None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+        };
+        
+        let res = session_guard.lock().await.request_sftp().await;
+        match res {
+            Ok(id) => {
+                Ok(Response::new(SftpRequestResponse{
+                    channel_id: id.to_string()
+                }))
+            }
+            Err(e) => {
+                log::error!("Failed to connect to SFTP server: {}", e.to_string());
+                Err(Status::new(tonic::Code::Internal, e.to_string()))
+            }
+        }
+   }
+
+    async fn list_directory(&self, request: Request<clientipc::Path>) 
+    -> Result<Response<FileList>, Status> {
+        log::info!("Got list dir request!");
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+        let session_guard = match client.sessions.get_mut(&request.session_id) {
+            Some(session) => session,
+            None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+        };
+        let session = session_guard.lock().await;
+        let Some(sftp) = &session.sftp_session else{
+            return Err(Status::new(tonic::Code::NotFound, "SFTP Session not found"));
+        };
+        info!("current path: {:?}", sftp.canonicalize(&request.path).await.unwrap());
+
+        let Ok(dir) = sftp.read_dir(&request.path).await else {
+            return Err(Status::new(tonic::Code::NotFound, "Directory not found"));
+        };
+        
+        let mut list = Vec::<FileData>::new();
+        for entry in dir {
+            info!("DIR FILE {}", entry.file_name());
+            list.push(FileData {
+                file_name: entry.file_name(),
+                file_path: format!("{0}/{1}", &request.path, entry.file_name()),
+                file_size: entry.metadata().size.unwrap_or(0),
+                is_dir: entry.metadata().is_dir()
+            });
+        }
+        Ok(Response::new(FileList {
+            files: list 
+        }))
+    }
+
+
+    async fn file_download(&self, request: Request<FileTransferRequest>) 
+    -> Result<Response<FileTransferResponse>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+        let session_guard = match client.sessions.get_mut(&request.session_id) {
+            Some(session) => session,
+            None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+        };
+        let session = session_guard.lock().await;
+        let Some(sftp) = &session.sftp_session else{
+            return Err(Status::new(tonic::Code::NotFound, "SFTP Session not found"));
+        };
+        let mut remote_file = sftp
+            .open_with_flags(
+                request.remote_path,
+                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE | OpenFlags::READ,
+            )
+            .await
+            .unwrap();
+
+        let mut local_file = match File::create(&request.local_path).await {
+            Ok(file) => file,
+            Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to create local file: {}", e))),
+        };
+        
+        let mut buf = vec![0u8; 1024*32];
+        loop {
+            let n = match remote_file.read(&mut buf).await {
+                Ok(n) if n == 0 => break, // EOF
+                Ok(n) => n,
+                Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to read from remote file: {}", e))),
+            };
+
+            if let Err(e) = local_file.write_all(&buf[..n]).await {
+                return Err(Status::new(tonic::Code::Internal, format!("Failed to write to local file: {}", e)));
+            }
+        }
+        Ok(Response::new(FileTransferResponse {
+            local_path: request.local_path
+        }))
+    }
+
+
+    async fn file_upload(&self, request: Request<FileTransferRequest>) 
+    -> Result<Response<FileTransferResponse>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+        let session_guard = match client.sessions.get_mut(&request.session_id) {
+            Some(session) => session,
+            None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+        };
+        let session = session_guard.lock().await;
+        let Some(sftp) = &session.sftp_session else{
+            return Err(Status::new(tonic::Code::NotFound, "SFTP Session not found"));
+        };
+        let mut remote_file = sftp
+            .open_with_flags(
+                request.remote_path,
+                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE | OpenFlags::READ,
+            )
+            .await
+            .unwrap();
+        
+        info!("Opening {}", request.local_path);
+        let mut local_file = match File::open(&request.local_path).await {
+            Ok(file) => file,
+            Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to create local file: {}", e))),
+        };
+        
+        let mut buf = vec![0u8; 1024*32];
+        loop {
+            let n = match local_file.read(&mut buf).await {
+                Ok(n) if n == 0 => break, // EOF
+                Ok(n) => n,
+                Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to read from local file: {}", e))),
+            };
+
+            if let Err(e) = remote_file.write_all(&buf[..n]).await {
+                return Err(Status::new(tonic::Code::Internal, format!("Failed to write to remote file: {}", e)));
+            }
+        }
+        Ok(Response::new(FileTransferResponse {
+            local_path: request.local_path
+        }))
+    }
+
 
     async fn new_connection(&self, request: Request<NewConnectionRequest>) 
     -> Result<Response<NewConnectionResponse>, Status> {
@@ -108,7 +242,7 @@ impl ClientIpc for ClientIpcHandler {
         match res {
             Ok(id) => {
                 Ok(Response::new(NewSessionResponse{
-                    session_id: username
+                    session_id: id
                 }))
             }
             Err(e) => {

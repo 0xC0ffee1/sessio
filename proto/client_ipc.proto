@@ -16,6 +16,20 @@ service ClientIPC {
 
     //Open a SSH channel and a bi-directional stream
     rpc OpenChannel(stream Msg) returns (stream Msg);
+
+    //SFTP RPCs
+    rpc OpenSftpChannel(SftpRequest) returns (SftpRequestResponse);
+    rpc ListDirectory(Path) returns (FileList);
+    rpc FileDownload(FileTransferRequest) returns (FileTransferResponse);
+    rpc FileUpload(FileTransferRequest) returns (FileTransferResponse);
+}
+
+message SftpRequest{
+    string session_id = 1;
+}
+
+message SftpRequestResponse{
+    string channel_id = 1;
 }
 
 message Msg{
@@ -44,6 +58,78 @@ message Msg{
     }
 }
 
+//The messages a client uses to interact with the sftp session
+message ListDir{
+    string path = 1;
+    string session_id = 2;
+}
+
+message Path {
+    string path = 1;
+    string session_id = 2;
+}
+
+message FileTransferRequest {
+    string session_id = 1;
+    string remote_path = 2;
+    string local_path = 3;
+}
+
+message FileTransferResponse {
+    string local_path = 1;
+}
+
+message FileWriteRequest {
+    string file_handle_id = 1;
+    bytes data = 2;
+    string session_id = 3;
+}
+
+message FileWriteResponse {
+    bool success = 1;
+}
+
+message FileReadRequest {
+    string file_handle_id = 1;
+    int32 buf_size = 2;
+    string session_id = 3;
+}
+
+message FileReadResponse {
+    bytes data = 1;
+}
+
+message FileCloseResponse {
+    bool success = 1;
+}
+
+message FileMetadataRequest {
+    string path = 1;
+    string session_id = 2;
+}
+
+message FileMetadataResponse {
+    string path = 1;
+    uint64 size = 2;
+    uint64 last_modified = 3; // Timestamp
+    bool is_directory = 4;
+}
+
+message DirMetadata {
+    string path = 1;
+}
+
+
+message FileList{
+    repeated FileData files = 1;
+}
+
+message FileData{
+    string file_name = 1;
+    uint64 file_size = 2;
+    string file_path = 3;
+    bool is_dir = 4;
+}
 
 message PtyRequestResponse{
     string channel_id = 1;

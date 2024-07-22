@@ -169,20 +169,6 @@ async fn close_client_connection(connection: quinn::Connection, client: Arc<Clie
         error!("Failed to close stream {}! Closing connection.", f_e);
         connection.close(0u32.into(), b"Closing connection");
     }
-    
-    let mut sessions = sessions.lock().await;
-    if let Some(session_id) = client.session_id.lock().await.as_ref() {
-        if let Some(session) = sessions.remove(session_id){
-            info!("Session {} removed", session_id);
-            //Client id is 100% set here
-            let client_id = client.id.lock().await.as_ref().unwrap().clone();
-            if session_id.clone() != client_id {
-                //It's the client disconnecting
-                //We don't care about this error, if it fails there's nothing we can do anyway
-                _ = session.server.stream.send_stream.lock().await.finish().await;
-            }
-        }
-    }
 }
 
 

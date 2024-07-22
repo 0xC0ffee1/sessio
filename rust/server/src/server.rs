@@ -42,7 +42,7 @@ use std::time::Duration;
 use common::utils::keygen::generate_keypair;
 use coordinator::coordinator_client::*;
 use url::Url;
-
+use crate::sftp::*;
 
 use common::utils::streams::BiStream;
 
@@ -194,7 +194,7 @@ fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error:
 //A session
 #[derive(Clone, Default)]
 struct ServerSession {
-    clients: Arc<Mutex<HashMap<(usize, ChannelId), Channel<Msg>>>>,
+    clients: Arc<Mutex<HashMap<ChannelId, Channel<Msg>>>>,
     ptys: Arc<Mutex<HashMap<ChannelId, Arc<PtyStream>>>>,
     id: Arc<AtomicUsize>,
     connection: Option<Connection>
@@ -346,10 +346,37 @@ async fn read_authorized_keys<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<key
 }
 
 
+impl ServerSession {
+    pub async fn take_channel(&mut self, channel_id: ChannelId) -> Channel<Msg> {
+        let mut clients = self.clients.lock().await;
+        clients.remove(&channel_id).unwrap()
+    }
+}
 
 #[async_trait]
 impl server::Handler for ServerSession {
     type Error = anyhow::Error;
+
+
+    async fn subsystem_request(
+        &mut self,
+        channel_id: ChannelId,
+        name: &str,
+        session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        info!("subsystem: {}", name);
+
+        if name == "sftp" {
+            let channel = self.take_channel(channel_id).await;
+            let sftp = SftpSession::new();
+            session.channel_success(channel_id);
+            russh_sftp::server::run(channel.into_stream(), sftp).await;
+        } else {
+            session.channel_failure(channel_id);
+        }
+
+        Ok(())
+    }
 
     async fn channel_open_session(
         &mut self,
@@ -360,12 +387,12 @@ impl server::Handler for ServerSession {
             let new_id = self.id.fetch_add(1, Ordering::SeqCst); // Atomic increment
             let mut clients = self.clients.lock().await;
             info!("Channel session opened! Client ID: {}, Channel ID: {:?}", new_id, channel.id());
-            clients.insert((new_id, channel.id()), channel);
+            clients.insert(channel.id(), channel);
         }
         Ok(true)
     }
 
-    async fn open_channel_stream(&mut self, 
+/*     async fn open_channel_stream(&mut self, 
         channel: ChannelId) 
         -> Result<Option<Box<dyn SubStream>>, Self::Error> {
 
@@ -378,7 +405,7 @@ impl server::Handler for ServerSession {
         }
         
         Ok(None)
-    }
+    } */
 
     async fn shell_request(
         &mut self,

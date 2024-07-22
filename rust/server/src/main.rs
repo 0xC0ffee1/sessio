@@ -1,5 +1,6 @@
 use clap::{Parser};
 mod server;
+mod sftp;
 
 use server::Opt;
 

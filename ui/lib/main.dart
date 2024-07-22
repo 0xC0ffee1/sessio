@@ -22,11 +22,17 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sessio Test',
+      title: 'Sessio',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
         useMaterial3: true,
       ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primarySwatch: Colors.pink,
+        // Additional dark theme settings if needed
+      ),
+      themeMode: ThemeMode.system,
       home: const MyHomePage(title: 'Sessio Test'),
     );
   }

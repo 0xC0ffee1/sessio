@@ -44,6 +44,7 @@ use russh_keys::*;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task;
+use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use futures::stream;
 use crossterm::{
     execute, queue,
@@ -204,10 +205,12 @@ pub struct Client {
     pub sessions: HashMap<String, Arc<Mutex<Session>>>
 }
 
+//The name "Session" is confusing, it's actually a SSH connection
 pub struct Session {
     handle: Handle<ClientHandler>,
     id: String,
-    pub channels: HashMap<ChannelId, Arc<Mutex<Channel<Msg>>>>
+    pub channels: HashMap<ChannelId, Arc<Mutex<Channel<Msg>>>>,
+    pub sftp_session: Option<SftpSession>
 }
 
 pub struct ClientHandler {
@@ -254,7 +257,7 @@ impl Client {
         username: String,
         private_key_path: T,
         known_hosts_path: T
-    )  -> anyhow::Result<()> where T: AsRef<Path> {
+    )  -> anyhow::Result<(String)> where T: AsRef<Path> {
         let start_time = Utc::now();
         let res = load_secret_key(private_key_path, None);
         //Supports RSA since russh 0.44-beta.1
@@ -263,11 +266,11 @@ impl Client {
         };
 
         //Reusing the same session
-        if(self.sessions.contains_key(&username)) {
+/*         if(self.sessions.contains_key(&username)) {
             log::info!("Reusing session {}", username);
             return Ok(());
         }
-
+ */
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(60 * 60)),
             ..<_>::default()
@@ -313,16 +316,17 @@ impl Client {
             anyhow::bail!("Authentication (with publickey) failed");
         }
 
-
         let session = Session {
             id: username.clone(),
             handle,
             channels: HashMap::new(),
+            sftp_session: None
         };
 
-        self.sessions.insert(username, Arc::new(Mutex::new(session)));
+        let id = Uuid::new_v4().to_string();
+        self.sessions.insert(id.clone(), Arc::new(Mutex::new(session)));
 
-        Ok(())
+        Ok((id))
     }
 }
 
@@ -372,7 +376,7 @@ impl russh::client::Handler for ClientHandler {
         Ok(())
     }
 
-    async fn channel_accept_stream(&mut self, 
+/*     async fn channel_accept_stream(&mut self, 
         id: ChannelId) -> Result<Option<Box<dyn SubStream>>, Self::Error> {
 
         info!("Waiting on new channel stream!");
@@ -383,7 +387,7 @@ impl russh::client::Handler for ClientHandler {
         info!("Accepted new channel substream!");
 
         return Ok(option.map(|b| b as Box<dyn russh::SubStream>))
-    }
+    } */
 }
 
 
@@ -432,6 +436,25 @@ async fn attempt_holepunch(target: String, coordinator: Url, endpoint: Endpoint)
 
 
 impl Session {
+
+    pub async fn request_sftp(&mut self) -> Result<ChannelId> {
+
+        
+        let mut channel = self.handle.channel_open_session().await?;
+        info!("Channel opened!");
+
+        let channel_id = channel.id();
+        channel.request_subsystem(true, "sftp").await?;
+        info!("Subsystem requested!");
+
+        let sftp = SftpSession::new(channel.into_stream()).await?;
+        info!("session created!");
+
+        self.sftp_session = Option::from(sftp);
+
+        Ok(channel_id)
+    }
+
     pub async fn request_shell(
         channel_guard: Arc<Mutex<Channel<Msg>>>,
         mut input_rx: Arc<Mutex<mpsc::Receiver<Vec<u8>>>>,
@@ -489,13 +512,11 @@ impl Session {
         Ok(channel_id)
     }
 
-    pub fn get_channel(&mut self, id: &ChannelId) -> Arc<Mutex<Channel<Msg>>>{
-        self.channels.get(id).unwrap().clone()
-    }
-
     pub async fn request_pty(&mut self, channel_id: &ChannelId, col_width: u32, row_height: u32) -> Result<()>{
         let channel_guard = self.channels.get(&channel_id).unwrap();
         let mut channel = channel_guard.lock().await;
+
+        let session = Arc::new(&self);
 
         channel
             .request_pty(
@@ -510,7 +531,6 @@ impl Session {
             .await?;
         
         info!("PTY Requested!");
-
         Ok(())
     }
 

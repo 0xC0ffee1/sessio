@@ -13,6 +13,30 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use sftpRequestDescriptor instead')
+const SftpRequest$json = {
+  '1': 'SftpRequest',
+  '2': [
+    {'1': 'session_id', '3': 1, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `SftpRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sftpRequestDescriptor = $convert.base64Decode(
+    'CgtTZnRwUmVxdWVzdBIdCgpzZXNzaW9uX2lkGAEgASgJUglzZXNzaW9uSWQ=');
+
+@$core.Deprecated('Use sftpRequestResponseDescriptor instead')
+const SftpRequestResponse$json = {
+  '1': 'SftpRequestResponse',
+  '2': [
+    {'1': 'channel_id', '3': 1, '4': 1, '5': 9, '10': 'channelId'},
+  ],
+};
+
+/// Descriptor for `SftpRequestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sftpRequestResponseDescriptor = $convert.base64Decode(
+    'ChNTZnRwUmVxdWVzdFJlc3BvbnNlEh0KCmNoYW5uZWxfaWQYASABKAlSCWNoYW5uZWxJZA==');
+
 @$core.Deprecated('Use msgDescriptor instead')
 const Msg$json = {
   '1': 'Msg',
@@ -68,6 +92,201 @@ final $typed_data.Uint8List msgDescriptor = $convert.base64Decode(
     'pICgpQdHlSZXF1ZXN0EhsKCWNvbF93aWR0aBgBIAEoDVIIY29sV2lkdGgSHQoKcm93X2hlaWdo'
     'dBgCIAEoDVIJcm93SGVpZ2h0Gg4KDFNoZWxsUmVxdWVzdBosCgtDaGFubmVsSW5pdBIdCgpzZX'
     'NzaW9uX2lkGAEgASgJUglzZXNzaW9uSWRCBgoEdHlwZQ==');
+
+@$core.Deprecated('Use listDirDescriptor instead')
+const ListDir$json = {
+  '1': 'ListDir',
+  '2': [
+    {'1': 'path', '3': 1, '4': 1, '5': 9, '10': 'path'},
+    {'1': 'session_id', '3': 2, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `ListDir`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listDirDescriptor = $convert.base64Decode(
+    'CgdMaXN0RGlyEhIKBHBhdGgYASABKAlSBHBhdGgSHQoKc2Vzc2lvbl9pZBgCIAEoCVIJc2Vzc2'
+    'lvbklk');
+
+@$core.Deprecated('Use pathDescriptor instead')
+const Path$json = {
+  '1': 'Path',
+  '2': [
+    {'1': 'path', '3': 1, '4': 1, '5': 9, '10': 'path'},
+    {'1': 'session_id', '3': 2, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `Path`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pathDescriptor = $convert.base64Decode(
+    'CgRQYXRoEhIKBHBhdGgYASABKAlSBHBhdGgSHQoKc2Vzc2lvbl9pZBgCIAEoCVIJc2Vzc2lvbk'
+    'lk');
+
+@$core.Deprecated('Use fileTransferRequestDescriptor instead')
+const FileTransferRequest$json = {
+  '1': 'FileTransferRequest',
+  '2': [
+    {'1': 'session_id', '3': 1, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'remote_path', '3': 2, '4': 1, '5': 9, '10': 'remotePath'},
+    {'1': 'local_path', '3': 3, '4': 1, '5': 9, '10': 'localPath'},
+  ],
+};
+
+/// Descriptor for `FileTransferRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileTransferRequestDescriptor = $convert.base64Decode(
+    'ChNGaWxlVHJhbnNmZXJSZXF1ZXN0Eh0KCnNlc3Npb25faWQYASABKAlSCXNlc3Npb25JZBIfCg'
+    'tyZW1vdGVfcGF0aBgCIAEoCVIKcmVtb3RlUGF0aBIdCgpsb2NhbF9wYXRoGAMgASgJUglsb2Nh'
+    'bFBhdGg=');
+
+@$core.Deprecated('Use fileTransferResponseDescriptor instead')
+const FileTransferResponse$json = {
+  '1': 'FileTransferResponse',
+  '2': [
+    {'1': 'local_path', '3': 1, '4': 1, '5': 9, '10': 'localPath'},
+  ],
+};
+
+/// Descriptor for `FileTransferResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileTransferResponseDescriptor = $convert.base64Decode(
+    'ChRGaWxlVHJhbnNmZXJSZXNwb25zZRIdCgpsb2NhbF9wYXRoGAEgASgJUglsb2NhbFBhdGg=');
+
+@$core.Deprecated('Use fileWriteRequestDescriptor instead')
+const FileWriteRequest$json = {
+  '1': 'FileWriteRequest',
+  '2': [
+    {'1': 'file_handle_id', '3': 1, '4': 1, '5': 9, '10': 'fileHandleId'},
+    {'1': 'data', '3': 2, '4': 1, '5': 12, '10': 'data'},
+    {'1': 'session_id', '3': 3, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `FileWriteRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileWriteRequestDescriptor = $convert.base64Decode(
+    'ChBGaWxlV3JpdGVSZXF1ZXN0EiQKDmZpbGVfaGFuZGxlX2lkGAEgASgJUgxmaWxlSGFuZGxlSW'
+    'QSEgoEZGF0YRgCIAEoDFIEZGF0YRIdCgpzZXNzaW9uX2lkGAMgASgJUglzZXNzaW9uSWQ=');
+
+@$core.Deprecated('Use fileWriteResponseDescriptor instead')
+const FileWriteResponse$json = {
+  '1': 'FileWriteResponse',
+  '2': [
+    {'1': 'success', '3': 1, '4': 1, '5': 8, '10': 'success'},
+  ],
+};
+
+/// Descriptor for `FileWriteResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileWriteResponseDescriptor = $convert.base64Decode(
+    'ChFGaWxlV3JpdGVSZXNwb25zZRIYCgdzdWNjZXNzGAEgASgIUgdzdWNjZXNz');
+
+@$core.Deprecated('Use fileReadRequestDescriptor instead')
+const FileReadRequest$json = {
+  '1': 'FileReadRequest',
+  '2': [
+    {'1': 'file_handle_id', '3': 1, '4': 1, '5': 9, '10': 'fileHandleId'},
+    {'1': 'buf_size', '3': 2, '4': 1, '5': 5, '10': 'bufSize'},
+    {'1': 'session_id', '3': 3, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `FileReadRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileReadRequestDescriptor = $convert.base64Decode(
+    'Cg9GaWxlUmVhZFJlcXVlc3QSJAoOZmlsZV9oYW5kbGVfaWQYASABKAlSDGZpbGVIYW5kbGVJZB'
+    'IZCghidWZfc2l6ZRgCIAEoBVIHYnVmU2l6ZRIdCgpzZXNzaW9uX2lkGAMgASgJUglzZXNzaW9u'
+    'SWQ=');
+
+@$core.Deprecated('Use fileReadResponseDescriptor instead')
+const FileReadResponse$json = {
+  '1': 'FileReadResponse',
+  '2': [
+    {'1': 'data', '3': 1, '4': 1, '5': 12, '10': 'data'},
+  ],
+};
+
+/// Descriptor for `FileReadResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileReadResponseDescriptor = $convert.base64Decode(
+    'ChBGaWxlUmVhZFJlc3BvbnNlEhIKBGRhdGEYASABKAxSBGRhdGE=');
+
+@$core.Deprecated('Use fileCloseResponseDescriptor instead')
+const FileCloseResponse$json = {
+  '1': 'FileCloseResponse',
+  '2': [
+    {'1': 'success', '3': 1, '4': 1, '5': 8, '10': 'success'},
+  ],
+};
+
+/// Descriptor for `FileCloseResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileCloseResponseDescriptor = $convert.base64Decode(
+    'ChFGaWxlQ2xvc2VSZXNwb25zZRIYCgdzdWNjZXNzGAEgASgIUgdzdWNjZXNz');
+
+@$core.Deprecated('Use fileMetadataRequestDescriptor instead')
+const FileMetadataRequest$json = {
+  '1': 'FileMetadataRequest',
+  '2': [
+    {'1': 'path', '3': 1, '4': 1, '5': 9, '10': 'path'},
+    {'1': 'session_id', '3': 2, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `FileMetadataRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileMetadataRequestDescriptor = $convert.base64Decode(
+    'ChNGaWxlTWV0YWRhdGFSZXF1ZXN0EhIKBHBhdGgYASABKAlSBHBhdGgSHQoKc2Vzc2lvbl9pZB'
+    'gCIAEoCVIJc2Vzc2lvbklk');
+
+@$core.Deprecated('Use fileMetadataResponseDescriptor instead')
+const FileMetadataResponse$json = {
+  '1': 'FileMetadataResponse',
+  '2': [
+    {'1': 'path', '3': 1, '4': 1, '5': 9, '10': 'path'},
+    {'1': 'size', '3': 2, '4': 1, '5': 4, '10': 'size'},
+    {'1': 'last_modified', '3': 3, '4': 1, '5': 4, '10': 'lastModified'},
+    {'1': 'is_directory', '3': 4, '4': 1, '5': 8, '10': 'isDirectory'},
+  ],
+};
+
+/// Descriptor for `FileMetadataResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileMetadataResponseDescriptor = $convert.base64Decode(
+    'ChRGaWxlTWV0YWRhdGFSZXNwb25zZRISCgRwYXRoGAEgASgJUgRwYXRoEhIKBHNpemUYAiABKA'
+    'RSBHNpemUSIwoNbGFzdF9tb2RpZmllZBgDIAEoBFIMbGFzdE1vZGlmaWVkEiEKDGlzX2RpcmVj'
+    'dG9yeRgEIAEoCFILaXNEaXJlY3Rvcnk=');
+
+@$core.Deprecated('Use dirMetadataDescriptor instead')
+const DirMetadata$json = {
+  '1': 'DirMetadata',
+  '2': [
+    {'1': 'path', '3': 1, '4': 1, '5': 9, '10': 'path'},
+  ],
+};
+
+/// Descriptor for `DirMetadata`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List dirMetadataDescriptor = $convert.base64Decode(
+    'CgtEaXJNZXRhZGF0YRISCgRwYXRoGAEgASgJUgRwYXRo');
+
+@$core.Deprecated('Use fileListDescriptor instead')
+const FileList$json = {
+  '1': 'FileList',
+  '2': [
+    {'1': 'files', '3': 1, '4': 3, '5': 11, '6': '.clientipc.FileData', '10': 'files'},
+  ],
+};
+
+/// Descriptor for `FileList`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileListDescriptor = $convert.base64Decode(
+    'CghGaWxlTGlzdBIpCgVmaWxlcxgBIAMoCzITLmNsaWVudGlwYy5GaWxlRGF0YVIFZmlsZXM=');
+
+@$core.Deprecated('Use fileDataDescriptor instead')
+const FileData$json = {
+  '1': 'FileData',
+  '2': [
+    {'1': 'file_name', '3': 1, '4': 1, '5': 9, '10': 'fileName'},
+    {'1': 'file_size', '3': 2, '4': 1, '5': 4, '10': 'fileSize'},
+    {'1': 'file_path', '3': 3, '4': 1, '5': 9, '10': 'filePath'},
+    {'1': 'is_dir', '3': 4, '4': 1, '5': 8, '10': 'isDir'},
+  ],
+};
+
+/// Descriptor for `FileData`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileDataDescriptor = $convert.base64Decode(
+    'CghGaWxlRGF0YRIbCglmaWxlX25hbWUYASABKAlSCGZpbGVOYW1lEhsKCWZpbGVfc2l6ZRgCIA'
+    'EoBFIIZmlsZVNpemUSGwoJZmlsZV9wYXRoGAMgASgJUghmaWxlUGF0aBIVCgZpc19kaXIYBCAB'
+    'KAhSBWlzRGly');
 
 @$core.Deprecated('Use ptyRequestResponseDescriptor instead')
 const PtyRequestResponse$json = {
