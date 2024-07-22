@@ -200,11 +200,13 @@ impl ClientIpc for ClientIpcHandler {
         let res = client.new_connection(request.target_id.clone(), url).await;
         match res {
             Ok(id) => {
+                log::info!("CONN OK");
                 Ok(Response::new(NewConnectionResponse{
                     connection_id: request.target_id
                 }))
             }
             Err(e) => {
+                log::error!("Failed to connect {}", e);
                 Err(Status::new(tonic::Code::Internal, e.to_string()))
             }
         }

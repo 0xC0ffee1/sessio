@@ -234,7 +234,7 @@ impl Client {
         }
         
         let start_time = Utc::now();
-        let addr = attempt_holepunch(target_id.clone(), coordinator, endpoint.clone()).await?;
+        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint.clone()).await?;
         let end_time = Utc::now();
         let elapsed_time = end_time - start_time;
         println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
@@ -243,8 +243,6 @@ impl Client {
             inactivity_timeout: Some(Duration::from_secs(60 * 60)),
             ..<_>::default()
         };
-
-        let conn: Connection = endpoint.connect(addr, "server").unwrap().await?;
 
         self.connections.insert(target_id.clone(), conn);
 
@@ -391,16 +389,12 @@ impl russh::client::Handler for ClientHandler {
 }
 
 
-async fn attempt_holepunch(target: String, coordinator: Url, endpoint: Endpoint) -> io::Result<SocketAddr> {
+async fn attempt_holepunch(target: String, coordinator: Url, endpoint: Endpoint) -> io::Result<Connection> {
 
     let mut client = CoordinatorClient::connect(coordinator, Uuid::new_v4().to_string(), endpoint.clone()).await;
     let _ = client.register_endpoint().await;
 
     let _ = client.connect_to(target).await;
-
-    let mut buf = [0u8; 1024];
-
-    let mut successful_target: Option<SocketAddr> = None;
 
     loop {
         info!("Waiting for server to connect.");
@@ -412,13 +406,12 @@ async fn attempt_holepunch(target: String, coordinator: Url, endpoint: Endpoint)
                 let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
                 let target_id = response.get("target_id").unwrap();
 
-                match endpoint.connect(target, "server") {
-                    Ok(_) => {
+                match endpoint.connect(target, "server").unwrap().await {
+                    Ok(conn) => {
                         info!("Connection successful!");
-                        successful_target = Some(target);
                         let _ = client.send_packet(&json!({"id":"CONNECT_OK", "target_id":target_id})).await;
                         let _ = client.close_connection().await;
-                        return Ok(successful_target.unwrap());
+                        return Ok(conn);
                     }
                     Err(e) => {
                         info!("Connection failed: {}", e);

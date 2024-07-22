@@ -120,14 +120,16 @@ impl CoordinatorClient {
                             }
                             Err(e) => {
                                 eprintln!("failed to read JSON message: {}", e);
-                                connection.close(0u32.into(), b"err");
+                                //connection.close(0u32.into(), b"err");
+                                //send_stream.finish().await;
                                 break;
                             }
                         }
                     }
                     Err(e) => {
                         eprintln!("failed to read message length: {}", e);
-                        connection.close(0u32.into(), b"err");
+                        //send_stream.finish().await;
+                        //connection.close(0u32.into(), b"err");
                         break;
                     }
                 }
