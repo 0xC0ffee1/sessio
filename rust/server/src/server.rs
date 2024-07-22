@@ -120,7 +120,7 @@ async fn attempt_holepunch(id: String, coordinator: Url, mut endpoint: Endpoint)
                     
                     let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
 
-                    match endpoint.connect(target, "client").unwrap().await {
+                    match endpoint.connect(target, "client") {
                         Ok(_) => {
                             info!("Connection successful!");
                             
