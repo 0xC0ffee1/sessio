@@ -40,6 +40,7 @@ android_logger = "0.10"
 tokio-stream = { version = "0.1.15", features = ["net"] }
 async-stream = "0.3.5"
 russh-sftp = "2.0.3"
+pnet = "0.35.0"
 
 [target.'cfg(target_os="android")'.dependencies]
 jni = { version = "0.5", default-features = false }

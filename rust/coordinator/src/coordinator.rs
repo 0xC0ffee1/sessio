@@ -77,7 +77,9 @@ struct Client {
     id: Mutex<Option<String>>,
 
     //Set once clients initiates or joins a session
-    session_id: Mutex<Option<String>>
+    session_id: Mutex<Option<String>>,
+
+    ipv6: Mutex<Option<SocketAddr>>
 }
 
 struct ClientStream {
@@ -193,7 +195,8 @@ async fn handle_connection(connection: quinn::Connection,
     let mut client = Arc::new(Client {
         stream: conn.clone(),
         id: Mutex::new(None),
-        session_id: Mutex::new(None)
+        session_id: Mutex::new(None),
+        ipv6: Mutex::new(None)
     });
 
     loop {
@@ -217,6 +220,13 @@ async fn handle_connection(connection: quinn::Connection,
                 let mut client_id_guard = client.session_id.lock().await;
 
                 *client_id_guard = Some(own_id.clone());
+                
+                //Checking if the client supports ipv6
+                if let Some(ipv6) = read_packet_field("ipv6", &packet) {
+                    if ipv6 != "None" {
+                        *client_id_guard = Some(ipv6.clone());
+                    }
+                };
 
                 //let mut clients = clients.lock().await;
 
@@ -231,10 +241,6 @@ async fn handle_connection(connection: quinn::Connection,
 
                 let mut sessions = sessions.lock().await;
 
-                let mut client_id_guard = client.session_id.lock().await;
-
-                *client_id_guard = Some(own_id.clone());
-
                 //Initially there's no client connected
                 sessions.insert(own_id.to_string(), Session {
                     server: client.clone(), //self
@@ -244,7 +250,7 @@ async fn handle_connection(connection: quinn::Connection,
             }
             Some("CLIENT_CONNECTED") => {
                 //Sent by client
-                let client_addr = connection.remote_address();
+                let mut client_addr = connection.remote_address();
                 let Some(target_id) = read_packet_field("target_client_id", &packet) else {
                     continue;
                 };
@@ -256,9 +262,14 @@ async fn handle_connection(connection: quinn::Connection,
                     let mut session_id_guard = client.session_id.lock().await;
 
                     *session_id_guard = Some(target_id.clone());
+                    
+                    //Check if both support ipv6
+                    if session.server.ipv6.lock().await.is_some() {
+                        // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
+                        client_addr = client.ipv6.lock().await.clone().unwrap_or(client_addr);
+                    }
 
                     //Telling the server to send the first packet in the UDP hole punch process
-
                     info!("Sending connect packet to server!");
                     let _ = session.server.stream.send_packet::<Value>(&json!({"id" : "CONNECT_TO", "target" : client_addr})).await;
 
@@ -282,7 +293,15 @@ async fn handle_connection(connection: quinn::Connection,
                         continue;
                     };
 
-                    let _ = client.stream.send_packet::<Value>(&json!({"id" : "CONNECT_TO", "target" : connection.remote_address(), "target_id": own_id})).await;
+                    let mut server_addr = connection.remote_address();
+
+                    //Check if both support ipv6
+                    if client.ipv6.lock().await.is_some() {
+                        // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
+                        server_addr = session.server.ipv6.lock().await.clone().unwrap_or(server_addr);
+                    }
+                    
+                    let _ = client.stream.send_packet::<Value>(&json!({"id" : "CONNECT_TO", "target" : server_addr, "target_id": own_id})).await;
                     json!({"status": "200"})
                 }
                 else {
