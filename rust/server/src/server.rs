@@ -101,11 +101,16 @@ impl ServerConf {
 }
 
 
-async fn attempt_holepunch(id: String, coordinator: Url, mut endpoint: Endpoint) -> anyhow::Result<(), anyhow::Error> {
+async fn attempt_holepunch(id: String, coordinator: Url, 
+    mut endpoint_v4: Endpoint, 
+    mut endpoint_v6: Endpoint) 
+    -> anyhow::Result<(), anyhow::Error> {
     loop {
 
-        CoordinatorClient::configure_client(&mut endpoint);
-        let mut client = CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint.clone()).await;
+        CoordinatorClient::configure_client(&mut endpoint_v4);
+        CoordinatorClient::configure_client(&mut endpoint_v6);
+
+        let mut client = CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint_v4.clone()).await;
         _ = client.register_endpoint().await;
 
         _ = client.new_session().await;
@@ -120,10 +125,15 @@ async fn attempt_holepunch(id: String, coordinator: Url, mut endpoint: Endpoint)
                     
                     let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
 
+                    let endpoint: &Endpoint = if target.is_ipv4() {
+                        &endpoint_v4
+                    } else {
+                        &endpoint_v6
+                    };
+
                     match endpoint.connect(target, "client") {
                         Ok(_) => {
-                            info!("Connection successful!");
-                            
+                            info!("Connection attempt made!");
                         }
                         Err(e) => {
                             info!("Connection failed: {}", e);
@@ -162,21 +172,36 @@ pub async fn run(opt: Opt) {
     
     let conf: ServerConf = ServerConf::new();
 
-    let addr = "0.0.0.0:2222";
-    let (endpoint, _) = make_server_endpoint(addr.parse().unwrap()).unwrap();
+    let addr_v4 = "0.0.0.0:2222";
+    let addr_v6 = "[::]:2222";
 
-    let endpoint_clone = endpoint.clone();
+    let (endpoint_v4, _) = make_server_endpoint(addr_v4.parse().unwrap()).unwrap();
+    let (endpoint_v6, _) = make_server_endpoint(addr_v6.parse().unwrap()).unwrap();
+
+    let endpoint_v4_clone = endpoint_v4.clone();
+    let endpoint_v6_clone = endpoint_v6.clone();
 
     tokio::spawn(async move {
-        attempt_holepunch(opt.id, opt.coordinator, endpoint_clone).await;
+        attempt_holepunch(opt.id, opt.coordinator, endpoint_v4_clone, endpoint_v6_clone).await;
     });
 
     let config = Arc::new(config);
-    let mut sh = Server {};
-
+    
     println!("Started!");
-    sh.run_quic(config, &endpoint).await.unwrap();
-    //sh.run_on_address(config, ("0.0.0.0", 2222)).await.unwrap();
+    let config_v4 = config.clone();
+    let v4_handle = tokio::spawn(async move {
+        let mut sh = Server {};
+        sh.run_quic(config_v4, &endpoint_v4).await.unwrap();
+    });
+    let config_v6 = config.clone();
+    let v6_handle = tokio::spawn(async move {
+        let mut sh = Server {};
+        sh.run_quic(config_v6, &endpoint_v6).await.unwrap();
+    });
+    let (v4,v6) = tokio::join!(v4_handle, v6_handle);
+    // Handle potential errors
+    v4.unwrap();
+    v6.unwrap();
 }
 
 fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error::Error>> {

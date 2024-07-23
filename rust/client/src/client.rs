@@ -190,9 +190,9 @@ fn configure_client() -> Result<ClientConfig, Box<dyn Error>> {
 ///
 /// - server_certs: list of trusted certificates.
 #[allow(unused)]
-pub fn make_client_endpoint() -> Result<Endpoint, Box<dyn Error>> {
+pub fn make_client_endpoint(addr: &str) -> Result<Endpoint, Box<dyn Error>> {
     let client_cfg = configure_client()?;
-    let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?)?;
+    let mut endpoint = Endpoint::client(addr.parse()?)?;
     endpoint.set_default_client_config(client_cfg);
     Ok(endpoint)
 }
@@ -223,7 +223,8 @@ pub struct ClientHandler {
 impl Client {
     //Create a new connection and on success return the its ID
     pub async fn new_connection(&mut self, target_id: String, coordinator: Url) -> anyhow::Result<()> {
-        let endpoint = make_client_endpoint().unwrap();
+        let endpoint_v4 = make_client_endpoint("0.0.0.0:0").unwrap();
+        let endpoint_v6 = make_client_endpoint("[::]:0").unwrap();
 
         if let Some(conn) = self.connections.get_mut(&target_id) {
             if let None = conn.close_reason() {
@@ -234,7 +235,7 @@ impl Client {
         }
         
         let start_time = Utc::now();
-        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint.clone()).await?;
+        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v4.clone(), endpoint_v6.clone()).await?;
         let end_time = Utc::now();
         let elapsed_time = end_time - start_time;
         println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
@@ -389,9 +390,10 @@ impl russh::client::Handler for ClientHandler {
 }
 
 
-async fn attempt_holepunch(target: String, coordinator: Url, endpoint: Endpoint) -> io::Result<Connection> {
+async fn attempt_holepunch(target: String, coordinator: Url, mut endpoint_v4: Endpoint,
+mut endpoint_v6: Endpoint) -> io::Result<Connection> {
 
-    let mut client = CoordinatorClient::connect(coordinator, Uuid::new_v4().to_string(), endpoint.clone()).await;
+    let mut client = CoordinatorClient::connect(coordinator, Uuid::new_v4().to_string(), endpoint_v4.clone()).await;
     let _ = client.register_endpoint().await;
 
     let _ = client.connect_to(target).await;
@@ -405,6 +407,12 @@ async fn attempt_holepunch(target: String, coordinator: Url, endpoint: Endpoint)
                 
                 let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
                 let target_id = response.get("target_id").unwrap();
+
+                let endpoint: &Endpoint = if target.is_ipv4() {
+                    &endpoint_v4
+                } else {
+                    &endpoint_v6
+                };
 
                 match endpoint.connect(target, "server").unwrap().await {
                     Ok(conn) => {
