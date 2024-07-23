@@ -224,7 +224,8 @@ async fn handle_connection(connection: quinn::Connection,
                 //Checking if the client supports ipv6
                 if let Some(ipv6) = read_packet_field("ipv6", &packet) {
                     if ipv6 != "None" {
-                        *client_id_guard = Some(ipv6.clone());
+                        let client_ipv6_guard = client.ipv6.lock().await;
+                        *client_ipv6_guard = Some(ipv6.clone());
                     }
                 };
 
