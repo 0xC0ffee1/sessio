@@ -225,8 +225,8 @@ async fn handle_connection(connection: quinn::Connection,
                 if let Some(ipv6) = read_packet_field("ipv6", &packet) {
                     if ipv6 != "None" {
                         let mut client_ipv6_guard = client.ipv6.lock().await;
-                        let final_v6 = format!("{}:42225", ipv6);
-                        info!("Parsing {}", ipv6);
+                        let final_v6 = format!("[{}]:42225", ipv6);
+                        info!("Parsing {}", final_v6);
                         *client_ipv6_guard = Some(final_v6.parse().unwrap());
                     }
                 };
