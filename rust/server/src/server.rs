@@ -173,7 +173,7 @@ pub async fn run(opt: Opt) {
     let conf: ServerConf = ServerConf::new();
 
     let addr_v4 = "0.0.0.0:2222";
-    let addr_v6 = "[::]:2225";
+    let addr_v6 = "[::]:42225";
 
     let (endpoint_v4, _) = make_server_endpoint(addr_v4.parse().unwrap()).unwrap();
     let (endpoint_v6, _) = make_server_endpoint(addr_v6.parse().unwrap()).unwrap();
