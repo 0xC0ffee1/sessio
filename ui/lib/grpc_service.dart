@@ -19,7 +19,7 @@ class GrpcService {
     final ClientChannel channel;
     if (Platform.isLinux || Platform.isMacOS) {
       final InternetAddress host =
-          InternetAddress('tmp/test.socket', type: InternetAddressType.unix);
+          InternetAddress('/tmp/sessio.socket', type: InternetAddressType.unix);
       channel = ClientChannel(
         host,
         options: const ChannelOptions(
@@ -65,8 +65,21 @@ class GrpcService {
     return browser;
   }
 
+  bool isSpecialCharacter(String data) {
+    // List of special characters to check for
+    const specialChars = [
+      '\r',
+      '\n',
+      '\x03',
+      '\x04'
+    ]; // Enter, Ctrl+C, Ctrl+D, etc.
+
+    // Check if the data contains any special characters
+    return specialChars.any((char) => data.contains(char));
+  }
+
   void connectPTY(String clientId, SessioTerminalState state) async {
-    final t = DateTime.now().millisecondsSinceEpoch;
+    var t = DateTime.now().millisecondsSinceEpoch;
     NewSessionResponse sessionResponse = await _newSession(clientId);
 
     final streamController = StreamController<Msg>();
@@ -84,9 +97,13 @@ class GrpcService {
         ..colWidth = state.terminal.viewWidth
         ..rowHeight = state.terminal.viewHeight));
 
+    // Handle terminal output
     state.terminal.onOutput = (data) {
+      // Add the data to the stream
       streamController
           .add(Msg()..data = (Msg_Data()..payload = data.codeUnits));
+      // Write the data to the terminal
+      //state.terminal.write(data);
     };
 
     bool pinged = false;
@@ -101,10 +118,13 @@ class GrpcService {
       if (response.hasData()) {
         if (!pinged) {
           state.terminal.write(
-              "Took ${DateTime.now().millisecondsSinceEpoch - t}ms to connect.\r\n");
+              "Took to connect: ${DateTime.now().millisecondsSinceEpoch - t}ms.\r\n");
+
           pinged = true;
         }
-        state.terminal.write(utf8.decode(response.data.payload));
+        String data = utf8.decode(response.data.payload);
+        //state.terminal.write("\b \b");
+        state.terminal.write(data);
       }
     }
   }

@@ -20,8 +20,8 @@ service ClientIPC {
     //SFTP RPCs
     rpc OpenSftpChannel(SftpRequest) returns (SftpRequestResponse);
     rpc ListDirectory(Path) returns (FileList);
-    rpc FileDownload(FileTransferRequest) returns (FileTransferResponse);
-    rpc FileUpload(FileTransferRequest) returns (FileTransferResponse);
+    rpc FileDownload(FileTransferRequest) returns (stream FileTransferStatus);
+    rpc FileUpload(FileTransferRequest) returns (stream FileTransferStatus);
 }
 
 message SftpRequest{
@@ -75,8 +75,17 @@ message FileTransferRequest {
     string local_path = 3;
 }
 
-message FileTransferResponse {
-    string local_path = 1;
+message FileTransferStatus {
+    oneof typ{
+        Progress progress = 1;
+        Completed completed = 2;
+    }
+    message Progress{
+        int32 bytes_read = 1;
+    }
+    message Completed{
+        
+    }
 }
 
 message FileWriteRequest {

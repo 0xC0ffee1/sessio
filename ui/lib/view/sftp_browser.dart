@@ -5,6 +5,78 @@ import 'package:sessio_ui/model/sftp/browser.dart';
 import 'package:sessio_ui/model/sftp/sftp.dart';
 import 'sftp_browser.dart'; // Import the file containing your SftpBrowser class
 
+void showProgressDialog(
+    BuildContext context, int fileSize, Stream<TransferStatus> transferStream) {
+  int previousBytesRead = 0;
+  DateTime? previousTimestamp;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) {
+      return AlertDialog(
+        title: Text('File Transfer'),
+        content: StreamBuilder<TransferStatus>(
+          stream: transferStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Text('Initializing...');
+            } else if (snapshot.hasError) {
+              return Text('Error: ${snapshot.error}');
+            } else if (!snapshot.hasData) {
+              return Text('Unknown state');
+            } else {
+              final status = snapshot.data!;
+              final progress = status.bytesRead;
+
+              double speed = 0;
+              final timestamp = DateTime.now();
+              if (previousTimestamp != null) {
+                final elapsedTime = timestamp.difference(previousTimestamp!).inMilliseconds;
+                final bytesTransferred = status.bytesRead - previousBytesRead;
+                speed = bytesTransferred / elapsedTime * 1000 / (1024 * 1024); // Convert to MB/s
+              }
+
+              previousBytesRead = status.bytesRead;
+              previousTimestamp = timestamp;
+
+              if (status.type == TransferStatusType.progress) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Transferring...'),
+                    SizedBox(height: 20),
+                    LinearProgressIndicator(
+                      value: progress / fileSize,
+                    ),
+                    SizedBox(height: 20),
+                    Text('${(progress / fileSize * 100).toStringAsFixed(2)}% completed'),
+                    SizedBox(height: 10),
+                    Text('Speed: ${speed.toStringAsFixed(2)} MB/s'),
+                  ],
+                );
+              } else if (status.type == TransferStatusType.completed) {
+                Navigator.of(context).pop(); // Close the dialog on completion
+                return Text('Transfer completed');
+              } else {
+                return Text('Unknown state');
+              }
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: Text('Cancel'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 class FileBrowserView extends StatelessWidget {
   final FileBrowser _browser;
 
@@ -45,8 +117,12 @@ class FileBrowserView extends StatelessWidget {
               dialogTitle: 'Select file:',
             );
             if (res != null) {
-              await _browser.addFile(
+              int fileSize = res.files.single.size;
+
+              final transferStream = _browser.addFile(
                   res.files.single.path!, res.files.single.name);
+
+              showProgressDialog(context, fileSize, transferStream);
             }
           },
           child: Icon(Icons.add),
@@ -126,7 +202,12 @@ class FileListView extends StatelessWidget {
                     );
 
                     if (outputFile != null) {
-                      browser.copyFile(file.path, outputFile);
+                      int fileSize = file.byteSize;
+
+                      final transferStream =
+                          browser.copyFile(file.path, outputFile);
+
+                      showProgressDialog(context, fileSize, transferStream);
                     }
                   },
                   icon: Icon(Icons.download),

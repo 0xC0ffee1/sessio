@@ -137,17 +137,39 @@ final $typed_data.Uint8List fileTransferRequestDescriptor = $convert.base64Decod
     'tyZW1vdGVfcGF0aBgCIAEoCVIKcmVtb3RlUGF0aBIdCgpsb2NhbF9wYXRoGAMgASgJUglsb2Nh'
     'bFBhdGg=');
 
-@$core.Deprecated('Use fileTransferResponseDescriptor instead')
-const FileTransferResponse$json = {
-  '1': 'FileTransferResponse',
+@$core.Deprecated('Use fileTransferStatusDescriptor instead')
+const FileTransferStatus$json = {
+  '1': 'FileTransferStatus',
   '2': [
-    {'1': 'local_path', '3': 1, '4': 1, '5': 9, '10': 'localPath'},
+    {'1': 'progress', '3': 1, '4': 1, '5': 11, '6': '.clientipc.FileTransferStatus.Progress', '9': 0, '10': 'progress'},
+    {'1': 'completed', '3': 2, '4': 1, '5': 11, '6': '.clientipc.FileTransferStatus.Completed', '9': 0, '10': 'completed'},
+  ],
+  '3': [FileTransferStatus_Progress$json, FileTransferStatus_Completed$json],
+  '8': [
+    {'1': 'typ'},
   ],
 };
 
-/// Descriptor for `FileTransferResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List fileTransferResponseDescriptor = $convert.base64Decode(
-    'ChRGaWxlVHJhbnNmZXJSZXNwb25zZRIdCgpsb2NhbF9wYXRoGAEgASgJUglsb2NhbFBhdGg=');
+@$core.Deprecated('Use fileTransferStatusDescriptor instead')
+const FileTransferStatus_Progress$json = {
+  '1': 'Progress',
+  '2': [
+    {'1': 'bytes_read', '3': 1, '4': 1, '5': 5, '10': 'bytesRead'},
+  ],
+};
+
+@$core.Deprecated('Use fileTransferStatusDescriptor instead')
+const FileTransferStatus_Completed$json = {
+  '1': 'Completed',
+};
+
+/// Descriptor for `FileTransferStatus`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileTransferStatusDescriptor = $convert.base64Decode(
+    'ChJGaWxlVHJhbnNmZXJTdGF0dXMSRAoIcHJvZ3Jlc3MYASABKAsyJi5jbGllbnRpcGMuRmlsZV'
+    'RyYW5zZmVyU3RhdHVzLlByb2dyZXNzSABSCHByb2dyZXNzEkcKCWNvbXBsZXRlZBgCIAEoCzIn'
+    'LmNsaWVudGlwYy5GaWxlVHJhbnNmZXJTdGF0dXMuQ29tcGxldGVkSABSCWNvbXBsZXRlZBopCg'
+    'hQcm9ncmVzcxIdCgpieXRlc19yZWFkGAEgASgFUglieXRlc1JlYWQaCwoJQ29tcGxldGVkQgUK'
+    'A3R5cA==');
 
 @$core.Deprecated('Use fileWriteRequestDescriptor instead')
 const FileWriteRequest$json = {

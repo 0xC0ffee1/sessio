@@ -636,22 +636,22 @@ class FileTransferRequest extends $pb.GeneratedMessage {
   void clearLocalPath() => clearField(3);
 }
 
-class FileTransferResponse extends $pb.GeneratedMessage {
-  factory FileTransferResponse({
-    $core.String? localPath,
+class FileTransferStatus_Progress extends $pb.GeneratedMessage {
+  factory FileTransferStatus_Progress({
+    $core.int? bytesRead,
   }) {
     final $result = create();
-    if (localPath != null) {
-      $result.localPath = localPath;
+    if (bytesRead != null) {
+      $result.bytesRead = bytesRead;
     }
     return $result;
   }
-  FileTransferResponse._() : super();
-  factory FileTransferResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
-  factory FileTransferResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+  FileTransferStatus_Progress._() : super();
+  factory FileTransferStatus_Progress.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileTransferStatus_Progress.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileTransferResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'localPath')
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileTransferStatus.Progress', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..a<$core.int>(1, _omitFieldNames ? '' : 'bytesRead', $pb.PbFieldType.O3)
     ..hasRequiredFields = false
   ;
 
@@ -659,31 +659,146 @@ class FileTransferResponse extends $pb.GeneratedMessage {
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
   'Will be removed in next major version')
-  FileTransferResponse clone() => FileTransferResponse()..mergeFromMessage(this);
+  FileTransferStatus_Progress clone() => FileTransferStatus_Progress()..mergeFromMessage(this);
   @$core.Deprecated(
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
   'Will be removed in next major version')
-  FileTransferResponse copyWith(void Function(FileTransferResponse) updates) => super.copyWith((message) => updates(message as FileTransferResponse)) as FileTransferResponse;
+  FileTransferStatus_Progress copyWith(void Function(FileTransferStatus_Progress) updates) => super.copyWith((message) => updates(message as FileTransferStatus_Progress)) as FileTransferStatus_Progress;
 
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
-  static FileTransferResponse create() => FileTransferResponse._();
-  FileTransferResponse createEmptyInstance() => create();
-  static $pb.PbList<FileTransferResponse> createRepeated() => $pb.PbList<FileTransferResponse>();
+  static FileTransferStatus_Progress create() => FileTransferStatus_Progress._();
+  FileTransferStatus_Progress createEmptyInstance() => create();
+  static $pb.PbList<FileTransferStatus_Progress> createRepeated() => $pb.PbList<FileTransferStatus_Progress>();
   @$core.pragma('dart2js:noInline')
-  static FileTransferResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileTransferResponse>(create);
-  static FileTransferResponse? _defaultInstance;
+  static FileTransferStatus_Progress getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileTransferStatus_Progress>(create);
+  static FileTransferStatus_Progress? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $core.String get localPath => $_getSZ(0);
+  $core.int get bytesRead => $_getIZ(0);
   @$pb.TagNumber(1)
-  set localPath($core.String v) { $_setString(0, v); }
+  set bytesRead($core.int v) { $_setSignedInt32(0, v); }
   @$pb.TagNumber(1)
-  $core.bool hasLocalPath() => $_has(0);
+  $core.bool hasBytesRead() => $_has(0);
   @$pb.TagNumber(1)
-  void clearLocalPath() => clearField(1);
+  void clearBytesRead() => clearField(1);
+}
+
+class FileTransferStatus_Completed extends $pb.GeneratedMessage {
+  factory FileTransferStatus_Completed() => create();
+  FileTransferStatus_Completed._() : super();
+  factory FileTransferStatus_Completed.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileTransferStatus_Completed.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileTransferStatus.Completed', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileTransferStatus_Completed clone() => FileTransferStatus_Completed()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileTransferStatus_Completed copyWith(void Function(FileTransferStatus_Completed) updates) => super.copyWith((message) => updates(message as FileTransferStatus_Completed)) as FileTransferStatus_Completed;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileTransferStatus_Completed create() => FileTransferStatus_Completed._();
+  FileTransferStatus_Completed createEmptyInstance() => create();
+  static $pb.PbList<FileTransferStatus_Completed> createRepeated() => $pb.PbList<FileTransferStatus_Completed>();
+  @$core.pragma('dart2js:noInline')
+  static FileTransferStatus_Completed getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileTransferStatus_Completed>(create);
+  static FileTransferStatus_Completed? _defaultInstance;
+}
+
+enum FileTransferStatus_Typ {
+  progress, 
+  completed, 
+  notSet
+}
+
+class FileTransferStatus extends $pb.GeneratedMessage {
+  factory FileTransferStatus({
+    FileTransferStatus_Progress? progress,
+    FileTransferStatus_Completed? completed,
+  }) {
+    final $result = create();
+    if (progress != null) {
+      $result.progress = progress;
+    }
+    if (completed != null) {
+      $result.completed = completed;
+    }
+    return $result;
+  }
+  FileTransferStatus._() : super();
+  factory FileTransferStatus.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileTransferStatus.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static const $core.Map<$core.int, FileTransferStatus_Typ> _FileTransferStatus_TypByTag = {
+    1 : FileTransferStatus_Typ.progress,
+    2 : FileTransferStatus_Typ.completed,
+    0 : FileTransferStatus_Typ.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileTransferStatus', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..oo(0, [1, 2])
+    ..aOM<FileTransferStatus_Progress>(1, _omitFieldNames ? '' : 'progress', subBuilder: FileTransferStatus_Progress.create)
+    ..aOM<FileTransferStatus_Completed>(2, _omitFieldNames ? '' : 'completed', subBuilder: FileTransferStatus_Completed.create)
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileTransferStatus clone() => FileTransferStatus()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileTransferStatus copyWith(void Function(FileTransferStatus) updates) => super.copyWith((message) => updates(message as FileTransferStatus)) as FileTransferStatus;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileTransferStatus create() => FileTransferStatus._();
+  FileTransferStatus createEmptyInstance() => create();
+  static $pb.PbList<FileTransferStatus> createRepeated() => $pb.PbList<FileTransferStatus>();
+  @$core.pragma('dart2js:noInline')
+  static FileTransferStatus getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileTransferStatus>(create);
+  static FileTransferStatus? _defaultInstance;
+
+  FileTransferStatus_Typ whichTyp() => _FileTransferStatus_TypByTag[$_whichOneof(0)]!;
+  void clearTyp() => clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  FileTransferStatus_Progress get progress => $_getN(0);
+  @$pb.TagNumber(1)
+  set progress(FileTransferStatus_Progress v) { setField(1, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasProgress() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProgress() => clearField(1);
+  @$pb.TagNumber(1)
+  FileTransferStatus_Progress ensureProgress() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  FileTransferStatus_Completed get completed => $_getN(1);
+  @$pb.TagNumber(2)
+  set completed(FileTransferStatus_Completed v) { setField(2, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasCompleted() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCompleted() => clearField(2);
+  @$pb.TagNumber(2)
+  FileTransferStatus_Completed ensureCompleted() => $_ensure(1);
 }
 
 class FileWriteRequest extends $pb.GeneratedMessage {

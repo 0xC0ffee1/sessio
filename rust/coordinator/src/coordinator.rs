@@ -50,9 +50,14 @@ pub fn make_server_endpoint(bind_addr: SocketAddr) -> Result<(Endpoint, Vec<u8>)
 
 #[tokio::main]
 pub async fn run(addr: SocketAddr) {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
-        .init();
+    let mut builder = env_logger::Builder::from_default_env();
+    if cfg!(debug_assertions) {
+        // Debug mode
+        builder.filter_level(log::LevelFilter::Debug);
+    } else {
+        builder.filter_level(log::LevelFilter::Info);
+    }
+    builder.init();
     
 
     let (endpoint, _) = make_server_endpoint(addr).unwrap();

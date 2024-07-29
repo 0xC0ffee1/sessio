@@ -9,10 +9,28 @@ abstract class FileBrowser with ChangeNotifier {
   bool get isLoading;
 
   void setCurrentPath(List<String> path);
-  Future<void> addFile(String filePath, String fileName);
-  Future<void> copyFile(String filePath, String dest);
+  Stream<TransferStatus> addFile(String filePath, String fileName);
+  Stream<TransferStatus> copyFile(String filePath, String dest);
   Future<void> navigateToDirectory(String directory);
   Future<void> navigateUp();
+}
+
+enum TransferStatusType {
+  progress,
+  completed,
+}
+
+class TransferStatus {
+  final TransferStatusType type;
+  final int bytesRead;
+
+  const TransferStatus.progress({required this.bytesRead})
+      : type = TransferStatusType.progress;
+  const TransferStatus.completed()
+      : bytesRead = 0,
+        type = TransferStatusType.completed;
+
+  int getBytesRead() => bytesRead;
 }
 
 //Java moment

@@ -223,9 +223,6 @@ pub struct ClientHandler {
 impl Client {
     //Create a new connection and on success return the its ID
     pub async fn new_connection(&mut self, target_id: String, coordinator: Url) -> anyhow::Result<()> {
-        let endpoint_v4 = make_client_endpoint("0.0.0.0:0").unwrap();
-        let endpoint_v6 = make_client_endpoint("[::]:42225").unwrap();
-
         if let Some(conn) = self.connections.get_mut(&target_id) {
             if let None = conn.close_reason() {
                 //Connection is still open, reusing the old one
@@ -234,6 +231,9 @@ impl Client {
             }
         }
         
+        let endpoint_v4 = make_client_endpoint("0.0.0.0:0").unwrap();
+        let endpoint_v6 = make_client_endpoint("[::]:42225").unwrap();
+
         let start_time = Utc::now();
         let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v4.clone(), endpoint_v6.clone()).await?;
         let end_time = Utc::now();

@@ -15,21 +15,48 @@ class SftpBrowser with ChangeNotifier implements FileBrowser {
 
   //Uploads from local machine to remote
   @override
-  Future<void> addFile(String localPath, String fileName) async {
-    await _client.fileUpload(FileTransferRequest(
+  Stream<TransferStatus> addFile(String localPath, String fileName) async* {
+    final responseStream = _client.fileUpload(FileTransferRequest(
         sessionId: _sessionId,
         localPath: localPath,
         remotePath: "${_currentPath.join('/')}$fileName"));
 
-    await refreshFileList();
+    await for (var response in responseStream) {
+      // Map the response to FileTransferStatus DTO
+      switch (response.whichTyp()) {
+        case FileTransferStatus_Typ.progress:
+          yield TransferStatus.progress(bytesRead: response.progress.bytesRead);
+          break;
+        case FileTransferStatus_Typ.completed:
+          yield TransferStatus.completed();
+          break;
+        case FileTransferStatus_Typ.notSet:
+          break;
+      }
+    }
   }
 
-  //Downloads from remote machine to local
   @override
-  Future<void> copyFile(String filePath, String dest) async {
-    await _client.fileDownload(FileTransferRequest(
-        sessionId: _sessionId, localPath: dest, remotePath: filePath));
-    await refreshFileList();
+  Stream<TransferStatus> copyFile(String filePath, String dest) async* {
+    final responseStream = _client.fileDownload(FileTransferRequest(
+      sessionId: _sessionId,
+      localPath: dest,
+      remotePath: filePath,
+    ));
+
+    await for (var response in responseStream) {
+      // Map the response to TransferStatus
+      switch (response.whichTyp()) {
+        case FileTransferStatus_Typ.progress:
+          yield TransferStatus.progress(bytesRead: response.progress.bytesRead);
+          break;
+        case FileTransferStatus_Typ.completed:
+          yield TransferStatus.completed();
+          break;
+        case FileTransferStatus_Typ.notSet:
+          break;
+      }
+    }
   }
 
   @override
@@ -48,7 +75,6 @@ class SftpBrowser with ChangeNotifier implements FileBrowser {
           byteSize: file.fileSize.toInt(),
           isDir: file.isDir);
     }).toList();
-    print("FETCHED ${res.length}");
     _currentFiles = res;
     _isLoadingFiles = false;
     notifyListeners();

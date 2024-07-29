@@ -9,8 +9,10 @@ use uuid::Uuid;
 use tokio::{fs::File, io::AsyncReadExt, sync::mpsc, io::AsyncWriteExt};
 use std::{pin::Pin, sync::Arc};
 use clientipc::{
-    client_ipc_server::{ClientIpc, ClientIpcServer}, msg::Type, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferResponse, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, SftpRequest, SftpRequestResponse, StreamResponse
+    client_ipc_server::{ClientIpc, ClientIpcServer}, msg::Type, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, file_transfer_status::Progress, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, SftpRequest, SftpRequestResponse, StreamResponse
 };
+use clientipc::file_transfer_status::Typ;
+
 
 use log::info;
 use tokio::sync::Mutex;
@@ -42,6 +44,10 @@ struct ClientIpcHandler {
 impl ClientIpc for ClientIpcHandler {
     type OpenChannelStream =
         Pin<Box<dyn Stream<Item = Result<Msg, Status>> + Send  + 'static>>;
+    type FileDownloadStream =
+        Pin<Box<dyn Stream<Item = Result<FileTransferStatus, Status>> + Send  + 'static>>;
+
+    type FileUploadStream = Self::FileDownloadStream;
 
     async fn open_sftp_channel(&self, request: Request<SftpRequest>) 
     -> Result<Response<SftpRequestResponse>, Status> {
@@ -79,7 +85,7 @@ impl ClientIpc for ClientIpcHandler {
         let Some(sftp) = &session.sftp_session else{
             return Err(Status::new(tonic::Code::NotFound, "SFTP Session not found"));
         };
-        info!("current path: {:?}", sftp.canonicalize(&request.path).await.unwrap());
+        //info!("current path: {:?}", sftp.canonicalize(&request.path).await.unwrap());
 
         let Ok(dir) = sftp.read_dir(&request.path).await else {
             return Err(Status::new(tonic::Code::NotFound, "Directory not found"));
@@ -102,7 +108,7 @@ impl ClientIpc for ClientIpcHandler {
 
 
     async fn file_download(&self, request: Request<FileTransferRequest>) 
-    -> Result<Response<FileTransferResponse>, Status> {
+    -> Result<Response<Self::FileDownloadStream>, Status> {
         let request = request.into_inner();
         let mut client = self.client.lock().await;
         let session_guard = match client.sessions.get_mut(&request.session_id) {
@@ -126,26 +132,47 @@ impl ClientIpc for ClientIpcHandler {
             Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to create local file: {}", e))),
         };
         
-        let mut buf = vec![0u8; 1024*32];
-        loop {
-            let n = match remote_file.read(&mut buf).await {
-                Ok(n) if n == 0 => break, // EOF
-                Ok(n) => n,
-                Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to read from remote file: {}", e))),
-            };
+        let res = async_stream::try_stream! {
+            let mut buf = vec![0u8; 1024*512];
+            let mut bytes_read: i32 = 0;
+            loop {
+                let n: usize = match remote_file.read(&mut buf).await {
+                    Ok(n) if n == 0 => break, // EOF
+                    Ok(n) => n,
+                    Err(e) => {
+                        //yield Err(Status::new(tonic::Code::Internal, format!("Failed to read from remote file: {}", e)));
+                        log::error!("Failed to read from remote file: {}", e);
+                        break;
+                    },
+                };
+                bytes_read += n as i32;
+                if let Err(e) = local_file.write_all(&buf[..n]).await {
+                    //yield Err(Status::new(tonic::Code::Internal, format!("Failed to write to local file: {}", e)));
+                    log::error!("Failed to write to local file: {}", e);
+                    break;
+                }
 
-            if let Err(e) = local_file.write_all(&buf[..n]).await {
-                return Err(Status::new(tonic::Code::Internal, format!("Failed to write to local file: {}", e)));
+                let progress = Progress {
+                    bytes_read: bytes_read
+                };
+
+                let file_transfer_status = FileTransferStatus {
+                    typ: Some(Typ::Progress(progress)),
+                };
+
+                yield file_transfer_status;
             }
-        }
-        Ok(Response::new(FileTransferResponse {
-            local_path: request.local_path
-        }))
+            yield FileTransferStatus {
+                typ: Some(Typ::Completed(Default::default())),
+            };
+        };
+        
+        Ok(Response::new(Box::pin(res) as Self::FileDownloadStream))
     }
 
 
     async fn file_upload(&self, request: Request<FileTransferRequest>) 
-    -> Result<Response<FileTransferResponse>, Status> {
+    -> Result<Response<Self::FileUploadStream>, Status> {
         let request = request.into_inner();
         let mut client = self.client.lock().await;
         let session_guard = match client.sessions.get_mut(&request.session_id) {
@@ -170,21 +197,40 @@ impl ClientIpc for ClientIpcHandler {
             Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to create local file: {}", e))),
         };
         
-        let mut buf = vec![0u8; 1024*32];
+
+        let res = async_stream::try_stream! {
+        let mut buf = vec![0u8; 1024*512];
+        let mut bytes_written: i32 = 0;
         loop {
             let n = match local_file.read(&mut buf).await {
                 Ok(n) if n == 0 => break, // EOF
                 Ok(n) => n,
-                Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to read from local file: {}", e))),
+                Err(e) => {
+                    log::error!("Failed to read from local file: {}", e);
+                    break;
+                }
             };
 
             if let Err(e) = remote_file.write_all(&buf[..n]).await {
-                return Err(Status::new(tonic::Code::Internal, format!("Failed to write to remote file: {}", e)));
+                log::error!("Failed to write to remote file: {}", e);
+                break;
+                //return Err(Status::new(tonic::Code::Internal, format!("Failed to write to remote file: {}", e)));
             }
+            bytes_written += n as i32;
+            let progress = Progress {
+                bytes_read: bytes_written
+            };
+
+            let file_transfer_status = FileTransferStatus {
+                typ: Some(Typ::Progress(progress)),
+            };
+
+            yield file_transfer_status;
+
         }
-        Ok(Response::new(FileTransferResponse {
-            local_path: request.local_path
-        }))
+        };
+        
+        Ok(Response::new(Box::pin(res) as Self::FileUploadStream))
     }
 
 
