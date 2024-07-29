@@ -13,7 +13,7 @@ use tokio::sync::oneshot::channel;
 use uuid::Uuid;
 use std::collections::HashMap;
 use std::f64::consts::E;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV6};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stdin, Stdout};
@@ -190,9 +190,9 @@ fn configure_client() -> Result<ClientConfig, Box<dyn Error>> {
 ///
 /// - server_certs: list of trusted certificates.
 #[allow(unused)]
-pub fn make_client_endpoint(addr: &str) -> Result<Endpoint, Box<dyn Error>> {
+pub fn make_client_endpoint(addr: SocketAddr) -> Result<Endpoint, Box<dyn Error>> {
     let client_cfg = configure_client()?;
-    let mut endpoint = Endpoint::client(addr.parse()?)?;
+    let mut endpoint = Endpoint::client(addr)?;
     endpoint.set_default_client_config(client_cfg);
     Ok(endpoint)
 }
@@ -216,6 +216,7 @@ pub struct Session {
 pub struct ClientHandler {
     connection: Connection,
     remote_addr: SocketAddr,
+    server_id: String,
     known_hosts_path: PathBuf
 }
 
@@ -230,9 +231,11 @@ impl Client {
                 return Ok(());
             }
         }
+
+        let v6_ip = common::utils::ipv6::get_first_global_ipv6().unwrap_or(Ipv6Addr::UNSPECIFIED);
         
-        let endpoint_v4 = make_client_endpoint("0.0.0.0:0").unwrap();
-        let endpoint_v6 = make_client_endpoint("[::]:0").unwrap();
+        let endpoint_v4 = make_client_endpoint("0.0.0.0:0".parse().unwrap()).unwrap();
+        let endpoint_v6 = make_client_endpoint(SocketAddr::V6(SocketAddrV6::new(v6_ip, 0, 0, 0))).unwrap();
 
         let start_time = Utc::now();
         let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v4.clone(), endpoint_v6.clone()).await?;
@@ -296,6 +299,7 @@ impl Client {
 
         let session_handler = ClientHandler {
             remote_addr: connection.remote_address(),
+            server_id: target_id,
             connection: connection.clone(),
             known_hosts_path: known_hosts_path.as_ref().to_path_buf()
         };
@@ -340,9 +344,8 @@ impl russh::client::Handler for ClientHandler {
         &mut self,
         _server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        let host = &self.remote_addr.ip().to_string();
+        let host = &self.server_id;
         let port = self.remote_addr.port();
-
 
         let is_known_res = russh_keys::check_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path);
 

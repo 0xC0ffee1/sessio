@@ -10,3 +10,5 @@ log = "0.4"
 rand = { version = "0.8", features = ["std"] }
 ssh-key = { version = "0.6.6", features = ["ed25519"] }
 russh = { path = "../../../russh/russh" }
+if-addrs = "0.13.1"
+anyhow = "1.0.86"

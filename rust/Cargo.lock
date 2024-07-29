@@ -494,6 +494,7 @@ dependencies = [
  "env_logger 0.10.2",
  "futures",
  "futures-util",
+ "if-addrs",
  "jni",
  "log 0.4.22",
  "log4rs",
@@ -543,6 +544,8 @@ dependencies = [
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "if-addrs",
  "log 0.4.22",
  "quinn",
  "rand",
@@ -1467,6 +1470,16 @@ checksum = "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
 dependencies = [
  "unicode-bidi",
  "unicode-normalization",
+]
+
+[[package]]
+name = "if-addrs"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a2b3d54f41dab497e273737c41c6c2468c6d0b001b8cc0871d57334e78c4691"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3197,6 +3210,7 @@ dependencies = [
  "coordinator",
  "env_logger 0.10.2",
  "futures-util",
+ "if-addrs",
  "log 0.4.22",
  "log4rs",
  "portable-pty",

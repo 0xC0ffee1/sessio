@@ -25,7 +25,7 @@ use russh_keys::key::KeyPair;
 use rand::CryptoRng;
 use log::{debug, error, info};
 use tokio::fs::read_to_string;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use clap::Parser;
 use quinn::{crypto, Connection, Endpoint, ServerConfig, VarInt};
 
@@ -178,10 +178,10 @@ pub async fn run(opt: Opt) {
     let conf: ServerConf = ServerConf::new();
 
     let addr_v4 = "0.0.0.0:2222";
-    let addr_v6 = "[::]:42225";
+    let v6_ip = common::utils::ipv6::get_first_global_ipv6().unwrap_or(Ipv6Addr::UNSPECIFIED);
 
     let (endpoint_v4, _) = make_server_endpoint(addr_v4.parse().unwrap()).unwrap();
-    let (endpoint_v6, _) = make_server_endpoint(addr_v6.parse().unwrap()).unwrap();
+    let (endpoint_v6, _) = make_server_endpoint(SocketAddr::V6(SocketAddrV6::new(v6_ip, 0, 0, 0))).unwrap();
 
     let endpoint_v4_clone = endpoint_v4.clone();
     let endpoint_v6_clone = endpoint_v6.clone();
