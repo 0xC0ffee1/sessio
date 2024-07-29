@@ -345,7 +345,7 @@ impl russh::client::Handler for ClientHandler {
         _server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
         let host = &self.server_id;
-        let port = self.remote_addr.port();
+        let port = 0;
 
         let is_known_res = russh_keys::check_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path);
 
@@ -515,6 +515,25 @@ impl Session {
         self.channels.insert(channel.id(), Arc::new(Mutex::new(channel)));
 
         Ok(channel_id)
+    }
+
+    pub async fn resize_pty(&mut self, channel_id: &ChannelId, col_width: u32, row_height: u32) -> Result<()>{
+        let channel_guard = self.channels.get(&channel_id).unwrap();
+        let mut channel = channel_guard.lock().await;
+
+        let session = Arc::new(&self);
+
+        channel
+            .window_change(
+                col_width ,
+                row_height,
+                0,
+                0,
+            )
+            .await?;
+        
+        info!("PTY Requested!");
+        Ok(())
     }
 
     pub async fn request_pty(&mut self, channel_id: &ChannelId, col_width: u32, row_height: u32) -> Result<()>{

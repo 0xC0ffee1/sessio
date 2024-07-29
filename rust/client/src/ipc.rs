@@ -367,6 +367,10 @@ impl ClientIpc for ClientIpcHandler {
                                     let mut session = session_clone.lock().await;
                                     let _ = session.request_pty(&channel_id, req.col_width, req.row_height).await;
                                 }
+                                Some(Type::PtyResize(req)) => {
+                                    let mut session = session_clone.lock().await;
+                                    let _ = session.resize_pty(&channel_id, req.col_width, req.row_height).await;
+                                }
                                 Some(Type::ShellRequest(req)) => {
                                     info!("IPC: Opening a shell!");
                                     

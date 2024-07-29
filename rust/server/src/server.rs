@@ -235,9 +235,9 @@ struct Server {}
 struct PtyStream{
     reader: Mutex<Box<dyn Read + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
-    slave: Mutex<Box<dyn SlavePty + Send>>
+    slave: Mutex<Box<dyn SlavePty + Send>>,
+    master: Mutex<Box<dyn MasterPty + Send>>
 }
-
 
 trait QuicServer{
     async fn run_quic(
@@ -515,6 +515,32 @@ impl server::Handler for ServerSession {
         Ok(())
     }
 
+
+    async fn window_change_request(
+        &mut self,
+        channel_id: ChannelId,
+        col_width: u32,
+        row_height: u32,
+        pix_width: u32,
+        pix_height: u32,
+        session: &mut Session,
+    ) -> Result<(), Self::Error> {
+ 
+        let clone = self.ptys.clone();
+        let ptys_guard = clone.lock().await;
+        let pty = ptys_guard.get(&channel_id).unwrap();
+
+        let _ = ptys_guard.get(&channel_id).unwrap().master.lock().await.resize(PtySize {
+            rows: row_height as u16,
+            cols: col_width as u16,
+            pixel_width: pix_width as u16,
+            pixel_height: pix_height as u16,
+        });
+
+        Ok(())
+    }
+
+
     async fn pty_request(
         &mut self,
         channel_id: ChannelId,
@@ -545,7 +571,7 @@ impl server::Handler for ServerSession {
         let master_reader = Mutex::new(master.try_clone_reader().unwrap());
         let mut master_writer = Mutex::new(master.take_writer().unwrap());
 
-        let p = Mutex::new(master);
+        let master_lock = Mutex::new(master);
         
 
         self.ptys
@@ -554,6 +580,7 @@ impl server::Handler for ServerSession {
             .insert(channel_id, Arc::new(PtyStream {
                 reader: master_reader,
                 writer: master_writer,
+                master: master_lock,
                 slave: Mutex::new(slave)
             }));
         
@@ -592,20 +619,6 @@ impl server::Handler for ServerSession {
         Ok(server::Auth::Accept)
     }
 
-    /// The client's pseudo-terminal window size has changed.
-    #[allow(unused_variables)]
-    async fn window_change_request(
-        &mut self,
-        channel: ChannelId,
-        col_width: u32,
-        row_height: u32,
-        pix_width: u32,
-        pix_height: u32,
-        session: &mut Session,
-    ) -> Result<(), Self::Error> {
-        info!("Got window resize request!");
-        Ok(())
-    }
     async fn data(
         &mut self,
         channel_id: ChannelId,

@@ -310,11 +310,76 @@ class Msg_ChannelInit extends $pb.GeneratedMessage {
   void clearSessionId() => clearField(1);
 }
 
+class Msg_PtyResize extends $pb.GeneratedMessage {
+  factory Msg_PtyResize({
+    $core.int? colWidth,
+    $core.int? rowHeight,
+  }) {
+    final $result = create();
+    if (colWidth != null) {
+      $result.colWidth = colWidth;
+    }
+    if (rowHeight != null) {
+      $result.rowHeight = rowHeight;
+    }
+    return $result;
+  }
+  Msg_PtyResize._() : super();
+  factory Msg_PtyResize.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory Msg_PtyResize.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'Msg.PtyResize', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..a<$core.int>(1, _omitFieldNames ? '' : 'colWidth', $pb.PbFieldType.OU3)
+    ..a<$core.int>(2, _omitFieldNames ? '' : 'rowHeight', $pb.PbFieldType.OU3)
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  Msg_PtyResize clone() => Msg_PtyResize()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  Msg_PtyResize copyWith(void Function(Msg_PtyResize) updates) => super.copyWith((message) => updates(message as Msg_PtyResize)) as Msg_PtyResize;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Msg_PtyResize create() => Msg_PtyResize._();
+  Msg_PtyResize createEmptyInstance() => create();
+  static $pb.PbList<Msg_PtyResize> createRepeated() => $pb.PbList<Msg_PtyResize>();
+  @$core.pragma('dart2js:noInline')
+  static Msg_PtyResize getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Msg_PtyResize>(create);
+  static Msg_PtyResize? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get colWidth => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set colWidth($core.int v) { $_setUnsignedInt32(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasColWidth() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearColWidth() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get rowHeight => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set rowHeight($core.int v) { $_setUnsignedInt32(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasRowHeight() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRowHeight() => clearField(2);
+}
+
 enum Msg_Type {
   data, 
   ptyRequest, 
   shellRequest, 
   channelInit, 
+  ptyResize, 
   notSet
 }
 
@@ -324,6 +389,7 @@ class Msg extends $pb.GeneratedMessage {
     Msg_PtyRequest? ptyRequest,
     Msg_ShellRequest? shellRequest,
     Msg_ChannelInit? channelInit,
+    Msg_PtyResize? ptyResize,
   }) {
     final $result = create();
     if (data != null) {
@@ -338,6 +404,9 @@ class Msg extends $pb.GeneratedMessage {
     if (channelInit != null) {
       $result.channelInit = channelInit;
     }
+    if (ptyResize != null) {
+      $result.ptyResize = ptyResize;
+    }
     return $result;
   }
   Msg._() : super();
@@ -349,14 +418,16 @@ class Msg extends $pb.GeneratedMessage {
     2 : Msg_Type.ptyRequest,
     3 : Msg_Type.shellRequest,
     4 : Msg_Type.channelInit,
+    5 : Msg_Type.ptyResize,
     0 : Msg_Type.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'Msg', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
-    ..oo(0, [1, 2, 3, 4])
+    ..oo(0, [1, 2, 3, 4, 5])
     ..aOM<Msg_Data>(1, _omitFieldNames ? '' : 'data', subBuilder: Msg_Data.create)
     ..aOM<Msg_PtyRequest>(2, _omitFieldNames ? '' : 'ptyRequest', subBuilder: Msg_PtyRequest.create)
     ..aOM<Msg_ShellRequest>(3, _omitFieldNames ? '' : 'shellRequest', subBuilder: Msg_ShellRequest.create)
     ..aOM<Msg_ChannelInit>(4, _omitFieldNames ? '' : 'channelInit', subBuilder: Msg_ChannelInit.create)
+    ..aOM<Msg_PtyResize>(5, _omitFieldNames ? '' : 'ptyResize', subBuilder: Msg_PtyResize.create)
     ..hasRequiredFields = false
   ;
 
@@ -427,6 +498,17 @@ class Msg extends $pb.GeneratedMessage {
   void clearChannelInit() => clearField(4);
   @$pb.TagNumber(4)
   Msg_ChannelInit ensureChannelInit() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  Msg_PtyResize get ptyResize => $_getN(4);
+  @$pb.TagNumber(5)
+  set ptyResize(Msg_PtyResize v) { setField(5, v); }
+  @$pb.TagNumber(5)
+  $core.bool hasPtyResize() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPtyResize() => clearField(5);
+  @$pb.TagNumber(5)
+  Msg_PtyResize ensurePtyResize() => $_ensure(4);
 }
 
 /// The messages a client uses to interact with the sftp session

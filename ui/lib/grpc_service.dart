@@ -106,6 +106,13 @@ class GrpcService {
       //state.terminal.write(data);
     };
 
+    state.terminal.onResize = (w, h, pw, ph) {
+      streamController.add(Msg()
+        ..ptyResize = (Msg_PtyResize()
+          ..colWidth = w
+          ..rowHeight = h));
+    };
+
     bool pinged = false;
 
     //state.terminal.buffer.clear();

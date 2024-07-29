@@ -6,8 +6,6 @@ option java_outer_classname = "SessioClientIPC";
 
 package clientipc;
 
-
-
 service ClientIPC {
     rpc NewConnection(NewConnectionRequest) returns (NewConnectionResponse);
     rpc NewSession(NewSessionRequest) returns (NewSessionResponse);
@@ -38,6 +36,7 @@ message Msg{
         PtyRequest pty_request = 2;
         ShellRequest shell_request = 3;
         ChannelInit channel_init = 4;
+        PtyResize pty_resize = 5;
     }
 
     message Data{
@@ -55,6 +54,11 @@ message Msg{
 
     message ChannelInit{
         string session_id = 1;
+    }
+
+    message PtyResize {
+        uint32 col_width = 1;
+        uint32 row_height = 2;
     }
 }
 

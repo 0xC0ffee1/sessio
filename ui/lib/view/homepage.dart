@@ -132,9 +132,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _addNewSession(String clientId, String type) async {
-    final sessionState = SessioTerminalState();
-    final terminal = sessionState.terminal;
-    final terminalController = sessionState.terminalController;
+
 
     if (!sessionTree.containsKey(clientId)) {
       sessionTree[clientId] = [];
@@ -151,6 +149,9 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     if (type == "PTY") {
+      final sessionState = SessioTerminalState();
+      final terminal = sessionState.terminal;
+      final terminalController = sessionState.terminalController;
       setState(() {
         sessionViews.add(
           Center(
@@ -176,8 +177,11 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
         );
-        Provider.of<GrpcService>(context, listen: false)
-            .connectPTY(clientId, sessionState);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          
+          Provider.of<GrpcService>(context, listen: false)
+              .connectPTY(clientId, sessionState);
+        });
       });
     } else if (type == "SFTP") {
       SftpBrowser browser =

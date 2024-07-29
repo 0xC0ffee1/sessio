@@ -45,8 +45,9 @@ const Msg$json = {
     {'1': 'pty_request', '3': 2, '4': 1, '5': 11, '6': '.clientipc.Msg.PtyRequest', '9': 0, '10': 'ptyRequest'},
     {'1': 'shell_request', '3': 3, '4': 1, '5': 11, '6': '.clientipc.Msg.ShellRequest', '9': 0, '10': 'shellRequest'},
     {'1': 'channel_init', '3': 4, '4': 1, '5': 11, '6': '.clientipc.Msg.ChannelInit', '9': 0, '10': 'channelInit'},
+    {'1': 'pty_resize', '3': 5, '4': 1, '5': 11, '6': '.clientipc.Msg.PtyResize', '9': 0, '10': 'ptyResize'},
   ],
-  '3': [Msg_Data$json, Msg_PtyRequest$json, Msg_ShellRequest$json, Msg_ChannelInit$json],
+  '3': [Msg_Data$json, Msg_PtyRequest$json, Msg_ShellRequest$json, Msg_ChannelInit$json, Msg_PtyResize$json],
   '8': [
     {'1': 'type'},
   ],
@@ -82,16 +83,27 @@ const Msg_ChannelInit$json = {
   ],
 };
 
+@$core.Deprecated('Use msgDescriptor instead')
+const Msg_PtyResize$json = {
+  '1': 'PtyResize',
+  '2': [
+    {'1': 'col_width', '3': 1, '4': 1, '5': 13, '10': 'colWidth'},
+    {'1': 'row_height', '3': 2, '4': 1, '5': 13, '10': 'rowHeight'},
+  ],
+};
+
 /// Descriptor for `Msg`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List msgDescriptor = $convert.base64Decode(
     'CgNNc2cSKQoEZGF0YRgBIAEoCzITLmNsaWVudGlwYy5Nc2cuRGF0YUgAUgRkYXRhEjwKC3B0eV'
     '9yZXF1ZXN0GAIgASgLMhkuY2xpZW50aXBjLk1zZy5QdHlSZXF1ZXN0SABSCnB0eVJlcXVlc3QS'
     'QgoNc2hlbGxfcmVxdWVzdBgDIAEoCzIbLmNsaWVudGlwYy5Nc2cuU2hlbGxSZXF1ZXN0SABSDH'
     'NoZWxsUmVxdWVzdBI/CgxjaGFubmVsX2luaXQYBCABKAsyGi5jbGllbnRpcGMuTXNnLkNoYW5u'
-    'ZWxJbml0SABSC2NoYW5uZWxJbml0GiAKBERhdGESGAoHcGF5bG9hZBgBIAEoDFIHcGF5bG9hZB'
-    'pICgpQdHlSZXF1ZXN0EhsKCWNvbF93aWR0aBgBIAEoDVIIY29sV2lkdGgSHQoKcm93X2hlaWdo'
-    'dBgCIAEoDVIJcm93SGVpZ2h0Gg4KDFNoZWxsUmVxdWVzdBosCgtDaGFubmVsSW5pdBIdCgpzZX'
-    'NzaW9uX2lkGAEgASgJUglzZXNzaW9uSWRCBgoEdHlwZQ==');
+    'ZWxJbml0SABSC2NoYW5uZWxJbml0EjkKCnB0eV9yZXNpemUYBSABKAsyGC5jbGllbnRpcGMuTX'
+    'NnLlB0eVJlc2l6ZUgAUglwdHlSZXNpemUaIAoERGF0YRIYCgdwYXlsb2FkGAEgASgMUgdwYXls'
+    'b2FkGkgKClB0eVJlcXVlc3QSGwoJY29sX3dpZHRoGAEgASgNUghjb2xXaWR0aBIdCgpyb3dfaG'
+    'VpZ2h0GAIgASgNUglyb3dIZWlnaHQaDgoMU2hlbGxSZXF1ZXN0GiwKC0NoYW5uZWxJbml0Eh0K'
+    'CnNlc3Npb25faWQYASABKAlSCXNlc3Npb25JZBpHCglQdHlSZXNpemUSGwoJY29sX3dpZHRoGA'
+    'EgASgNUghjb2xXaWR0aBIdCgpyb3dfaGVpZ2h0GAIgASgNUglyb3dIZWlnaHRCBgoEdHlwZQ==');
 
 @$core.Deprecated('Use listDirDescriptor instead')
 const ListDir$json = {
