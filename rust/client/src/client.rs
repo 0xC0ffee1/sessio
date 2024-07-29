@@ -232,7 +232,7 @@ impl Client {
         }
         
         let endpoint_v4 = make_client_endpoint("0.0.0.0:0").unwrap();
-        let endpoint_v6 = make_client_endpoint("[::]:42225").unwrap();
+        let endpoint_v6 = make_client_endpoint("[::]:0").unwrap();
 
         let start_time = Utc::now();
         let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v4.clone(), endpoint_v6.clone()).await?;
@@ -390,11 +390,12 @@ impl russh::client::Handler for ClientHandler {
 }
 
 
-async fn attempt_holepunch(target: String, coordinator: Url, mut endpoint_v4: Endpoint,
-mut endpoint_v6: Endpoint) -> io::Result<Connection> {
+async fn attempt_holepunch(target: String, coordinator: Url, 
+    mut endpoint_v4: Endpoint,
+    mut endpoint_v6: Endpoint) -> io::Result<Connection> {
 
     let mut client = CoordinatorClient::connect(coordinator, Uuid::new_v4().to_string(), endpoint_v4.clone()).await;
-    let _ = client.register_endpoint().await;
+    let _ = client.register_endpoint(endpoint_v6.local_addr().unwrap()).await;
 
     let _ = client.connect_to(target).await;
 

@@ -111,7 +111,7 @@ async fn attempt_holepunch(id: String, coordinator: Url,
         CoordinatorClient::configure_client(&mut endpoint_v6);
 
         let mut client = CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint_v4.clone()).await;
-        _ = client.register_endpoint().await;
+        _ = client.register_endpoint(endpoint_v6.local_addr().unwrap()).await;
 
         _ = client.new_session().await;
         info!("Created new session!");

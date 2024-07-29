@@ -10,7 +10,7 @@ use tokio::time::{timeout, Duration};
 use quinn::Connection;
 use url::Url;
 use std::collections::HashMap;
-use std::net::{Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -72,16 +72,6 @@ impl rustls::client::ServerCertVerifier for SkipServerVerification {
 }
 
 impl CoordinatorClient {
-
-    //This is done to get the temporary Ipv6
-    async fn get_public_ipv6() -> Result<Ipv6Addr> {
-        let response = reqwest::get("https://api64.ipify.org")
-            .await?
-            .text()
-            .await?;
-        let ip: Ipv6Addr = response.parse()?;
-        Ok(ip)
-    }
 
     pub async fn connect(coordinator_url: Url, id_own: String, mut endpoint: Endpoint) -> Self {
 
@@ -207,11 +197,24 @@ impl CoordinatorClient {
         Ok(())
     }
     
-    pub async fn register_endpoint(&mut self) -> Result<(), Box<dyn std::error::Error>> {
 
-        let ipv6 = match CoordinatorClient::get_public_ipv6().await {
-            Ok(ip) => ip.to_string(),
-            Err(_) => String::from("None")
+    fn is_link_local(addr: &SocketAddr) -> bool {
+        match addr.ip() {
+            IpAddr::V6(ipv6) => {
+                ipv6.segments()[0] & 0xffc0 == 0xfe80
+            }
+            _ => false,
+        }
+    }
+    
+    
+    pub async fn register_endpoint(&mut self, ipv6_addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+
+        let ipv6 = if !CoordinatorClient::is_link_local(&ipv6_addr) {
+            ipv6_addr.to_string()
+
+        } else {
+           "None".into()
         };
 
         let register_msg = serde_json::json!({"id": "REGISTER", "own_id": self.id_own, "ipv6": ipv6});

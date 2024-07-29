@@ -6,7 +6,7 @@ use futures::{stream, Stream, StreamExt};
 use russh_sftp::{client::SftpSession, protocol::Stat};
 use url::Url;
 use uuid::Uuid;
-use tokio::{fs::File, io::AsyncReadExt, sync::mpsc, io::AsyncWriteExt};
+use tokio::{fs::File, io::{AsyncReadExt, AsyncWriteExt}, sync::mpsc, time::Instant};
 use std::{pin::Pin, sync::Arc};
 use clientipc::{
     client_ipc_server::{ClientIpc, ClientIpcServer}, msg::Type, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, file_transfer_status::Progress, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, SftpRequest, SftpRequestResponse, StreamResponse
@@ -196,7 +196,6 @@ impl ClientIpc for ClientIpcHandler {
             Ok(file) => file,
             Err(e) => return Err(Status::new(tonic::Code::Internal, format!("Failed to create local file: {}", e))),
         };
-        
 
         let res = async_stream::try_stream! {
         let mut buf = vec![0u8; 1024*512];
@@ -211,11 +210,16 @@ impl ClientIpc for ClientIpcHandler {
                 }
             };
 
+            let start_time = Instant::now();
             if let Err(e) = remote_file.write_all(&buf[..n]).await {
                 log::error!("Failed to write to remote file: {}", e);
                 break;
                 //return Err(Status::new(tonic::Code::Internal, format!("Failed to write to remote file: {}", e)));
             }
+            let elapsed_time = start_time.elapsed();
+
+            log::info!("Buffer written in {:?}", elapsed_time);
+
             bytes_written += n as i32;
             let progress = Progress {
                 bytes_read: bytes_written
