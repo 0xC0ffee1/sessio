@@ -22,6 +22,7 @@ use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stdin,
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(windows)]
 use tokio::signal::windows::ctrl_c;
+use crate::ipc::clientipc::msg::Type;
 
 use url::Url;
 
@@ -52,7 +53,7 @@ use crossterm::{
     event::{read, Event, KeyCode},
 };
 
-use socket2::{Socket, Domain, Type};
+
 use std::net::UdpSocket;
 
 use coordinator::coordinator_client::CoordinatorClient;
@@ -462,9 +463,11 @@ impl Session {
 
     pub async fn request_shell(
         channel_guard: Arc<Mutex<Channel<Msg>>>,
-        mut input_rx: Arc<Mutex<mpsc::Receiver<Vec<u8>>>>,
+        mut input_rx: Arc<Mutex<mpsc::Receiver<crate::ipc::clientipc::Msg>>>,
         output_tx: Arc<Mutex<mpsc::Sender<Vec<u8>>>>,
     ) -> Result<u32> {
+
+        //Todo make this accept proto messages
         let mut channel = channel_guard.lock().await;
 
         let _ = channel.request_shell(false).await;
@@ -477,13 +480,19 @@ impl Session {
 
         loop {
             tokio::select! {
-                Some(input_data) = input.recv(), if !stdin_closed => {
-                    if input_data.is_empty() {
-                        stdin_closed = true;
-                        channel.eof().await?;
-                    } else {
-                        let c: &[u8] = &input_data;
-                        channel.data(c).await.unwrap();
+                Some(input_msg) = input.recv(), if !stdin_closed => {
+                    match input_msg.r#type {
+                        Some(Type::Data(data)) => {
+                            //Sends the data to the shell stream
+                            info!("IPC: Forwarding data!");
+                            let payload: &[u8] = &data.payload;
+                            channel.data(payload).await;
+                        }
+                        Some(Type::PtyResize(req)) => {
+                            info!("IPC: Resizing PTY!");
+                            channel.window_change(req.col_width, req.row_height, 0, 0).await;
+                        }
+                        _ => {}
                     }
                 },
                 Some(msg) = channel.wait() => {
@@ -520,8 +529,6 @@ impl Session {
     pub async fn resize_pty(&mut self, channel_id: &ChannelId, col_width: u32, row_height: u32) -> Result<()>{
         let channel_guard = self.channels.get(&channel_id).unwrap();
         let mut channel = channel_guard.lock().await;
-
-        let session = Arc::new(&self);
 
         channel
             .window_change(

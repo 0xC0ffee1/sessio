@@ -354,13 +354,13 @@ impl ClientIpc for ClientIpcHandler {
 
             tokio::spawn(async move {
                 while let Some(msg) = stream.next().await {
+                    let msg_clone = msg.clone().unwrap();
                     match msg {
                         Ok(msg) => {
                             match msg.r#type {
                                 Some(Type::Data(data)) => {
                                     //Sends the data to the shell stream
-                                    info!("IPC: Forwarding data!");
-                                    input_tx.send(data.payload).await.unwrap();
+                                    input_tx.send(msg_clone).await.unwrap();
                                 }
                                 Some(Type::PtyRequest(req)) => {
                                     info!("IPC: Opening a pty!");
@@ -368,8 +368,7 @@ impl ClientIpc for ClientIpcHandler {
                                     let _ = session.request_pty(&channel_id, req.col_width, req.row_height).await;
                                 }
                                 Some(Type::PtyResize(req)) => {
-                                    let mut session = session_clone.lock().await;
-                                    let _ = session.resize_pty(&channel_id, req.col_width, req.row_height).await;
+                                    input_tx.send(msg_clone).await.unwrap();
                                 }
                                 Some(Type::ShellRequest(req)) => {
                                     info!("IPC: Opening a shell!");
@@ -380,9 +379,10 @@ impl ClientIpc for ClientIpcHandler {
                                     let output = o_clone.clone();
                                     tokio::spawn(async move {
                                         let task = {
-                                            let session = session.lock().await;
-                                            let channel_guard = session.channels.get(&channel_id);
-                                            Session::request_shell(channel_guard.unwrap().clone(), input, output)
+                                            let ses = session.lock().await;
+                                            let channel_guard = ses.channels.get(&channel_id).unwrap().clone();
+
+                                            Session::request_shell(channel_guard, input, output)
                                         };
 
                                         if let Err(e) = task.await {
