@@ -210,9 +210,8 @@ impl CoordinatorClient {
     
     pub async fn register_endpoint(&mut self, ipv6_addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
 
-        let ipv6 = if !CoordinatorClient::is_link_local(&ipv6_addr) && !ipv6_addr.ip().is_loopback() {
+        let ipv6 = if !ipv6_addr.ip().is_unspecified() {
             ipv6_addr.to_string()
-
         } else {
            "None".into()
         };
