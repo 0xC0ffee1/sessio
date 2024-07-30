@@ -503,8 +503,8 @@ dependencies = [
  "quinn",
  "rand",
  "rcgen",
- "russh 0.44.0",
- "russh-keys 0.44.0",
+ "russh",
+ "russh-keys",
  "russh-sftp",
  "rustls 0.21.12",
  "rustls-pemfile 2.1.2",
@@ -549,7 +549,7 @@ dependencies = [
  "log 0.4.22",
  "quinn",
  "rand",
- "russh 0.44.0-beta.3",
+ "russh",
  "ssh-key",
  "tokio",
 ]
@@ -596,8 +596,8 @@ dependencies = [
  "rand",
  "rcgen",
  "reqwest",
- "russh 0.44.0",
- "russh-keys 0.44.0",
+ "russh",
+ "russh-keys",
  "rustls 0.21.12",
  "rustls-pemfile 2.1.2",
  "serde",
@@ -2642,47 +2642,6 @@ dependencies = [
 
 [[package]]
 name = "russh"
-version = "0.44.0-beta.3"
-dependencies = [
- "aes",
- "aes-gcm",
- "async-trait",
- "bitflags 2.6.0",
- "byteorder",
- "cbc",
- "chacha20",
- "ctr",
- "curve25519-dalek",
- "digest",
- "elliptic-curve",
- "flate2",
- "futures",
- "generic-array",
- "hex-literal",
- "hmac",
- "lazy_static",
- "log 0.4.22",
- "num-bigint",
- "once_cell",
- "p256",
- "p384",
- "p521",
- "poly1305",
- "rand",
- "rand_core",
- "russh-cryptovec 0.7.3",
- "russh-keys 0.44.0-beta.3",
- "sha1",
- "sha2",
- "ssh-encoding",
- "ssh-key",
- "subtle",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "russh"
 version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69d007dc79831fd2bbe5a388daa13fa48c5d2c6f6ceb74a08b13fb1450c3468a"
@@ -2712,8 +2671,8 @@ dependencies = [
  "poly1305",
  "rand",
  "rand_core",
- "russh-cryptovec 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "russh-keys 0.44.0",
+ "russh-cryptovec",
+ "russh-keys",
  "sha1",
  "sha2",
  "ssh-encoding",
@@ -2726,68 +2685,11 @@ dependencies = [
 [[package]]
 name = "russh-cryptovec"
 version = "0.7.3"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
-name = "russh-cryptovec"
-version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fadd2c0ab350e21c66556f94ee06f766d8bdae3213857ba7610bfd8e10e51880"
 dependencies = [
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "russh-keys"
-version = "0.44.0-beta.3"
-dependencies = [
- "aes",
- "async-trait",
- "bcrypt-pbkdf",
- "block-padding",
- "byteorder",
- "cbc",
- "ctr",
- "data-encoding",
- "der",
- "digest",
- "dirs",
- "ecdsa",
- "ed25519-dalek",
- "elliptic-curve",
- "futures",
- "hmac",
- "inout",
- "log 0.4.22",
- "md5",
- "num-integer",
- "p256",
- "p384",
- "p521",
- "pbkdf2 0.11.0",
- "pkcs1",
- "pkcs5",
- "pkcs8",
- "rand",
- "rand_core",
- "rsa",
- "russh-cryptovec 0.7.3",
- "sec1",
- "serde",
- "sha1",
- "sha2",
- "spki",
- "ssh-encoding",
- "ssh-key",
- "thiserror",
- "tokio",
- "tokio-stream",
- "typenum",
- "zeroize",
 ]
 
 [[package]]
@@ -2826,7 +2728,7 @@ dependencies = [
  "rand",
  "rand_core",
  "rsa",
- "russh-cryptovec 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "russh-cryptovec",
  "sec1",
  "serde",
  "sha1",
@@ -3217,8 +3119,8 @@ dependencies = [
  "quinn",
  "rand",
  "rcgen",
- "russh 0.44.0",
- "russh-keys 0.44.0",
+ "russh",
+ "russh-keys",
  "russh-sftp",
  "rustls 0.21.12",
  "rustls-pemfile 2.1.2",

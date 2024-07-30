@@ -41,7 +41,7 @@ class GrpcService {
   Future<NewSessionResponse> _newSession(String clientId) async {
     NewConnectionResponse connectionResponse =
         await client.newConnection(NewConnectionRequest()
-          ..coordinatorUrl = "quic://157.90.127.19:2223"
+          ..coordinatorUrl = "quic://127.0.0.1:2223"
           ..targetId = clientId);
 
     NewSessionResponse sessionResponse =

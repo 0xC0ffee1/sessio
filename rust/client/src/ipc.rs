@@ -389,7 +389,6 @@ impl ClientIpc for ClientIpcHandler {
                                             eprintln!("Failed to request shell: {:?}", e);
                                         }
                                     });
-                                    
                                 }
                                 _ => {
                                     // Handle other cases
