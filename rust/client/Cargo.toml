@@ -60,7 +60,6 @@ features = [
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
 ]
 
-
 [build-dependencies]
 tonic-build = "0.11"
 

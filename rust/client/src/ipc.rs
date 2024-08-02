@@ -7,13 +7,20 @@ use russh_sftp::{client::SftpSession, protocol::Stat};
 use url::Url;
 use uuid::Uuid;
 use tokio::{fs::File, io::{AsyncReadExt, AsyncWriteExt}, sync::mpsc, time::Instant};
-use std::{pin::Pin, sync::Arc};
+use std::{collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
 use clientipc::{
-    client_ipc_server::{ClientIpc, ClientIpcServer}, msg::Type, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, file_transfer_status::Progress, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, SftpRequest, SftpRequestResponse, StreamResponse
+    client_ipc_server::{ClientIpc, ClientIpcServer}, msg::Type, Value, SettingsRequest, GetSaveDataRequest,
+    Settings, UserData,GetKeyRequest,PublicKey,
+    FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest,
+    FileReadResponse, file_transfer_status::Progress, FileTransferRequest, FileTransferStatus, 
+    FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, Msg, NewConnectionRequest, NewConnectionResponse, 
+    NewSessionRequest, NewSessionResponse, SftpRequest, SftpRequestResponse, StreamResponse, InitData, InitResponse
 };
 use clientipc::file_transfer_status::Typ;
+use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
+use clientipc::value::Kind;
 
-
+use tokio::io::BufReader;
 use log::info;
 use tokio::sync::Mutex;
 use crate::client::{Client, Session};
@@ -40,6 +47,7 @@ struct ClientIpcHandler {
 }
 
 
+
 #[tonic::async_trait]
 impl ClientIpc for ClientIpcHandler {
     type OpenChannelStream =
@@ -48,6 +56,80 @@ impl ClientIpc for ClientIpcHandler {
         Pin<Box<dyn Stream<Item = Result<FileTransferStatus, Status>> + Send  + 'static>>;
 
     type FileUploadStream = Self::FileDownloadStream;
+
+    async fn init_client(&self, request: Request<InitData>)
+    -> Result<Response<InitResponse>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+        client.set_data_folder(PathBuf::from(request.data_folder_path));
+
+        Ok(Response::new(InitResponse {}))
+    }
+
+    async fn get_settings(&self, request: Request<SettingsRequest>) 
+    -> Result<Response<Settings>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+
+        let file = client.get_settings_file().await.map_err(|e| {
+            Status::new(tonic::Code::Internal, e.to_string())
+        })?;
+    
+        let settings = Client::get_json_as::<Settings>(file).await.unwrap_or(Settings {
+            coordinator_url: "quic://example.com:2223".into(),
+            device_id: "Your-Device-ID".into()
+        });
+
+        Ok(Response::new(settings))
+    }
+
+    async fn get_save_data(&self, request: Request<GetSaveDataRequest>) 
+    -> Result<Response<UserData>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+
+        let file = client.get_save_file().await.map_err(|e| {
+            Status::new(tonic::Code::Internal, e.to_string())
+        })?;
+    
+        let data = Client::get_json_as::<UserData>(file).await.map_err(|e| {
+            Status::new(tonic::Code::Internal, e.to_string())
+        })?;
+
+        Ok(Response::new(data))
+    }
+
+    async fn save_settings(&self, request: Request<Settings>) 
+    -> Result<Response<Settings>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+
+        let file = client.get_settings_file().await.map_err(|e| {
+            Status::new(tonic::Code::Internal, e.to_string())
+        })?;
+    
+        let data = Client::save_json_as::<Settings>(file, request).await.map_err(|e| {
+            Status::new(tonic::Code::Internal, e.to_string())
+        })?;
+
+        Ok(Response::new(data))
+    }
+
+    async fn save_user_data(&self, request: Request<UserData>) 
+    -> Result<Response<UserData>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+
+        let file = client.get_save_file().await.map_err(|e| {
+            Status::new(tonic::Code::Internal, e.to_string())
+        })?;
+    
+        let data = Client::save_json_as::<UserData>(file, request).await.map_err(|e| {
+            Status::new(tonic::Code::Internal, e.to_string())
+        })?;
+
+        Ok(Response::new(data))
+    }
 
     async fn open_sftp_channel(&self, request: Request<SftpRequest>) 
     -> Result<Response<SftpRequestResponse>, Status> {
@@ -87,8 +169,11 @@ impl ClientIpc for ClientIpcHandler {
         };
         //info!("current path: {:?}", sftp.canonicalize(&request.path).await.unwrap());
 
-        let Ok(dir) = sftp.read_dir(&request.path).await else {
-            return Err(Status::new(tonic::Code::NotFound, "Directory not found"));
+        let dir = match sftp.read_dir(&request.path).await {
+            Ok(dir) => dir,
+            Err(e) => {
+                return Err(Status::new(tonic::Code::NotFound, e.to_string()));
+            }
         };
         
         let mut list = Vec::<FileData>::new();
@@ -247,7 +332,10 @@ impl ClientIpc for ClientIpcHandler {
         };
 
         let mut client = self.client.lock().await;
-        let res = client.new_connection(request.target_id.clone(), url).await;
+        
+        let ipv6_addr: Option<Ipv6Addr> = request.own_ipv6.and_then(|s| s.parse().ok());
+
+        let res = client.new_connection(request.target_id.clone(), url, ipv6_addr).await;
         match res {
             Ok(id) => {
                 log::info!("CONN OK");
@@ -264,17 +352,37 @@ impl ClientIpc for ClientIpcHandler {
 
     async fn gen_keys(&self, request: Request<GenKeysRequest>) -> Result<Response<GenKeysResponse>, Status> {
         let request = request.into_inner();
-        let res = generate_keypair(&request.key_path, ssh_key::Algorithm::Ed25519, "id_ed25519");
+        let client = self.client.lock().await;
+        let Some(data_folder) = &client.data_folder_path else {
+            return Err(Status::new(tonic::Code::FailedPrecondition, "Data folder not set! Possibly init rpc not called"));
+        };
+
+        let res = generate_keypair(data_folder.join("keys"), ssh_key::Algorithm::Ed25519, "id_ed25519");
+
         match res {
             Ok(_) => {
-                Ok(Response::new(GenKeysResponse{
-                    key_path: request.key_path
-                }))
+                Ok(Response::new(GenKeysResponse{}))
             }
             Err(e) => {
                 Err(Status::new(tonic::Code::Internal, e.to_string()))
             }
         }
+    }
+
+    async fn get_public_key(&self, request: Request<GetKeyRequest>) -> Result<Response<PublicKey>, Status> {
+        let request = request.into_inner();
+        let client = self.client.lock().await;
+        let Some(data_folder) = &client.data_folder_path else {
+            return Err(Status::new(tonic::Code::FailedPrecondition, "Data folder not set! Possibly init rpc not called"));
+        };
+
+        let mut file = File::options().read(true).open(data_folder.join("keys/id_ed25519.pub")).await?;
+
+        let mut reader = BufReader::new(file);
+        let mut contents = String::new();
+        let res = reader.read_to_string(&mut contents).await?;
+
+        Ok(Response::new(PublicKey{key: contents}))
     }
     
     async fn new_session(&self, request: Request<NewSessionRequest>) 
@@ -390,9 +498,7 @@ impl ClientIpc for ClientIpcHandler {
                                         }
                                     });
                                 }
-                                _ => {
-                                    // Handle other cases
-                                }
+                                _ => {}
                             }
                         }
                         Err(e) => {
@@ -463,8 +569,6 @@ pub async fn start_grpc_server(path_str: &str) {
 
     info!("exited grpc server, is err {}", res.is_err());
 }
-
-
 
 pub fn start_server_new_runtime(path_str: &str) {
     let path = path_str.to_string();

@@ -4,7 +4,7 @@ import 'package:sessio_ui/src/generated/client_ipc.pbgrpc.dart';
 
 class SftpBrowser with ChangeNotifier implements FileBrowser {
   //fix path always starting with . and other stuff with it
-  List<String> _currentPath = ["."];
+  List<String> _currentPath = [];
   List<FileMeta> _currentFiles = [];
   bool _isLoadingFiles = false;
 
@@ -16,10 +16,11 @@ class SftpBrowser with ChangeNotifier implements FileBrowser {
   //Uploads from local machine to remote
   @override
   Stream<TransferStatus> addFile(String localPath, String fileName) async* {
+    final remotePath = _currentPath.isEmpty ? fileName : "${_currentPath.join('/')}/$fileName";
     final responseStream = _client.fileUpload(FileTransferRequest(
         sessionId: _sessionId,
         localPath: localPath,
-        remotePath: "${_currentPath.join('/')}$fileName"));
+        remotePath: remotePath));
 
     await for (var response in responseStream) {
       // Map the response to FileTransferStatus DTO

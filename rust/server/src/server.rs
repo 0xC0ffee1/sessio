@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::f32::consts::E;
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -11,6 +12,7 @@ use serde_json::json;
 use tokio::process::Command as TokioCommand;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
+use homedir::home;
 use tokio::net::UdpSocket;
 use std::process::{Command, Stdio};
 use std::str;
@@ -30,10 +32,9 @@ use clap::Parser;
 use quinn::{crypto, Connection, Endpoint, ServerConfig, VarInt};
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtyPair, PtySize, PtySystem, SlavePty};
-use anyhow::Error;
+use anyhow::{bail, Context, Error};
 use std::pin::Pin;
 use std::task::Poll;
-use std::task::Context;
 use serde::Deserialize;
 use russh::Channel;
 use std::sync::mpsc::channel;
@@ -227,7 +228,7 @@ struct ServerSession {
     clients: Arc<Mutex<HashMap<ChannelId, Channel<Msg>>>>,
     ptys: Arc<Mutex<HashMap<ChannelId, Arc<PtyStream>>>>,
     id: Arc<AtomicUsize>,
-    connection: Option<Connection>
+    user: Option<String>
 }
 
 struct Server {}
@@ -311,7 +312,6 @@ impl QuicServer for Server {
                     let mut bi_stream = BiStream {recv_stream: quinn_recv, send_stream: quinn_send};
 
                     let handler = ServerSession {
-                        connection: Option::from(conn.clone()),
                         ..Default::default()
                     };
 
@@ -340,9 +340,11 @@ impl QuicServer for Server {
 }
 
 
-async fn read_authorized_keys<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<key::PublicKey>> {
+async fn read_authorized_keys(user: &str) -> anyhow::Result<Vec<key::PublicKey>> {
     
-    let path = path.as_ref();
+    let path = home(user)?
+    .with_context(|| format!("Home directory not found for user {}", user))?
+    .join(".sessio/authorized_keys");
 
     if !path.exists() {
         // Create the file and its parent directories if they don't exist
@@ -350,10 +352,10 @@ async fn read_authorized_keys<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<key
             tokio::fs::create_dir_all(parent).await?;
         }
         
-        tokio::fs::File::create(path).await?;
+        tokio::fs::File::create(&path).await?;
     }
 
-    let mut file = tokio::fs::File::open(path).await?;
+    let mut file = tokio::fs::File::open(&path).await?;
     let mut contents = String::new();
     file.read_to_string(&mut contents).await?;
 
@@ -387,7 +389,6 @@ impl ServerSession {
 impl server::Handler for ServerSession {
     type Error = anyhow::Error;
 
-
     async fn subsystem_request(
         &mut self,
         channel_id: ChannelId,
@@ -398,7 +399,8 @@ impl server::Handler for ServerSession {
 
         if name == "sftp" {
             let channel = self.take_channel(channel_id).await;
-            let sftp = SftpSession::new();
+            let user = self.user.as_ref().unwrap().clone();
+            let sftp = SftpSession::new(user);
             session.channel_success(channel_id);
             russh_sftp::server::run(channel.into_stream(), sftp).await;
         } else {
@@ -449,9 +451,17 @@ impl server::Handler for ServerSession {
 
         let ptys = self.ptys.clone();
 
+        let Some(user) = &self.user else {
+            bail!("Authentication has not finished yet(?)");
+        };
+        let shell = if cfg!(windows) {
+            vec![OsString::from("cmd.exe"), OsString::from("/C"), OsString::from(format!("runas /user:{}", user))]
+        } else {
+            vec![OsString::from("/usr/bin/sudo"), OsString::from("-u"), OsString::from(user), OsString::from("/bin/bash")]
+        };
+
         tokio::spawn(async move {
             let pty_cloned = ptys.clone();
-            let shell = if cfg!(windows) { "cmd.exe" } else { "bash" };
             let reader_handle = tokio::spawn(async move {
                 loop {
                     let mut buffer = vec![0; 1024];
@@ -489,7 +499,9 @@ impl server::Handler for ServerSession {
             let child_status = tokio::task::spawn_blocking(move || {
                 let stream = pty_cloned.blocking_lock().get(&channel_id).unwrap().clone();
 
-                let mut child = stream.slave.blocking_lock().spawn_command(CommandBuilder::new(shell)).expect("Failed to spawn child process");
+                let command_builder = CommandBuilder::from_argv(shell);
+
+                let mut child = stream.slave.blocking_lock().spawn_command(command_builder).expect("Failed to spawn child process");
                 child.wait().expect("Failed to wait on child process")
             }).await;
 
@@ -603,7 +615,10 @@ impl server::Handler for ServerSession {
         log::debug!("Attempting to authenticate user: {}", user);
         log::debug!("Public key: {:?}", public_key);
 
-        let authorized_keys = read_authorized_keys("authorized_keys").await.unwrap();
+        let authorized_keys = read_authorized_keys(user).await.map_err(|e| {
+            error!("{}", e);
+            russh::Error::CouldNotReadKey 
+        })?;
         let res = if authorized_keys.contains(&public_key) {server::Auth::Accept} else {server::Auth::Reject { proceed_with_methods: (None) }};
 
         Ok(res)
@@ -615,6 +630,7 @@ impl server::Handler for ServerSession {
         public_key: &key::PublicKey,
     ) -> Result<server::Auth, Self::Error> {
 
+        self.user = Some(user.into());
         //Accept after auth_publickey_offered has succeeded
         Ok(server::Auth::Accept)
     }

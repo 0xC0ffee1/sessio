@@ -4,7 +4,11 @@ import 'package:sessio_ui/model/terminal_state.dart';
 import 'package:sessio_ui/view/homepage.dart';
 import 'package:provider/provider.dart';
 
-void main() {
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
+void main() async {
   runApp(
     MultiProvider(
       providers: [
@@ -22,6 +26,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: scaffoldMessengerKey,
       title: 'Sessio',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
@@ -30,10 +36,9 @@ class MyApp extends StatelessWidget {
       darkTheme: ThemeData(
         brightness: Brightness.dark,
         primarySwatch: Colors.pink,
-        // Additional dark theme settings if needed
       ),
       themeMode: ThemeMode.system,
-      home: const MyHomePage(title: 'Sessio Test'),
+      home: const MyHomePage(title: 'Sessio'),
     );
   }
 }

@@ -27,7 +27,7 @@ pub extern "C" fn start_grpc_server(path: *const std::os::raw::c_char) {
 
     info!("Starting gRPC server with path: {}", socket_path);
 
-    ipc::start_grpc_server(&socket_path);
+    ipc::start_server_new_runtime(&socket_path);
 }
 
 #[cfg(target_os = "android")]

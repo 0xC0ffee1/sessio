@@ -13,6 +13,188 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use getKeyRequestDescriptor instead')
+const GetKeyRequest$json = {
+  '1': 'GetKeyRequest',
+};
+
+/// Descriptor for `GetKeyRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getKeyRequestDescriptor = $convert.base64Decode(
+    'Cg1HZXRLZXlSZXF1ZXN0');
+
+@$core.Deprecated('Use publicKeyDescriptor instead')
+const PublicKey$json = {
+  '1': 'PublicKey',
+  '2': [
+    {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
+  ],
+};
+
+/// Descriptor for `PublicKey`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List publicKeyDescriptor = $convert.base64Decode(
+    'CglQdWJsaWNLZXkSEAoDa2V5GAEgASgJUgNrZXk=');
+
+@$core.Deprecated('Use initDataDescriptor instead')
+const InitData$json = {
+  '1': 'InitData',
+  '2': [
+    {'1': 'data_folder_path', '3': 1, '4': 1, '5': 9, '10': 'dataFolderPath'},
+  ],
+};
+
+/// Descriptor for `InitData`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List initDataDescriptor = $convert.base64Decode(
+    'CghJbml0RGF0YRIoChBkYXRhX2ZvbGRlcl9wYXRoGAEgASgJUg5kYXRhRm9sZGVyUGF0aA==');
+
+@$core.Deprecated('Use initResponseDescriptor instead')
+const InitResponse$json = {
+  '1': 'InitResponse',
+};
+
+/// Descriptor for `InitResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List initResponseDescriptor = $convert.base64Decode(
+    'CgxJbml0UmVzcG9uc2U=');
+
+@$core.Deprecated('Use getSaveDataRequestDescriptor instead')
+const GetSaveDataRequest$json = {
+  '1': 'GetSaveDataRequest',
+};
+
+/// Descriptor for `GetSaveDataRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSaveDataRequestDescriptor = $convert.base64Decode(
+    'ChJHZXRTYXZlRGF0YVJlcXVlc3Q=');
+
+@$core.Deprecated('Use settingsRequestDescriptor instead')
+const SettingsRequest$json = {
+  '1': 'SettingsRequest',
+};
+
+/// Descriptor for `SettingsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List settingsRequestDescriptor = $convert.base64Decode(
+    'Cg9TZXR0aW5nc1JlcXVlc3Q=');
+
+@$core.Deprecated('Use settingsDescriptor instead')
+const Settings$json = {
+  '1': 'Settings',
+  '2': [
+    {'1': 'coordinator_url', '3': 1, '4': 1, '5': 9, '10': 'coordinatorUrl'},
+    {'1': 'device_id', '3': 2, '4': 1, '5': 9, '10': 'deviceId'},
+  ],
+};
+
+/// Descriptor for `Settings`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List settingsDescriptor = $convert.base64Decode(
+    'CghTZXR0aW5ncxInCg9jb29yZGluYXRvcl91cmwYASABKAlSDmNvb3JkaW5hdG9yVXJsEhsKCW'
+    'RldmljZV9pZBgCIAEoCVIIZGV2aWNlSWQ=');
+
+@$core.Deprecated('Use userDataDescriptor instead')
+const UserData$json = {
+  '1': 'UserData',
+  '2': [
+    {'1': 'used_device_ids', '3': 1, '4': 3, '5': 9, '10': 'usedDeviceIds'},
+    {'1': 'saved_sessions', '3': 2, '4': 3, '5': 11, '6': '.clientipc.UserData.SavedSessionsEntry', '10': 'savedSessions'},
+  ],
+  '3': [UserData_SavedSessionsEntry$json],
+};
+
+@$core.Deprecated('Use userDataDescriptor instead')
+const UserData_SavedSessionsEntry$json = {
+  '1': 'SavedSessionsEntry',
+  '2': [
+    {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
+    {'1': 'value', '3': 2, '4': 1, '5': 11, '6': '.clientipc.SavedSession', '10': 'value'},
+  ],
+  '7': {'7': true},
+};
+
+/// Descriptor for `UserData`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List userDataDescriptor = $convert.base64Decode(
+    'CghVc2VyRGF0YRImCg91c2VkX2RldmljZV9pZHMYASADKAlSDXVzZWREZXZpY2VJZHMSTQoOc2'
+    'F2ZWRfc2Vzc2lvbnMYAiADKAsyJi5jbGllbnRpcGMuVXNlckRhdGEuU2F2ZWRTZXNzaW9uc0Vu'
+    'dHJ5Ug1zYXZlZFNlc3Npb25zGlkKElNhdmVkU2Vzc2lvbnNFbnRyeRIQCgNrZXkYASABKAlSA2'
+    'tleRItCgV2YWx1ZRgCIAEoCzIXLmNsaWVudGlwYy5TYXZlZFNlc3Npb25SBXZhbHVlOgI4AQ==');
+
+@$core.Deprecated('Use savedSessionDescriptor instead')
+const SavedSession$json = {
+  '1': 'SavedSession',
+  '2': [
+    {'1': 'index', '3': 1, '4': 1, '5': 5, '10': 'index'},
+  ],
+};
+
+/// Descriptor for `SavedSession`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List savedSessionDescriptor = $convert.base64Decode(
+    'CgxTYXZlZFNlc3Npb24SFAoFaW5kZXgYASABKAVSBWluZGV4');
+
+@$core.Deprecated('Use emptyValueDescriptor instead')
+const EmptyValue$json = {
+  '1': 'EmptyValue',
+};
+
+/// Descriptor for `EmptyValue`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List emptyValueDescriptor = $convert.base64Decode(
+    'CgpFbXB0eVZhbHVl');
+
+@$core.Deprecated('Use valueDescriptor instead')
+const Value$json = {
+  '1': 'Value',
+  '2': [
+    {'1': 'string_value', '3': 1, '4': 1, '5': 9, '9': 0, '10': 'stringValue'},
+    {'1': 'int_value', '3': 2, '4': 1, '5': 5, '9': 0, '10': 'intValue'},
+    {'1': 'json_value', '3': 3, '4': 1, '5': 11, '6': '.clientipc.MapValue', '9': 0, '10': 'jsonValue'},
+    {'1': 'list_value', '3': 4, '4': 1, '5': 11, '6': '.clientipc.ListValue', '9': 0, '10': 'listValue'},
+    {'1': 'empty', '3': 5, '4': 1, '5': 11, '6': '.clientipc.EmptyValue', '9': 0, '10': 'empty'},
+  ],
+  '8': [
+    {'1': 'kind'},
+  ],
+};
+
+/// Descriptor for `Value`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List valueDescriptor = $convert.base64Decode(
+    'CgVWYWx1ZRIjCgxzdHJpbmdfdmFsdWUYASABKAlIAFILc3RyaW5nVmFsdWUSHQoJaW50X3ZhbH'
+    'VlGAIgASgFSABSCGludFZhbHVlEjQKCmpzb25fdmFsdWUYAyABKAsyEy5jbGllbnRpcGMuTWFw'
+    'VmFsdWVIAFIJanNvblZhbHVlEjUKCmxpc3RfdmFsdWUYBCABKAsyFC5jbGllbnRpcGMuTGlzdF'
+    'ZhbHVlSABSCWxpc3RWYWx1ZRItCgVlbXB0eRgFIAEoCzIVLmNsaWVudGlwYy5FbXB0eVZhbHVl'
+    'SABSBWVtcHR5QgYKBGtpbmQ=');
+
+@$core.Deprecated('Use mapValueDescriptor instead')
+const MapValue$json = {
+  '1': 'MapValue',
+  '2': [
+    {'1': 'map', '3': 1, '4': 3, '5': 11, '6': '.clientipc.MapValue.MapEntry', '10': 'map'},
+  ],
+  '3': [MapValue_MapEntry$json],
+};
+
+@$core.Deprecated('Use mapValueDescriptor instead')
+const MapValue_MapEntry$json = {
+  '1': 'MapEntry',
+  '2': [
+    {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
+    {'1': 'value', '3': 2, '4': 1, '5': 11, '6': '.clientipc.Value', '10': 'value'},
+  ],
+  '7': {'7': true},
+};
+
+/// Descriptor for `MapValue`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List mapValueDescriptor = $convert.base64Decode(
+    'CghNYXBWYWx1ZRIuCgNtYXAYASADKAsyHC5jbGllbnRpcGMuTWFwVmFsdWUuTWFwRW50cnlSA2'
+    '1hcBpICghNYXBFbnRyeRIQCgNrZXkYASABKAlSA2tleRImCgV2YWx1ZRgCIAEoCzIQLmNsaWVu'
+    'dGlwYy5WYWx1ZVIFdmFsdWU6AjgB');
+
+@$core.Deprecated('Use listValueDescriptor instead')
+const ListValue$json = {
+  '1': 'ListValue',
+  '2': [
+    {'1': 'list', '3': 1, '4': 3, '5': 11, '6': '.clientipc.Value', '10': 'list'},
+  ],
+};
+
+/// Descriptor for `ListValue`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listValueDescriptor = $convert.base64Decode(
+    'CglMaXN0VmFsdWUSJAoEbGlzdBgBIAMoCzIQLmNsaWVudGlwYy5WYWx1ZVIEbGlzdA==');
+
 @$core.Deprecated('Use sftpRequestDescriptor instead')
 const SftpRequest$json = {
   '1': 'SftpRequest',
@@ -337,26 +519,20 @@ final $typed_data.Uint8List ptyRequestResponseDescriptor = $convert.base64Decode
 @$core.Deprecated('Use genKeysRequestDescriptor instead')
 const GenKeysRequest$json = {
   '1': 'GenKeysRequest',
-  '2': [
-    {'1': 'key_path', '3': 1, '4': 1, '5': 9, '10': 'keyPath'},
-  ],
 };
 
 /// Descriptor for `GenKeysRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List genKeysRequestDescriptor = $convert.base64Decode(
-    'Cg5HZW5LZXlzUmVxdWVzdBIZCghrZXlfcGF0aBgBIAEoCVIHa2V5UGF0aA==');
+    'Cg5HZW5LZXlzUmVxdWVzdA==');
 
 @$core.Deprecated('Use genKeysResponseDescriptor instead')
 const GenKeysResponse$json = {
   '1': 'GenKeysResponse',
-  '2': [
-    {'1': 'key_path', '3': 1, '4': 1, '5': 9, '10': 'keyPath'},
-  ],
 };
 
 /// Descriptor for `GenKeysResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List genKeysResponseDescriptor = $convert.base64Decode(
-    'Cg9HZW5LZXlzUmVzcG9uc2USGQoIa2V5X3BhdGgYASABKAlSB2tleVBhdGg=');
+    'Cg9HZW5LZXlzUmVzcG9uc2U=');
 
 @$core.Deprecated('Use streamRequestDescriptor instead')
 const StreamRequest$json = {
@@ -419,13 +595,18 @@ const NewConnectionRequest$json = {
   '2': [
     {'1': 'coordinator_url', '3': 1, '4': 1, '5': 9, '10': 'coordinatorUrl'},
     {'1': 'target_id', '3': 2, '4': 1, '5': 9, '10': 'targetId'},
+    {'1': 'own_ipv6', '3': 3, '4': 1, '5': 9, '9': 0, '10': 'ownIpv6', '17': true},
+  ],
+  '8': [
+    {'1': '_own_ipv6'},
   ],
 };
 
 /// Descriptor for `NewConnectionRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List newConnectionRequestDescriptor = $convert.base64Decode(
     'ChROZXdDb25uZWN0aW9uUmVxdWVzdBInCg9jb29yZGluYXRvcl91cmwYASABKAlSDmNvb3JkaW'
-    '5hdG9yVXJsEhsKCXRhcmdldF9pZBgCIAEoCVIIdGFyZ2V0SWQ=');
+    '5hdG9yVXJsEhsKCXRhcmdldF9pZBgCIAEoCVIIdGFyZ2V0SWQSHgoIb3duX2lwdjYYAyABKAlI'
+    'AFIHb3duSXB2NogBAUILCglfb3duX2lwdjY=');
 
 @$core.Deprecated('Use newConnectionResponseDescriptor instead')
 const NewConnectionResponse$json = {

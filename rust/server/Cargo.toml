@@ -28,6 +28,7 @@ rcgen = "0.12.1"
 log4rs = "1.2.0"
 serde = "1.0.203"
 toml = "0.8.14"
+homedir = "0.3.3"
 
 shell-escape = "0.1.5"
 

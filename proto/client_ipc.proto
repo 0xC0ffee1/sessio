@@ -7,10 +7,12 @@ option java_outer_classname = "SessioClientIPC";
 package clientipc;
 
 service ClientIPC {
+    rpc InitClient(InitData) returns (InitResponse);
     rpc NewConnection(NewConnectionRequest) returns (NewConnectionResponse);
     rpc NewSession(NewSessionRequest) returns (NewSessionResponse);
 
     rpc GenKeys(GenKeysRequest) returns (GenKeysResponse);
+    rpc GetPublicKey(GetKeyRequest) returns (PublicKey);
 
     //Open a SSH channel and a bi-directional stream
     rpc OpenChannel(stream Msg) returns (stream Msg);
@@ -20,7 +22,74 @@ service ClientIPC {
     rpc ListDirectory(Path) returns (FileList);
     rpc FileDownload(FileTransferRequest) returns (stream FileTransferStatus);
     rpc FileUpload(FileTransferRequest) returns (stream FileTransferStatus);
+
+    rpc GetSettings(SettingsRequest) returns (Settings);
+    rpc GetSaveData(GetSaveDataRequest) returns (UserData);
+
+    rpc SaveSettings(Settings) returns (Settings);
+    rpc SaveUserData(UserData) returns (UserData);
 }
+
+message GetKeyRequest{
+
+}
+
+message PublicKey{
+    string key = 1;
+}
+
+message InitData {
+    string data_folder_path = 1;
+}
+
+message InitResponse {
+
+}
+
+message GetSaveDataRequest{
+    
+}
+
+message SettingsRequest{
+    
+} 
+
+message Settings {
+    string coordinator_url = 1;
+    string device_id = 2;
+}
+
+message UserData {
+    repeated string used_device_ids = 1;
+    map<string, SavedSession> saved_sessions = 2;
+}
+
+message SavedSession {
+    int32 index = 1;
+}
+
+message EmptyValue {
+
+}
+
+message Value{
+    oneof kind {
+        string string_value = 1;
+        int32 int_value = 2;
+        MapValue json_value = 3;
+        ListValue list_value = 4;
+        EmptyValue empty = 5;
+    }
+}
+
+message MapValue {
+    map<string, Value> map = 1;
+}
+
+message ListValue {
+    repeated Value list = 1;
+}
+
 
 message SftpRequest{
     string session_id = 1;
@@ -149,10 +218,11 @@ message PtyRequestResponse{
 }
 
 message GenKeysRequest{
-    string key_path = 1;
+
 }
+
 message GenKeysResponse{
-    string key_path = 1;
+
 }
 
 message StreamRequest {
@@ -179,6 +249,8 @@ message NewSessionResponse {
 message NewConnectionRequest {
     string coordinator_url = 1;
     string target_id = 2;
+    //There's no good way of obtaining ipv6 in rust in both android and linux so we're passing it here
+    optional string own_ipv6 = 3;
 }
 
 message NewConnectionResponse {

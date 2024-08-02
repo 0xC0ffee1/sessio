@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:sessio_ui/model/sftp/browser.dart';
 import 'package:sessio_ui/model/sftp/sftp.dart';
 import 'sftp_browser.dart'; // Import the file containing your SftpBrowser class
+import 'package:material_symbols_icons/symbols.dart';
 
 void showProgressDialog(
     BuildContext context, int fileSize, Stream<TransferStatus> transferStream) {
@@ -32,9 +33,13 @@ void showProgressDialog(
               double speed = 0;
               final timestamp = DateTime.now();
               if (previousTimestamp != null) {
-                final elapsedTime = timestamp.difference(previousTimestamp!).inMilliseconds;
+                final elapsedTime =
+                    timestamp.difference(previousTimestamp!).inMilliseconds;
                 final bytesTransferred = status.bytesRead - previousBytesRead;
-                speed = bytesTransferred / elapsedTime * 1000 / (1024 * 1024); // Convert to MB/s
+                speed = bytesTransferred /
+                    elapsedTime *
+                    1000 /
+                    (1024 * 1024); // Convert to MB/s
               }
 
               previousBytesRead = status.bytesRead;
@@ -50,7 +55,8 @@ void showProgressDialog(
                       value: progress / fileSize,
                     ),
                     SizedBox(height: 20),
-                    Text('${(progress / fileSize * 100).toStringAsFixed(2)}% completed'),
+                    Text(
+                        '${(progress / fileSize * 100).toStringAsFixed(2)}% completed'),
                     SizedBox(height: 10),
                     Text('Speed: ${speed.toStringAsFixed(2)} MB/s'),
                   ],
@@ -175,43 +181,75 @@ class FileListView extends StatelessWidget {
       return Center(child: Text('No files found.'));
     }
 
+    List<bool> _selectedFiles = List.generate(20, (_) => false);
+
     return ListView.builder(
       itemCount: files.length,
       itemBuilder: (context, index) {
         final file = files[index];
         return ListTile(
-          leading: Icon(file.isDir
-              ? Icons.folder_outlined
-              : Icons.insert_drive_file_outlined),
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Checkbox(
+                value: false,
+                onChanged: (bool? value) {
+                  
+                },
+              ),
+              SizedBox(width: 10),
+              Icon(
+                files[index].isDir
+                    ? Icons.folder
+                    : Icons.insert_drive_file_outlined,
+              ),
+            ],
+          ),
+
           title: Text(file.filename),
           subtitle: Text(file.path),
           onTap: () {
             if (file.isDir) {
-              browser.navigateToDirectory(file.path);
+              browser.navigateToDirectory(file.filename);
             } else {
               // Handle file selection
             }
           },
+          
           trailing: file.isDir
               ? null
-              : IconButton(
-                  onPressed: () async {
-                    String? outputFile = await FilePicker.platform.saveFile(
-                      dialogTitle: 'Please select an output file:',
-                      fileName: file.filename,
-                    );
+              : PopupMenuButton<String>(
+            onSelected: (String result) async{
+              // Handle menu item selection
+              String? outputFile = await FilePicker.platform.saveFile(
+                  dialogTitle: 'Please select an output file:',
+                  fileName: file.filename,
+                );
 
-                    if (outputFile != null) {
-                      int fileSize = file.byteSize;
+                if (outputFile != null) {
+                  int fileSize = file.byteSize;
 
-                      final transferStream =
-                          browser.copyFile(file.path, outputFile);
+                  final transferStream =
+                      browser.copyFile(file.path, outputFile);
 
-                      showProgressDialog(context, fileSize, transferStream);
-                    }
-                  },
-                  icon: Icon(Icons.download),
-                ),
+                  showProgressDialog(context, fileSize, transferStream);
+                }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'download',
+                child: Row(children: [Icon(Symbols.download), SizedBox(width: 10), Text('Download')]),
+              ),
+              const PopupMenuItem<String>(
+                value: 'Delete',
+                child: Row(children: [Icon(Symbols.delete), SizedBox(width: 10), Text('Delete')]),
+              ),
+              const PopupMenuItem<String>(
+                value: 'Edit',
+                child: Row(children: [Icon(Symbols.edit), SizedBox(width: 10), Text('Edit')]),
+              ),
+            ],
+          ),
         );
       },
     );

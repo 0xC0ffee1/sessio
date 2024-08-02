@@ -6,7 +6,7 @@ use client::Msg;
 use russh::client::Handle;
 use key::KeyPair;
 use quinn::{ClientConfig, Connection, Endpoint, VarInt};
-use serde_json::json;
+use serde_json::{json, Value};
 use ssh_key::known_hosts;
 use tokio::fs::File;
 use tokio::sync::oneshot::channel;
@@ -16,7 +16,7 @@ use std::f64::consts::E;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV6};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{error::Error, net::SocketAddr, sync::Arc};
-use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stdin, Stdout};
+use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout};
 
 #[cfg(not(windows))]
 use tokio::signal::unix::{signal, SignalKind};
@@ -28,7 +28,6 @@ use url::Url;
 
 use std::pin::Pin;
 use std::task::Poll;
-use std::task::Context;
 
 use russh_keys::*;
 
@@ -39,7 +38,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use bytes::Bytes;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use russh::*;
 use russh_keys::*;
 use tokio::net::ToSocketAddrs;
@@ -95,7 +94,7 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
 
     let mut client = Client::default();
 
-    let connection_id = client.new_connection(cli.target_id.clone(), cli.coordinator).await?;
+    let connection_id = client.new_connection(cli.target_id.clone(), cli.coordinator, None).await?;
 
     let session_id = client.new_session(
         cli.target_id,
@@ -202,8 +201,8 @@ pub fn make_client_endpoint(addr: SocketAddr) -> Result<Endpoint, Box<dyn Error>
 pub struct Client {
     //Map of active connections
     pub connections: HashMap<String, Connection>,
-
-    pub sessions: HashMap<String, Arc<Mutex<Session>>>
+    pub sessions: HashMap<String, Arc<Mutex<Session>>>,
+    pub data_folder_path: Option<PathBuf>
 }
 
 //The name "Session" is confusing, it's actually a SSH connection
@@ -221,10 +220,97 @@ pub struct ClientHandler {
     known_hosts_path: PathBuf
 }
 
-
 impl Client {
+
+    pub fn set_data_folder(&mut self, path: PathBuf) {
+        self.data_folder_path = Option::from(path);
+    }
+
+    pub async fn get_settings_file(&self) -> Result<File> {
+        let mut f = File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(self.data_folder_path.as_ref()
+            .context("Data folder not set")?
+            .join("settings.json")).await?;
+        Ok(f)
+    }
+
+    pub async fn get_save_file(&self) -> Result<File> {
+        let mut f = File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(self.data_folder_path.as_ref()
+            .context("Data folder not set")?
+            .join("save.json")).await?;
+        
+        Ok(f)
+    }
+
+    pub async fn get_json_as<T>(file: File) -> Result<T> 
+    where
+    T: serde::de::DeserializeOwned
+    {
+        let mut reader = BufReader::new(file);
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents).await?;
+        let data: T = serde_json::from_str(&contents)?;
+        Ok(data)
+    }
+
+    pub async fn save_json_as<T>(file: File, data: T) -> Result<T> 
+    where
+    T: serde::Serialize
+    {
+        let str: String = serde_json::to_string_pretty(&data)?;
+        let mut writer = BufWriter::new(file);
+        writer.write_all(str.as_bytes()).await?;
+        writer.flush().await?;
+        Ok(data)
+    }
+
+    pub async fn get_json_value<T>(key: &str, file: File) -> Result<Option<T>> 
+    where
+    T: serde::de::DeserializeOwned
+    {
+        let mut reader = BufReader::new(file);
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents).await?;
+        let mut data: HashMap<String, T> = serde_json::from_str(&contents)?;
+        let value = data.remove(key);
+        Ok(value)
+    }
+
+    ///Returns the old value
+    pub async fn set_json_value<T>(key: &str, value: &T, file: File) -> Result<Option<Value>> 
+    where
+    T: serde::Serialize
+    {
+        let (mut reader, mut writer) = tokio::io::split(file);
+        let mut reader = BufReader::new(reader);
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents).await?;
+        let mut data: HashMap<String, Value> = serde_json::from_str(&contents)?;
+        
+        let new_value = serde_json::to_value(value)?;
+
+        let old_value = data.insert(key.to_string(), new_value);
+
+        let mut writer = BufWriter::new(writer);
+
+        let updated_contents = serde_json::to_string(&data)?;
+    
+        // Write the updated JSON string back to the file
+        writer.write_all(updated_contents.as_bytes()).await?;
+        writer.flush().await?;
+
+        Ok(old_value)
+    }
+
     //Create a new connection and on success return the its ID
-    pub async fn new_connection(&mut self, target_id: String, coordinator: Url) -> anyhow::Result<()> {
+    pub async fn new_connection(&mut self, target_id: String, coordinator: Url, ipv6: Option<Ipv6Addr>) -> anyhow::Result<()> {
         if let Some(conn) = self.connections.get_mut(&target_id) {
             if let None = conn.close_reason() {
                 //Connection is still open, reusing the old one
@@ -233,7 +319,7 @@ impl Client {
             }
         }
 
-        let v6_ip = common::utils::ipv6::get_first_global_ipv6().unwrap_or(Ipv6Addr::UNSPECIFIED);
+        let v6_ip = ipv6.unwrap_or(Ipv6Addr::UNSPECIFIED);
         
         let endpoint_v4 = make_client_endpoint("0.0.0.0:0".parse().unwrap()).unwrap();
         let endpoint_v6 = make_client_endpoint(SocketAddr::V6(SocketAddrV6::new(v6_ip, 0, 0, 0))).unwrap();
@@ -261,7 +347,11 @@ impl Client {
         private_key_path: T,
         known_hosts_path: T
     )  -> anyhow::Result<(String)> where T: AsRef<Path> {
-        let start_time = Utc::now();
+
+        let data_folder = self.data_folder_path.as_ref().context("Data folder not set")?;
+        let private_key_path = data_folder.join("keys/id_ed25519");
+        let known_hosts_path = data_folder.join("keys/known_hosts");
+
         let res = load_secret_key(private_key_path, None);
         //Supports RSA since russh 0.44-beta.1
         let Ok(key_pair) = res else {
@@ -302,7 +392,7 @@ impl Client {
             remote_addr: connection.remote_address(),
             server_id: target_id,
             connection: connection.clone(),
-            known_hosts_path: known_hosts_path.as_ref().to_path_buf()
+            known_hosts_path: known_hosts_path.to_path_buf()
         };
 
         let mut handle = russh::client::connect_stream(config, bi_stream, session_handler).await?;
@@ -408,8 +498,6 @@ async fn attempt_holepunch(target: String, coordinator: Url,
         let response = client.read_response::<HashMap<String, String>>().await.unwrap();
         match response.get("id").map(String::as_str) {
             Some("CONNECT_TO") => {
-                info!("Attempting connection");
-                
                 let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
                 let target_id = response.get("target_id").unwrap();
 
@@ -421,7 +509,6 @@ async fn attempt_holepunch(target: String, coordinator: Url,
 
                 match endpoint.connect(target, "server").unwrap().await {
                     Ok(conn) => {
-                        info!("Connection successful!");
                         let _ = client.send_packet(&json!({"id":"CONNECT_OK", "target_id":target_id})).await;
                         let _ = client.close_connection().await;
                         return Ok(conn);
@@ -442,6 +529,7 @@ async fn attempt_holepunch(target: String, coordinator: Url,
 
 
 impl Session {
+
 
     pub async fn request_sftp(&mut self) -> Result<ChannelId> {
 

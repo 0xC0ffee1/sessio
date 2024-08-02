@@ -1,5 +1,7 @@
 
+use anyhow::Context;
 use async_trait::async_trait;
+use homedir::home;
 use russh_sftp::protocol::{Data, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version};
 use russh_sftp::server::Handler;
 use std::collections::HashMap;
@@ -17,6 +19,7 @@ pub struct SftpSession {
     root_dir_read_done: bool,
     open_directories: Arc<Mutex<HashMap<String, OpenDir>>>,
     open_files: Arc<Mutex<HashMap<String, TokioFile>>>,
+    user: String
 }
 
 struct OpenDir{
@@ -26,12 +29,13 @@ struct OpenDir{
 
 
 impl SftpSession {
-    pub fn new() -> Self {
+    pub fn new(user: String) -> Self {
         SftpSession {
             version: None,
             root_dir_read_done: false,
             open_directories: Arc::new(Mutex::new(HashMap::new())),
             open_files:  Arc::new(Mutex::new(HashMap::new())),
+            user
         }
     }
 }
@@ -67,13 +71,17 @@ impl Handler for SftpSession {
         _attrs: FileAttributes,
     ) -> Result<Handle, Self::Error> {
         info!("OPENING FILE {}", filename);
-        let file = OpenOptions::new().read(true).create(true).write(true).open(&filename).await.unwrap();
+
+        let path = home(&self.user).map_err(|e| StatusCode::Failure)?
+        .ok_or(StatusCode::NoSuchFile)?
+        .join(filename.clone());
+
+        let file = OpenOptions::new().read(true).create(true).write(true).open(path).await.unwrap();
         let mut open_files = self.open_files.lock().await;
         open_files.insert(filename.clone(), file);
 
         Ok(Handle { id, handle: filename })
     }
-
     
     async fn read(
         &mut self,
@@ -140,8 +148,19 @@ impl Handler for SftpSession {
     async fn opendir(&mut self, id: u32, path: String) -> Result<Handle, Self::Error> {
         info!("opendir: {}", path);
 
-        let path_buf = PathBuf::from(&path);
-        let read_dir = fs::read_dir(&path_buf).await.map_err(|_| StatusCode::Failure)?;
+        let cleaned_path = if path.starts_with('/') {
+            &path[1..]
+        } else {
+            &path
+        };
+
+        let path_full = home(&self.user).map_err(|e| StatusCode::Failure)?
+        .ok_or(StatusCode::NoSuchFile)?
+        .join(cleaned_path);
+
+        info!("Opening dir {}", path_full.display());
+
+        let read_dir = fs::read_dir(&path_full).await.map_err(|_| StatusCode::Failure)?;
 
         let mut open_directories = self.open_directories.lock().await;
         open_directories.insert(path.clone(), OpenDir {
@@ -159,12 +178,18 @@ impl Handler for SftpSession {
         if let Some(mut read_dir) = open_directories.get_mut(&handle) {
             let mut files = Vec::new();
             if !read_dir.read {
-                while let Some(entry) = read_dir.dir.next_entry().await.map_err(|_| StatusCode::Failure)? {
+                while let Some(entry) = read_dir.dir.next_entry().await.map_err(|e| {
+                    error!("{}", e.to_string());
+                    StatusCode::Failure
+                })? {
                     let file_name = entry.file_name().into_string().unwrap();
                     let file_path = entry.path();
+                    info!("path {}", file_path.display());
 
                     // Get file metadata
-                    let metadata = metadata(&file_path).await.map_err(|_| StatusCode::Failure)?;
+                    let Ok(metadata) = metadata(&file_path).await else{
+                        continue;
+                    };
                     
                     let mut file_attrs = FileAttributes {
                         size: Some(metadata.len()),
@@ -176,6 +201,7 @@ impl Handler for SftpSession {
                         atime: None,
                         permissions: None
                     };
+
                     file_attrs.set_dir(metadata.is_dir());
                     file_attrs.set_regular(metadata.is_file());
                     file_attrs.set_symlink(metadata.is_symlink());
@@ -200,7 +226,11 @@ impl Handler for SftpSession {
     async fn realpath(&mut self, id: u32, path: String) -> Result<Name, Self::Error> {
         info!("realpath: {}", path);
 
-        let canonical_path = fs::canonicalize(&path).await.map_err(|_| StatusCode::Failure)?;
+        let path_full = home(&self.user).map_err(|e| StatusCode::Failure)?
+        .ok_or(StatusCode::NoSuchFile)?
+        .join(path.clone());
+
+        let canonical_path = fs::canonicalize(&path_full).await.map_err(|_| StatusCode::Failure)?;
         let canonical_path_str = canonical_path.to_str().ok_or(StatusCode::Failure)?.to_string();
 
         Ok(Name {

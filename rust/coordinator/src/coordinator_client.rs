@@ -198,14 +198,7 @@ impl CoordinatorClient {
     }
     
 
-    fn is_link_local(addr: &SocketAddr) -> bool {
-        match addr.ip() {
-            IpAddr::V6(ipv6) => {
-                ipv6.segments()[0] & 0xffc0 == 0xfe80
-            }
-            _ => false,
-        }
-    }
+
     
     
     pub async fn register_endpoint(&mut self, ipv6_addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
