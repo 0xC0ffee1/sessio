@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:sessio_ui/grpc_service.dart';
 import 'package:sessio_ui/src/generated/client_ipc.pbgrpc.dart';
@@ -21,22 +20,29 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _grpcService = Provider.of<GrpcService>(context, listen: false);
-    _settingsFuture = _grpcService
-        .client
-        .getSettings(SettingsRequest());
+    _settingsFuture = _grpcService.client.getSettings(SettingsRequest());
 
     _loadPublicKey();
+    _loadInitialSettings();
   }
 
   void _loadPublicKey() async {
     publicKey = (await _grpcService.client.getPublicKey(GetKeyRequest())).key;
   }
 
+  void _loadInitialSettings() async {
+    try {
+      final settings = await _settingsFuture;
+      _urlController.text = settings.coordinatorUrl;
+      _deviceIdController.text = settings.deviceId;
+    } catch (e) {}
+  }
+
   Future<void> _saveSettings() async {
     final newSettings = Settings(
-        coordinatorUrl: _urlController.text, deviceId: _deviceIdController.text
-        // add other fields if needed
-        );
+      coordinatorUrl: _urlController.text,
+      deviceId: _deviceIdController.text,
+    );
 
     try {
       await Provider.of<GrpcService>(context, listen: false)
@@ -62,10 +68,11 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-   void _generateKeyPair() async {
+  void _generateKeyPair() async {
     // Replace this with your actual key generation logic
     await _grpcService.client.genKeys(GenKeysRequest());
-    final newKey = (await _grpcService.client.getPublicKey(GetKeyRequest())).key;
+    final newKey =
+        (await _grpcService.client.getPublicKey(GetKeyRequest())).key;
     setState(() {
       publicKey = newKey;
     });
@@ -94,10 +101,6 @@ class _SettingsPageState extends State<SettingsPage> {
           } else if (!snapshot.hasData) {
             return Center(child: Text('No data found.'));
           } else {
-            final settings = snapshot.data!;
-            _urlController.text = settings.coordinatorUrl;
-            _deviceIdController.text = settings.deviceId;
-
             return ListView(
               padding: EdgeInsets.all(16.0), // Add padding for better layout
               children: [

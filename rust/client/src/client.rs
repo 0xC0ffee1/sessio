@@ -41,7 +41,7 @@ use bytes::Bytes;
 use anyhow::{bail, Context, Result};
 use russh::*;
 use russh_keys::*;
-use tokio::net::ToSocketAddrs;
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task;
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
@@ -264,6 +264,8 @@ impl Client {
     where
     T: serde::Serialize
     {
+        //Truncate
+        file.set_len(0).await?;
         let str: String = serde_json::to_string_pretty(&data)?;
         let mut writer = BufWriter::new(file);
         writer.write_all(str.as_bytes()).await?;
@@ -531,9 +533,33 @@ async fn attempt_holepunch(target: String, coordinator: Url,
 impl Session {
 
 
+    //This is not optimal as it blocks the whole session
+    pub async fn direct_tcpip_forward(&mut self, local_host: &str, local_port: u32, remote_host: &str, remote_port: u32) -> Result<()>{
+        let listener = TcpListener::bind((local_host, local_port as u16)).await?;
+
+        let remote_host = remote_host.to_string();
+
+        loop {
+            let (mut stream, addr) = listener.accept().await?;
+
+            let mut channel = self.handle.channel_open_direct_tcpip(remote_host.clone(), remote_port, 
+            addr.ip().to_string(), addr.port() as u32).await?;
+
+            tokio::spawn(async move {
+                let mut cin = channel.make_writer();
+                let mut cout = channel.make_reader();
+    
+                let (mut s_read, mut s_write) = stream.split();
+                tokio::try_join! {
+                    tokio::io::copy(&mut s_read, &mut cin),
+                    tokio::io::copy(&mut cout, &mut s_write)
+                }
+            });
+        }
+    }
+
     pub async fn request_sftp(&mut self) -> Result<ChannelId> {
 
-        
         let mut channel = self.handle.channel_open_session().await?;
         info!("Channel opened!");
 

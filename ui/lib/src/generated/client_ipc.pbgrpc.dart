@@ -45,6 +45,10 @@ class ClientIPCClient extends $grpc.Client {
       '/clientipc.ClientIPC/OpenChannel',
       ($0.Msg value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.Msg.fromBuffer(value));
+  static final _$localPortForward = $grpc.ClientMethod<$0.LocalPortForwardRequest, $0.LocalPortForwardResponse>(
+      '/clientipc.ClientIPC/LocalPortForward',
+      ($0.LocalPortForwardRequest value) => value.writeToBuffer(),
+      ($core.List<$core.int> value) => $0.LocalPortForwardResponse.fromBuffer(value));
   static final _$openSftpChannel = $grpc.ClientMethod<$0.SftpRequest, $0.SftpRequestResponse>(
       '/clientipc.ClientIPC/OpenSftpChannel',
       ($0.SftpRequest value) => value.writeToBuffer(),
@@ -106,6 +110,10 @@ class ClientIPCClient extends $grpc.Client {
 
   $grpc.ResponseStream<$0.Msg> openChannel($async.Stream<$0.Msg> request, {$grpc.CallOptions? options}) {
     return $createStreamingCall(_$openChannel, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.LocalPortForwardResponse> localPortForward($0.LocalPortForwardRequest request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$localPortForward, request, options: options);
   }
 
   $grpc.ResponseFuture<$0.SftpRequestResponse> openSftpChannel($0.SftpRequest request, {$grpc.CallOptions? options}) {
@@ -188,6 +196,13 @@ abstract class ClientIPCServiceBase extends $grpc.Service {
         true,
         ($core.List<$core.int> value) => $0.Msg.fromBuffer(value),
         ($0.Msg value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.LocalPortForwardRequest, $0.LocalPortForwardResponse>(
+        'LocalPortForward',
+        localPortForward_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.LocalPortForwardRequest.fromBuffer(value),
+        ($0.LocalPortForwardResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.SftpRequest, $0.SftpRequestResponse>(
         'OpenSftpChannel',
         openSftpChannel_Pre,
@@ -266,6 +281,10 @@ abstract class ClientIPCServiceBase extends $grpc.Service {
     return getPublicKey(call, await request);
   }
 
+  $async.Future<$0.LocalPortForwardResponse> localPortForward_Pre($grpc.ServiceCall call, $async.Future<$0.LocalPortForwardRequest> request) async {
+    return localPortForward(call, await request);
+  }
+
   $async.Future<$0.SftpRequestResponse> openSftpChannel_Pre($grpc.ServiceCall call, $async.Future<$0.SftpRequest> request) async {
     return openSftpChannel(call, await request);
   }
@@ -304,6 +323,7 @@ abstract class ClientIPCServiceBase extends $grpc.Service {
   $async.Future<$0.GenKeysResponse> genKeys($grpc.ServiceCall call, $0.GenKeysRequest request);
   $async.Future<$0.PublicKey> getPublicKey($grpc.ServiceCall call, $0.GetKeyRequest request);
   $async.Stream<$0.Msg> openChannel($grpc.ServiceCall call, $async.Stream<$0.Msg> request);
+  $async.Future<$0.LocalPortForwardResponse> localPortForward($grpc.ServiceCall call, $0.LocalPortForwardRequest request);
   $async.Future<$0.SftpRequestResponse> openSftpChannel($grpc.ServiceCall call, $0.SftpRequest request);
   $async.Future<$0.FileList> listDirectory($grpc.ServiceCall call, $0.Path request);
   $async.Stream<$0.FileTransferStatus> fileDownload($grpc.ServiceCall call, $0.FileTransferRequest request);

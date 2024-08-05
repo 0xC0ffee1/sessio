@@ -13,6 +13,46 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use localPortForwardResponseDescriptor instead')
+const LocalPortForwardResponse$json = {
+  '1': 'LocalPortForwardResponse',
+};
+
+/// Descriptor for `LocalPortForwardResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List localPortForwardResponseDescriptor = $convert.base64Decode(
+    'ChhMb2NhbFBvcnRGb3J3YXJkUmVzcG9uc2U=');
+
+@$core.Deprecated('Use localPortForwardRequestDescriptor instead')
+const LocalPortForwardRequest$json = {
+  '1': 'LocalPortForwardRequest',
+  '2': [
+    {'1': 'local_host', '3': 1, '4': 1, '5': 9, '10': 'localHost'},
+    {'1': 'local_port', '3': 2, '4': 1, '5': 13, '10': 'localPort'},
+    {'1': 'remote_host', '3': 3, '4': 1, '5': 9, '10': 'remoteHost'},
+    {'1': 'remote_port', '3': 4, '4': 1, '5': 13, '10': 'remotePort'},
+    {'1': 'session_id', '3': 5, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `LocalPortForwardRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List localPortForwardRequestDescriptor = $convert.base64Decode(
+    'ChdMb2NhbFBvcnRGb3J3YXJkUmVxdWVzdBIdCgpsb2NhbF9ob3N0GAEgASgJUglsb2NhbEhvc3'
+    'QSHQoKbG9jYWxfcG9ydBgCIAEoDVIJbG9jYWxQb3J0Eh8KC3JlbW90ZV9ob3N0GAMgASgJUgpy'
+    'ZW1vdGVIb3N0Eh8KC3JlbW90ZV9wb3J0GAQgASgNUgpyZW1vdGVQb3J0Eh0KCnNlc3Npb25faW'
+    'QYBSABKAlSCXNlc3Npb25JZA==');
+
+@$core.Deprecated('Use fileDeleteRequestDescriptor instead')
+const FileDeleteRequest$json = {
+  '1': 'FileDeleteRequest',
+  '2': [
+    {'1': 'files', '3': 1, '4': 3, '5': 9, '10': 'files'},
+  ],
+};
+
+/// Descriptor for `FileDeleteRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileDeleteRequestDescriptor = $convert.base64Decode(
+    'ChFGaWxlRGVsZXRlUmVxdWVzdBIUCgVmaWxlcxgBIAMoCVIFZmlsZXM=');
+
 @$core.Deprecated('Use getKeyRequestDescriptor instead')
 const GetKeyRequest$json = {
   '1': 'GetKeyRequest',

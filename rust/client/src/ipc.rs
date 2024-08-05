@@ -9,12 +9,7 @@ use uuid::Uuid;
 use tokio::{fs::File, io::{AsyncReadExt, AsyncWriteExt}, sync::mpsc, time::Instant};
 use std::{collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
 use clientipc::{
-    client_ipc_server::{ClientIpc, ClientIpcServer}, msg::Type, Value, SettingsRequest, GetSaveDataRequest,
-    Settings, UserData,GetKeyRequest,PublicKey,
-    FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest,
-    FileReadResponse, file_transfer_status::Progress, FileTransferRequest, FileTransferStatus, 
-    FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, Msg, NewConnectionRequest, NewConnectionResponse, 
-    NewSessionRequest, NewSessionResponse, SftpRequest, SftpRequestResponse, StreamResponse, InitData, InitResponse
+    client_ipc_server::{ClientIpc, ClientIpcServer}, file_transfer_status::Progress, msg::Type, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest, InitData, InitResponse, LocalPortForwardRequest, LocalPortForwardResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, PublicKey, Settings, SettingsRequest, SftpRequest, SftpRequestResponse, StreamResponse, UserData, Value
 };
 use clientipc::file_transfer_status::Typ;
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
@@ -64,6 +59,23 @@ impl ClientIpc for ClientIpcHandler {
         client.set_data_folder(PathBuf::from(request.data_folder_path));
 
         Ok(Response::new(InitResponse {}))
+    }
+
+    async fn local_port_forward(&self, request: Request<LocalPortForwardRequest>) 
+    -> Result<Response<LocalPortForwardResponse>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+
+        let session_guard = match client.sessions.get_mut(&request.session_id) {
+            Some(session) => session,
+            None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+        };
+
+        session_guard.lock().await.direct_tcpip_forward(&request.local_host, 
+            request.local_port, &request.remote_host, request.remote_port).await.map_err(|e| 
+                Status::new(tonic::Code::Internal, e.to_string()))?;
+        
+        Ok(Response::new(LocalPortForwardResponse {}))
     }
 
     async fn get_settings(&self, request: Request<SettingsRequest>) 

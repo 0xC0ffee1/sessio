@@ -17,6 +17,8 @@ service ClientIPC {
     //Open a SSH channel and a bi-directional stream
     rpc OpenChannel(stream Msg) returns (stream Msg);
 
+    rpc LocalPortForward(LocalPortForwardRequest) returns (LocalPortForwardResponse);
+
     //SFTP RPCs
     rpc OpenSftpChannel(SftpRequest) returns (SftpRequestResponse);
     rpc ListDirectory(Path) returns (FileList);
@@ -28,6 +30,22 @@ service ClientIPC {
 
     rpc SaveSettings(Settings) returns (Settings);
     rpc SaveUserData(UserData) returns (UserData);
+}
+
+message LocalPortForwardResponse{
+
+}
+
+message LocalPortForwardRequest{
+    string local_host = 1;
+    uint32 local_port = 2;
+    string remote_host = 3;
+    uint32 remote_port = 4;
+    string session_id = 5;
+}
+
+message FileDeleteRequest{
+    repeated string files = 1;
 }
 
 message GetKeyRequest{

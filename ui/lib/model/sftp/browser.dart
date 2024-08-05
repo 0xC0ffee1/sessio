@@ -13,12 +13,24 @@ abstract class FileBrowser with ChangeNotifier {
   Stream<TransferStatus> copyFile(String filePath, String dest);
   Future<void> navigateToDirectory(String directory);
   Future<void> navigateUp();
+
+  void setCurrentTransferData(TransferData data);
+  TransferData? getCurrentTransfer();
+  void setTransferCancelled();
 }
 
 enum TransferStatusType {
   progress,
   completed,
 }
+
+class TransferData{
+  final int fileSize;
+  final Stream<TransferStatus> transferStream;
+
+  const TransferData({required this.fileSize, 
+  required this.transferStream});
+} 
 
 class TransferStatus {
   final TransferStatusType type;

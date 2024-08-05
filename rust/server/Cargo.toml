@@ -40,6 +40,8 @@ tokio-stream = { version = "0.1.15", features = ["net"] }
 futures-util = "0.3.30"
 russh-sftp = "2.0.3"
 if-addrs = "0.13.1"
+shared_memory = "0.12.4"
+raw_sync = "0.1.5"
 
 [dependencies.uuid]
 version = "1.9.1"

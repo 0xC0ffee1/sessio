@@ -208,9 +208,7 @@ class ActionButton extends StatelessWidget {
     return Material(
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
-      color: active
-          ? Colors.pink
-          : theme.colorScheme.primary,
+      color: active ? Colors.pink : theme.colorScheme.primary,
       elevation: 4,
       child: IconButton(
         onPressed: onPressed,
@@ -219,7 +217,6 @@ class ActionButton extends StatelessWidget {
     );
   }
 }
-
 
 class VirtualKeyboard extends TerminalInputHandler with ChangeNotifier {
   final TerminalInputHandler _inputHandler;

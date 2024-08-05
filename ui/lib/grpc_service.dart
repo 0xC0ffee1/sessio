@@ -16,12 +16,13 @@ import 'package:path_provider/path_provider.dart';
 typedef StartGrpcServerNative = Void Function(Pointer<Utf8> path);
 typedef StartGrpcServer = void Function(Pointer<Utf8> path);
 
-class NativeGrpcServer{
+class NativeGrpcServer {
   late final DynamicLibrary _lib;
 
   NativeGrpcServer() {
     if (Platform.isAndroid) {
-      _lib = DynamicLibrary.open('libgrpc_server.so'); // Correct way to load the library
+      _lib = DynamicLibrary.open(
+          'libgrpc_server.so'); // Correct way to load the library
     } else if (Platform.isIOS) {
       _lib = DynamicLibrary.process();
     } else {
@@ -34,8 +35,6 @@ class NativeGrpcServer{
       .lookup<NativeFunction<StartGrpcServerNative>>('start_grpc_server')
       .asFunction();
 }
-
-
 
 class GrpcService {
   late ClientIPCClient _client;
@@ -54,15 +53,17 @@ class GrpcService {
   Future<ClientIPCClient> _createClientIPCClient() async {
     final ClientChannel channel;
     Directory appDir = await getApplicationSupportDirectory();
-    if(Platform.isAndroid){
-      final DynamicLibrary _lib =  DynamicLibrary.open("libgrpc_server.so");
-      startGrpcServer(appDir.path+"/sessio.socket");
+    if (Platform.isAndroid) {
+      final DynamicLibrary _lib = DynamicLibrary.open("libgrpc_server.so");
+      startGrpcServer(appDir.path + "/sessio.socket");
       //Waiting for the tokio runtime to start
       await Future.delayed(Duration(seconds: 1));
     }
-   
+
     if (Platform.isLinux || Platform.isMacOS || Platform.isAndroid) {
-      String unixPath = Platform.isAndroid ? appDir.path+"/sessio.socket" : "/tmp/sessio.socket";
+      String unixPath = Platform.isAndroid
+          ? appDir.path + "/sessio.socket"
+          : "/tmp/sessio.socket";
       final InternetAddress host =
           InternetAddress(unixPath, type: InternetAddressType.unix);
       channel = ClientChannel(
@@ -149,11 +150,12 @@ class GrpcService {
     return _client;
   }
 
-  Future<String> getIpv6() async{
+  Future<String> getIpv6() async {
     for (var interface in await NetworkInterface.list()) {
       for (var addr in interface.addresses) {
         print(addr);
-        if (addr.type == InternetAddressType.IPv6 && addr.isLinkLocal == false) {
+        if (addr.type == InternetAddressType.IPv6 &&
+            addr.isLinkLocal == false) {
           return addr.address;
         }
       }
@@ -161,17 +163,18 @@ class GrpcService {
     return "";
   }
 
-  Future<NewSessionResponse> _newSession(String clientId, String username) async {
+  Future<NewSessionResponse> _newSession(
+      String clientId, String username) async {
     Settings settings = await client.getSettings(SettingsRequest());
     var wifiIPv6 = await getIpv6();
-    wifiIPv6 = wifiIPv6.split("%")[0]; //For some reason android adds this to even non link-local addresses?
+    wifiIPv6 = wifiIPv6.split("%")[
+        0]; //For some reason android adds this to even non link-local addresses?
 
     NewConnectionResponse connectionResponse =
         await client.newConnection(NewConnectionRequest()
           ..coordinatorUrl = settings.coordinatorUrl
           ..targetId = clientId
           ..ownIpv6 = wifiIPv6);
-
 
     NewSessionResponse sessionResponse =
         await client.newSession(NewSessionRequest()
@@ -194,11 +197,23 @@ class GrpcService {
     return browser;
   }
 
-  void connectPTY(String clientId, String username, SessioTerminalState state) async {
-    var t = DateTime.now().millisecondsSinceEpoch;
+  void connectLPF(String clientId, String username, String hostLocal, int portLocal, 
+    String hostRemote, int portRemote) async {
+
+    final t = DateTime.now().millisecondsSinceEpoch;
     NewSessionResponse sessionResponse = await _newSession(clientId, username);
 
-    final streamController = StreamController<Msg>();
+    await client
+        .localPortForward(LocalPortForwardRequest(sessionId: sessionResponse.sessionId,
+        localHost: hostLocal, localPort:  portLocal,
+        remoteHost: hostRemote, remotePort: portRemote));
+  }
+
+  void connectPTY(
+      String clientId, String username, SessioTerminalState state) async {
+    final streamController = state.streamController;
+    var t = DateTime.now().millisecondsSinceEpoch;
+    NewSessionResponse sessionResponse = await _newSession(clientId, username);
     state.terminal
         .write("Connected! Session ID is: ${sessionResponse.sessionId} \r\n");
 

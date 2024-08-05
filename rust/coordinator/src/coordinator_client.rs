@@ -197,10 +197,6 @@ impl CoordinatorClient {
         Ok(())
     }
     
-
-
-    
-    
     pub async fn register_endpoint(&mut self, ipv6_addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
 
         let ipv6 = if !ipv6_addr.ip().is_unspecified() {

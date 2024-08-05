@@ -14,6 +14,188 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 
+class LocalPortForwardResponse extends $pb.GeneratedMessage {
+  factory LocalPortForwardResponse() => create();
+  LocalPortForwardResponse._() : super();
+  factory LocalPortForwardResponse.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory LocalPortForwardResponse.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'LocalPortForwardResponse', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  LocalPortForwardResponse clone() => LocalPortForwardResponse()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  LocalPortForwardResponse copyWith(void Function(LocalPortForwardResponse) updates) => super.copyWith((message) => updates(message as LocalPortForwardResponse)) as LocalPortForwardResponse;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static LocalPortForwardResponse create() => LocalPortForwardResponse._();
+  LocalPortForwardResponse createEmptyInstance() => create();
+  static $pb.PbList<LocalPortForwardResponse> createRepeated() => $pb.PbList<LocalPortForwardResponse>();
+  @$core.pragma('dart2js:noInline')
+  static LocalPortForwardResponse getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<LocalPortForwardResponse>(create);
+  static LocalPortForwardResponse? _defaultInstance;
+}
+
+class LocalPortForwardRequest extends $pb.GeneratedMessage {
+  factory LocalPortForwardRequest({
+    $core.String? localHost,
+    $core.int? localPort,
+    $core.String? remoteHost,
+    $core.int? remotePort,
+    $core.String? sessionId,
+  }) {
+    final $result = create();
+    if (localHost != null) {
+      $result.localHost = localHost;
+    }
+    if (localPort != null) {
+      $result.localPort = localPort;
+    }
+    if (remoteHost != null) {
+      $result.remoteHost = remoteHost;
+    }
+    if (remotePort != null) {
+      $result.remotePort = remotePort;
+    }
+    if (sessionId != null) {
+      $result.sessionId = sessionId;
+    }
+    return $result;
+  }
+  LocalPortForwardRequest._() : super();
+  factory LocalPortForwardRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory LocalPortForwardRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'LocalPortForwardRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'localHost')
+    ..a<$core.int>(2, _omitFieldNames ? '' : 'localPort', $pb.PbFieldType.OU3)
+    ..aOS(3, _omitFieldNames ? '' : 'remoteHost')
+    ..a<$core.int>(4, _omitFieldNames ? '' : 'remotePort', $pb.PbFieldType.OU3)
+    ..aOS(5, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  LocalPortForwardRequest clone() => LocalPortForwardRequest()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  LocalPortForwardRequest copyWith(void Function(LocalPortForwardRequest) updates) => super.copyWith((message) => updates(message as LocalPortForwardRequest)) as LocalPortForwardRequest;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static LocalPortForwardRequest create() => LocalPortForwardRequest._();
+  LocalPortForwardRequest createEmptyInstance() => create();
+  static $pb.PbList<LocalPortForwardRequest> createRepeated() => $pb.PbList<LocalPortForwardRequest>();
+  @$core.pragma('dart2js:noInline')
+  static LocalPortForwardRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<LocalPortForwardRequest>(create);
+  static LocalPortForwardRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get localHost => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set localHost($core.String v) { $_setString(0, v); }
+  @$pb.TagNumber(1)
+  $core.bool hasLocalHost() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearLocalHost() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get localPort => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set localPort($core.int v) { $_setUnsignedInt32(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasLocalPort() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearLocalPort() => clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get remoteHost => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set remoteHost($core.String v) { $_setString(2, v); }
+  @$pb.TagNumber(3)
+  $core.bool hasRemoteHost() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRemoteHost() => clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.int get remotePort => $_getIZ(3);
+  @$pb.TagNumber(4)
+  set remotePort($core.int v) { $_setUnsignedInt32(3, v); }
+  @$pb.TagNumber(4)
+  $core.bool hasRemotePort() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRemotePort() => clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get sessionId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set sessionId($core.String v) { $_setString(4, v); }
+  @$pb.TagNumber(5)
+  $core.bool hasSessionId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSessionId() => clearField(5);
+}
+
+class FileDeleteRequest extends $pb.GeneratedMessage {
+  factory FileDeleteRequest({
+    $core.Iterable<$core.String>? files,
+  }) {
+    final $result = create();
+    if (files != null) {
+      $result.files.addAll(files);
+    }
+    return $result;
+  }
+  FileDeleteRequest._() : super();
+  factory FileDeleteRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory FileDeleteRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'FileDeleteRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'clientipc'), createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'files')
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
+  'Will be removed in next major version')
+  FileDeleteRequest clone() => FileDeleteRequest()..mergeFromMessage(this);
+  @$core.Deprecated(
+  'Using this can add significant overhead to your binary. '
+  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
+  'Will be removed in next major version')
+  FileDeleteRequest copyWith(void Function(FileDeleteRequest) updates) => super.copyWith((message) => updates(message as FileDeleteRequest)) as FileDeleteRequest;
+
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileDeleteRequest create() => FileDeleteRequest._();
+  FileDeleteRequest createEmptyInstance() => create();
+  static $pb.PbList<FileDeleteRequest> createRepeated() => $pb.PbList<FileDeleteRequest>();
+  @$core.pragma('dart2js:noInline')
+  static FileDeleteRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<FileDeleteRequest>(create);
+  static FileDeleteRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.List<$core.String> get files => $_getList(0);
+}
+
 class GetKeyRequest extends $pb.GeneratedMessage {
   factory GetKeyRequest() => create();
   GetKeyRequest._() : super();

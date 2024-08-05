@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -45,15 +46,17 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void checkPerms() async {
-    if(!Platform.isAndroid) return;
-    if(!await Permission.manageExternalStorage.isGranted){
-        await Permission.manageExternalStorage.request();
+    if (!Platform.isAndroid) return;
+    if (!await Permission.manageExternalStorage.isGranted) {
+      await Permission.manageExternalStorage.request();
     }
   }
 
   Future<void> _showClientIdDialog() async {
     TextEditingController clientIdController = TextEditingController();
     TextEditingController usernameController = TextEditingController();
+    TextEditingController localHostPortController = TextEditingController();
+    TextEditingController remoteHostPortController = TextEditingController();
     String sessionType = "PTY"; // Default session type
 
     await showDialog(
@@ -63,84 +66,133 @@ class _MyHomePageState extends State<MyHomePage> {
           builder: (context, setState) {
             return AlertDialog(
               title: Text('Enter Device ID'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: usernameController,
-                    decoration: InputDecoration(
-                        border: OutlineInputBorder(), hintText: "Username"),
-                  ),
-                  SizedBox(height: 10),
-                  TextField(
-                    controller: clientIdController,
-                    decoration: InputDecoration(
-                        border: OutlineInputBorder(), hintText: "Device ID"),
-                  ),
-                  SizedBox(height: 20),
-                  Text(
-                    'Select Session Type',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              content: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      FilterChip(
-                        avatar: Icon(Icons.terminal,
-                            color: sessionType == 'PTY'
-                                ? Colors.white
-                                : Colors.black),
-                        label: Container(
-                          width: 50, // Ensures consistent width
-                          child: Center(
-                            child: Text('PTY'),
-                          ),
-                        ),
-                        selected: sessionType == 'PTY',
-                        onSelected: (selected) {
-                          setState(() {
-                            sessionType = 'PTY';
-                          });
-                        },
-                        selectedColor: Colors.pink,
-                        backgroundColor: Colors.grey[200],
-                        labelStyle: TextStyle(
-                          color: sessionType == 'PTY'
-                              ? Colors.white
-                              : Colors.black,
-                        ),
-                        showCheckmark: false,
+                      TextField(
+                        controller: usernameController,
+                        decoration: InputDecoration(
+                            border: OutlineInputBorder(), hintText: "Username"),
                       ),
-                      FilterChip(
-                        avatar: Icon(Icons.folder_open,
-                            color: sessionType == 'SFTP'
-                                ? Colors.white
-                                : Colors.black),
-                        label: Container(
-                          width: 50, // Ensures consistent width
-                          child: Center(
-                            child: Text('SFTP'),
-                          ),
-                        ),
-                        selected: sessionType == 'SFTP',
-                        onSelected: (selected) {
-                          setState(() {
-                            sessionType = 'SFTP';
-                          });
-                        },
-                        selectedColor: Colors.pink,
-                        backgroundColor: Colors.grey[200],
-                        labelStyle: TextStyle(
-                          color: sessionType == 'SFTP'
-                              ? Colors.white
-                              : Colors.black,
-                        ),
-                        showCheckmark: false,
+                      SizedBox(height: 10),
+                      TextField(
+                        controller: clientIdController,
+                        decoration: InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: "Device ID"),
                       ),
+                      SizedBox(height: 20),
+                      Text(
+                        'Select Session Type',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          FilterChip(
+                            avatar: Icon(Icons.terminal,
+                                color: sessionType == 'PTY'
+                                    ? Colors.white
+                                    : Colors.black),
+                            label: Container(
+                              width: 50, // Ensures consistent width
+                              child: Center(
+                                child: Text('PTY'),
+                              ),
+                            ),
+                            selected: sessionType == 'PTY',
+                            onSelected: (selected) {
+                              setState(() {
+                                sessionType = 'PTY';
+                              });
+                            },
+                            selectedColor: Colors.pink,
+                            backgroundColor: Colors.grey[200],
+                            labelStyle: TextStyle(
+                              color: sessionType == 'PTY'
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
+                            showCheckmark: false,
+                          ),
+                          FilterChip(
+                            avatar: Icon(Icons.folder_open,
+                                color: sessionType == 'SFTP'
+                                    ? Colors.white
+                                    : Colors.black),
+                            label: Container(
+                              width: 50, // Ensures consistent width
+                              child: Center(
+                                child: Text('SFTP'),
+                              ),
+                            ),
+                            selected: sessionType == 'SFTP',
+                            onSelected: (selected) {
+                              setState(() {
+                                sessionType = 'SFTP';
+                              });
+                            },
+                            selectedColor: Colors.pink,
+                            backgroundColor: Colors.grey[200],
+                            labelStyle: TextStyle(
+                              color: sessionType == 'SFTP'
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
+                            showCheckmark: false,
+                          ),
+                          FilterChip(
+                            avatar: Icon(Icons.security,
+                                color: sessionType == 'L-PF'
+                                    ? Colors.white
+                                    : Colors.black),
+                            label: Container(
+                              width: 50, // Ensures consistent width
+                              child: Center(
+                                child: Text('L-PF'),
+                              ),
+                            ),
+                            selected: sessionType == 'L-PF',
+                            onSelected: (selected) {
+                              setState(() {
+                                sessionType = 'L-PF';
+                              });
+                            },
+                            selectedColor: Colors.pink,
+                            backgroundColor: Colors.grey[200],
+                            labelStyle: TextStyle(
+                              color: sessionType == 'L-PF'
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
+                            showCheckmark: false,
+                          ),
+                        ],
+                      ),
+                      if (sessionType == 'L-PF') ...[
+                        SizedBox(height: 10),
+                        TextField(
+                          controller: localHostPortController,
+                          decoration: InputDecoration(
+                              border: OutlineInputBorder(),
+                              hintText: "Local Host:Port"),
+                        ),
+                        SizedBox(height: 10),
+                        TextField(
+                          controller: remoteHostPortController,
+                          decoration: InputDecoration(
+                              border: OutlineInputBorder(),
+                              hintText: "Remote Host:Port"),
+                        ),
+                      ],
                     ],
                   ),
-                ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -153,7 +205,24 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Text('Connect'),
                   onPressed: () {
                     Navigator.of(context).pop();
-                    _addNewSession(clientIdController.text, usernameController.text, sessionType);
+                    if (sessionType == 'L-PF') {
+                      var localHostPort = localHostPortController.text.split(':');
+                      var remoteHostPort = remoteHostPortController.text.split(':');
+                      _addLocalPFSession(
+                        clientIdController.text,
+                        usernameController.text,
+                        localHostPort[0],
+                        int.parse(localHostPort[1]),
+                        remoteHostPort[0],
+                        int.parse(remoteHostPort[1]),
+                      );
+                    } else {
+                      _addNewSession(
+                        clientIdController.text,
+                        usernameController.text,
+                        sessionType,
+                      );
+                    }
                   },
                 ),
               ],
@@ -164,7 +233,14 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Future<void> _addNewSession(String clientId, String username, String type) async {
+  Future<void> _addLocalPFSession(String clientId, String username, String hostLocal, int portLocal,
+  String hostRemote, int portRemote) async{
+    Provider.of<GrpcService>(context, listen: false)
+              .connectLPF(clientId, username, hostLocal, portLocal, hostRemote, portRemote);
+  }
+
+  Future<void> _addNewSession(
+      String clientId, String username, String type) async {
     if (!sessionTree.containsKey(clientId)) {
       sessionTree[clientId] = [];
     }
@@ -181,17 +257,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (type == "PTY") {
       final sessionState = SessioTerminalState();
-      final terminal = sessionState.terminal;
-      final terminalController = sessionState.terminalController;
       final keyboard = VirtualKeyboard(defaultInputHandler);
-      terminal.inputHandler = keyboard;
+      sessionState.terminal.inputHandler = keyboard;
       setState(() {
-          sessionViews.add(TerminalSessionView(
-            terminal: terminal,
-            terminalController: terminalController,
-            keyboard: keyboard,
-          ));
-          
+        sessionViews.add(TerminalSessionView(
+          terminalState: sessionState,
+          keyboard: keyboard,
+        ));
+
         WidgetsBinding.instance.addPostFrameCallback((_) {
           Provider.of<GrpcService>(context, listen: false)
               .connectPTY(clientId, username, sessionState);
@@ -206,7 +279,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Center(child: FileBrowserView(browser: browser)),
         );
       });
-    }
+    } 
   }
 
   Widget _buildConnStatus() {
@@ -247,23 +320,26 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _buildSessionListView() {
-   return ListView(
+    return ListView(
       padding: EdgeInsets.zero, // Remove any padding
       children: [
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Column(children: [SizedBox(height: 20), TextButton(
-            onPressed: () async {
-              await _showClientIdDialog();
-            },
-            child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add),
-                  SizedBox(width: 10),
-                  Text('New Session')
-                ]),
-          )]),
+          child: Column(children: [
+            SizedBox(height: 20),
+            TextButton(
+              onPressed: () async {
+                await _showClientIdDialog();
+              },
+              child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add),
+                    SizedBox(width: 10),
+                    Text('New Session')
+                  ]),
+            )
+          ]),
         ),
         ...sessionTree.keys.map((parent) {
           return ExpansionTile(
@@ -276,8 +352,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 style: TextStyle(color: Colors.white),
               )
             ]),
-            children:
-                sessionTree[parent]!.asMap().entries.map((entry) {
+            children: sessionTree[parent]!.asMap().entries.map((entry) {
               int index = entry.key;
               Widget session = entry.value;
               return Padding(
@@ -288,8 +363,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   selectedColor: Colors.pink,
                   onTap: () {
                     setState(() {
-                      _selectedSessionIndex = index +
-                          2; // Ensure session indices start from 2
+                      _selectedSessionIndex =
+                          index + 2; // Ensure session indices start from 2
                     });
                   },
                 ),
@@ -312,10 +387,9 @@ class _MyHomePageState extends State<MyHomePage> {
               255, 40, 40, 40), // Ensure background color matches
           child: ClipRect(
             child: Align(
-              alignment: Alignment.topLeft,
-              widthFactor: _isDrawerOpen ? 1.0 : 0.0,
-              child: _buildSessionListView()
-            ),
+                alignment: Alignment.topLeft,
+                widthFactor: _isDrawerOpen ? 1.0 : 0.0,
+                child: _buildSessionListView()),
           ),
         ),
         VerticalDivider(thickness: 1, width: 1),
@@ -372,16 +446,12 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
       ),
-      drawer: Drawer(
-        child: _buildSessionListView()
-      ),
+      drawer: Drawer(child: _buildSessionListView()),
       body: _selectedSessionIndex > 1
           ? sessionViews[_selectedSessionIndex - 2]
           : Center(child: Text('No sessions yet!')),
-
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -434,10 +504,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               _selectedRailIndex = index;
                             });
                           },
-                          children: [
-                            _buildSessionPageSmall(),
-                            SettingsPage()
-                          ],
+                          children: [_buildSessionPageSmall(), SettingsPage()],
                         ),
                       ),
                       BottomNavigationBar(
@@ -471,5 +538,4 @@ class _MyHomePageState extends State<MyHomePage> {
       },
     );
   }
-
 }

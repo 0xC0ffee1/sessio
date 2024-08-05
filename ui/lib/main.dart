@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:sessio_ui/grpc_service.dart';
+import 'package:sessio_ui/model/sftp/browser.dart';
+import 'package:sessio_ui/model/sftp/sftp.dart';
 import 'package:sessio_ui/model/terminal_state.dart';
 import 'package:sessio_ui/view/homepage.dart';
 import 'package:provider/provider.dart';
+import 'package:sessio_ui/view/sftp_browser.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =

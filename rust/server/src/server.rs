@@ -13,7 +13,7 @@ use tokio::process::Command as TokioCommand;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
 use homedir::home;
-use tokio::net::UdpSocket;
+use tokio::net::{TcpStream, UdpSocket};
 use std::process::{Command, Stdio};
 use std::str;
 use async_trait::async_trait;
@@ -27,7 +27,7 @@ use russh_keys::key::KeyPair;
 use rand::CryptoRng;
 use log::{debug, error, info};
 use tokio::fs::read_to_string;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener};
 use clap::Parser;
 use quinn::{crypto, Connection, Endpoint, ServerConfig, VarInt};
 
@@ -389,6 +389,37 @@ impl ServerSession {
 impl server::Handler for ServerSession {
     type Error = anyhow::Error;
 
+
+    /// Basic local forwarding
+    #[allow(unused_variables)]
+    async fn channel_open_direct_tcpip(
+        &mut self,
+        mut channel: Channel<Msg>,
+        host_to_connect: &str,
+        port_to_connect: u32,
+        originator_address: &str,
+        originator_port: u32,
+        session: &mut Session,
+    ) -> Result<bool, Self::Error> {
+        
+        info!("Forwarding {}:{} for {}:{}", host_to_connect, port_to_connect, originator_address, originator_port);
+        let host = host_to_connect.to_string();
+        let mut stream = TcpStream::connect((host, port_to_connect as u16)).await?;
+
+        tokio::spawn(async move {
+            let mut cin = channel.make_writer();
+            let mut cout = channel.make_reader();
+
+            let (mut s_read, mut s_write) = stream.split();
+            tokio::try_join! {
+                tokio::io::copy(&mut s_read, &mut cin),
+                tokio::io::copy(&mut cout, &mut s_write)
+            }
+        });
+        
+        Ok(true)
+    }
+
     async fn subsystem_request(
         &mut self,
         channel_id: ChannelId,
@@ -713,14 +744,14 @@ impl server::Handler for ServerSession {
         Ok(())
     }
 
-
-
+    ///According to RFC4254, the client must first request the reverse port forwarding
     async fn tcpip_forward(
         &mut self,
         address: &str,
         port: &mut u32,
         session: &mut Session,
     ) -> Result<bool, Self::Error> {
+        info!("Received tcpip_forward");
         let handle = session.handle();
         let address = address.to_string();
         let port = *port;
