@@ -21,7 +21,7 @@ Currently only pub-key auth is supported.
 By using QUIC as the transport protocol Sessio is able keep sessions uninterrupted even when switching between networks or in otherwise unreliable network conditions. 
 
 ### Hole punching
-Peer-to-Peer SSH connections in Sessio are achieved using QUIC as the transport protocol. By employing the UDP hole punching technique, Sessio enables direct connections between devices behind firewalls and NATs. This allows seamless and secure SSH communication without the need for a middleman server to relay traffic.
+Peer-to-Peer SSH connections in Sessio are achieved using QUIC as the transport protocol. By employing the UDP hole punching technique, Sessio enables direct connections between devices behind firewalls and NATs. This allows seamless and secure SSH communication without the need for a middleman server to relay traffic or open ports.
 
 > No publicly open ports are required to create P2P SSH Connections in Sessio.
 
