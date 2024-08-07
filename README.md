@@ -1,7 +1,6 @@
 # Sessio - P2P SSH
 
-Cross-platform SSH 2.0 Over QUIC Client & Server Implementation.
-
+Cross-platform SSH 2.0 Over QUIC Client & Server implementation written in Rust.
 
 ## Table of contents
 
@@ -11,7 +10,7 @@ Cross-platform SSH 2.0 Over QUIC Client & Server Implementation.
 
 ## About
 
-Sessio is a minimal SSH 2.0 over QUIC implementation that uses UDP Hole punching to facilitate Peer-to-peer SSH connections.
+> Sessio is a minimal SSH 2.0 over QUIC implementation that uses UDP Hole punching to facilitate Peer-to-peer SSH connections between devices behind firewalls and NATs.
 
 Currently only pub-key auth is supported.
 
