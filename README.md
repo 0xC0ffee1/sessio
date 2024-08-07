@@ -51,16 +51,16 @@ Sessio also exposes a gRPC interface for developers wanting to develop a GUI for
 > ! **Session is in alpha and thus not recommended for production use !**
 
 ### Server
-1. Download the sessio-server binary for your platform from releases.
-2. Run sessio-server --help to view the usage
-3. Add the public key of a client to your authorized_keys file in /your_home/.sessio/
+1. Download the `sessio-server` binary for your platform from releases.
+2. Run `sessio-server --help` to view the usage
+3. Add the public key of a client to your `authorized_keys` file in `/your_home/.sessio/`
 
 ### Coordination server
-1. Download the sessio-coordinator binary for your platform from releases.
+1. Download the `sessio-coordinator` binary for your platform from releases.
 2. Run it
 
 ### Client (daemon)
-1. Download the sessiod binary for your platform from releases.
+1. Download the `sessiod` binary for your platform from releases.
 2. Run it
 
 ### Client (CLI)
