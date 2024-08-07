@@ -13,14 +13,187 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use sessionMapDescriptor instead')
+const SessionMap$json = {
+  '1': 'SessionMap',
+  '2': [
+    {
+      '1': 'map',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.clientipc.SessionMap.MapEntry',
+      '10': 'map'
+    },
+    {
+      '1': 'parents',
+      '3': 2,
+      '4': 3,
+      '5': 11,
+      '6': '.clientipc.SessionMap.ParentsEntry',
+      '10': 'parents'
+    },
+  ],
+  '3': [SessionMap_MapEntry$json, SessionMap_ParentsEntry$json],
+};
+
+@$core.Deprecated('Use sessionMapDescriptor instead')
+const SessionMap_MapEntry$json = {
+  '1': 'MapEntry',
+  '2': [
+    {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
+    {
+      '1': 'value',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.SessionData',
+      '10': 'value'
+    },
+  ],
+  '7': {'7': true},
+};
+
+@$core.Deprecated('Use sessionMapDescriptor instead')
+const SessionMap_ParentsEntry$json = {
+  '1': 'ParentsEntry',
+  '2': [
+    {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
+    {
+      '1': 'value',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.DeviceStatus',
+      '10': 'value'
+    },
+  ],
+  '7': {'7': true},
+};
+
+/// Descriptor for `SessionMap`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sessionMapDescriptor = $convert.base64Decode(
+    'CgpTZXNzaW9uTWFwEjAKA21hcBgBIAMoCzIeLmNsaWVudGlwYy5TZXNzaW9uTWFwLk1hcEVudH'
+    'J5UgNtYXASPAoHcGFyZW50cxgCIAMoCzIiLmNsaWVudGlwYy5TZXNzaW9uTWFwLlBhcmVudHNF'
+    'bnRyeVIHcGFyZW50cxpOCghNYXBFbnRyeRIQCgNrZXkYASABKAlSA2tleRIsCgV2YWx1ZRgCIA'
+    'EoCzIWLmNsaWVudGlwYy5TZXNzaW9uRGF0YVIFdmFsdWU6AjgBGlMKDFBhcmVudHNFbnRyeRIQ'
+    'CgNrZXkYASABKAlSA2tleRItCgV2YWx1ZRgCIAEoCzIXLmNsaWVudGlwYy5EZXZpY2VTdGF0dX'
+    'NSBXZhbHVlOgI4AQ==');
+
+@$core.Deprecated('Use deviceStatusDescriptor instead')
+const DeviceStatus$json = {
+  '1': 'DeviceStatus',
+  '2': [
+    {'1': 'connected', '3': 1, '4': 1, '5': 8, '10': 'connected'},
+  ],
+};
+
+/// Descriptor for `DeviceStatus`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deviceStatusDescriptor = $convert.base64Decode(
+    'CgxEZXZpY2VTdGF0dXMSHAoJY29ubmVjdGVkGAEgASgIUgljb25uZWN0ZWQ=');
+
+@$core.Deprecated('Use sessionRequestDescriptor instead')
+const SessionRequest$json = {
+  '1': 'SessionRequest',
+  '2': [
+    {'1': 'parent', '3': 1, '4': 1, '5': 9, '9': 0, '10': 'parent', '17': true},
+  ],
+  '8': [
+    {'1': '_parent'},
+  ],
+};
+
+/// Descriptor for `SessionRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sessionRequestDescriptor = $convert.base64Decode(
+    'Cg5TZXNzaW9uUmVxdWVzdBIbCgZwYXJlbnQYASABKAlIAFIGcGFyZW50iAEBQgkKB19wYXJlbn'
+    'Q=');
+
+@$core.Deprecated('Use sessionDataDescriptor instead')
+const SessionData$json = {
+  '1': 'SessionData',
+  '2': [
+    {
+      '1': 'pty',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.SessionData.PTYSession',
+      '9': 0,
+      '10': 'pty'
+    },
+    {
+      '1': 'sftp',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.SessionData.SFTPSession',
+      '9': 0,
+      '10': 'sftp'
+    },
+    {
+      '1': 'lpf',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.SessionData.LPFSession',
+      '9': 0,
+      '10': 'lpf'
+    },
+    {'1': 'session_id', '3': 4, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'username', '3': 5, '4': 1, '5': 9, '10': 'username'},
+    {'1': 'device_id', '3': 6, '4': 1, '5': 9, '10': 'deviceId'},
+  ],
+  '3': [
+    SessionData_PTYSession$json,
+    SessionData_SFTPSession$json,
+    SessionData_LPFSession$json
+  ],
+  '8': [
+    {'1': 'kind'},
+  ],
+};
+
+@$core.Deprecated('Use sessionDataDescriptor instead')
+const SessionData_PTYSession$json = {
+  '1': 'PTYSession',
+};
+
+@$core.Deprecated('Use sessionDataDescriptor instead')
+const SessionData_SFTPSession$json = {
+  '1': 'SFTPSession',
+};
+
+@$core.Deprecated('Use sessionDataDescriptor instead')
+const SessionData_LPFSession$json = {
+  '1': 'LPFSession',
+  '2': [
+    {'1': 'local_host', '3': 1, '4': 1, '5': 9, '10': 'localHost'},
+    {'1': 'local_port', '3': 2, '4': 1, '5': 13, '10': 'localPort'},
+    {'1': 'remote_host', '3': 3, '4': 1, '5': 9, '10': 'remoteHost'},
+    {'1': 'remote_port', '3': 4, '4': 1, '5': 13, '10': 'remotePort'},
+  ],
+};
+
+/// Descriptor for `SessionData`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sessionDataDescriptor = $convert.base64Decode(
+    'CgtTZXNzaW9uRGF0YRI1CgNwdHkYASABKAsyIS5jbGllbnRpcGMuU2Vzc2lvbkRhdGEuUFRZU2'
+    'Vzc2lvbkgAUgNwdHkSOAoEc2Z0cBgCIAEoCzIiLmNsaWVudGlwYy5TZXNzaW9uRGF0YS5TRlRQ'
+    'U2Vzc2lvbkgAUgRzZnRwEjUKA2xwZhgDIAEoCzIhLmNsaWVudGlwYy5TZXNzaW9uRGF0YS5MUE'
+    'ZTZXNzaW9uSABSA2xwZhIdCgpzZXNzaW9uX2lkGAQgASgJUglzZXNzaW9uSWQSGgoIdXNlcm5h'
+    'bWUYBSABKAlSCHVzZXJuYW1lEhsKCWRldmljZV9pZBgGIAEoCVIIZGV2aWNlSWQaDAoKUFRZU2'
+    'Vzc2lvbhoNCgtTRlRQU2Vzc2lvbhqMAQoKTFBGU2Vzc2lvbhIdCgpsb2NhbF9ob3N0GAEgASgJ'
+    'Uglsb2NhbEhvc3QSHQoKbG9jYWxfcG9ydBgCIAEoDVIJbG9jYWxQb3J0Eh8KC3JlbW90ZV9ob3'
+    'N0GAMgASgJUgpyZW1vdGVIb3N0Eh8KC3JlbW90ZV9wb3J0GAQgASgNUgpyZW1vdGVQb3J0QgYK'
+    'BGtpbmQ=');
+
 @$core.Deprecated('Use localPortForwardResponseDescriptor instead')
 const LocalPortForwardResponse$json = {
   '1': 'LocalPortForwardResponse',
 };
 
 /// Descriptor for `LocalPortForwardResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List localPortForwardResponseDescriptor = $convert.base64Decode(
-    'ChhMb2NhbFBvcnRGb3J3YXJkUmVzcG9uc2U=');
+final $typed_data.Uint8List localPortForwardResponseDescriptor =
+    $convert.base64Decode('ChhMb2NhbFBvcnRGb3J3YXJkUmVzcG9uc2U=');
 
 @$core.Deprecated('Use localPortForwardRequestDescriptor instead')
 const LocalPortForwardRequest$json = {
@@ -50,8 +223,8 @@ const FileDeleteRequest$json = {
 };
 
 /// Descriptor for `FileDeleteRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List fileDeleteRequestDescriptor = $convert.base64Decode(
-    'ChFGaWxlRGVsZXRlUmVxdWVzdBIUCgVmaWxlcxgBIAMoCVIFZmlsZXM=');
+final $typed_data.Uint8List fileDeleteRequestDescriptor = $convert
+    .base64Decode('ChFGaWxlRGVsZXRlUmVxdWVzdBIUCgVmaWxlcxgBIAMoCVIFZmlsZXM=');
 
 @$core.Deprecated('Use getKeyRequestDescriptor instead')
 const GetKeyRequest$json = {
@@ -59,8 +232,8 @@ const GetKeyRequest$json = {
 };
 
 /// Descriptor for `GetKeyRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getKeyRequestDescriptor = $convert.base64Decode(
-    'Cg1HZXRLZXlSZXF1ZXN0');
+final $typed_data.Uint8List getKeyRequestDescriptor =
+    $convert.base64Decode('Cg1HZXRLZXlSZXF1ZXN0');
 
 @$core.Deprecated('Use publicKeyDescriptor instead')
 const PublicKey$json = {
@@ -71,8 +244,8 @@ const PublicKey$json = {
 };
 
 /// Descriptor for `PublicKey`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List publicKeyDescriptor = $convert.base64Decode(
-    'CglQdWJsaWNLZXkSEAoDa2V5GAEgASgJUgNrZXk=');
+final $typed_data.Uint8List publicKeyDescriptor =
+    $convert.base64Decode('CglQdWJsaWNLZXkSEAoDa2V5GAEgASgJUgNrZXk=');
 
 @$core.Deprecated('Use initDataDescriptor instead')
 const InitData$json = {
@@ -92,8 +265,8 @@ const InitResponse$json = {
 };
 
 /// Descriptor for `InitResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List initResponseDescriptor = $convert.base64Decode(
-    'CgxJbml0UmVzcG9uc2U=');
+final $typed_data.Uint8List initResponseDescriptor =
+    $convert.base64Decode('CgxJbml0UmVzcG9uc2U=');
 
 @$core.Deprecated('Use getSaveDataRequestDescriptor instead')
 const GetSaveDataRequest$json = {
@@ -101,8 +274,8 @@ const GetSaveDataRequest$json = {
 };
 
 /// Descriptor for `GetSaveDataRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getSaveDataRequestDescriptor = $convert.base64Decode(
-    'ChJHZXRTYXZlRGF0YVJlcXVlc3Q=');
+final $typed_data.Uint8List getSaveDataRequestDescriptor =
+    $convert.base64Decode('ChJHZXRTYXZlRGF0YVJlcXVlc3Q=');
 
 @$core.Deprecated('Use settingsRequestDescriptor instead')
 const SettingsRequest$json = {
@@ -110,8 +283,8 @@ const SettingsRequest$json = {
 };
 
 /// Descriptor for `SettingsRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List settingsRequestDescriptor = $convert.base64Decode(
-    'Cg9TZXR0aW5nc1JlcXVlc3Q=');
+final $typed_data.Uint8List settingsRequestDescriptor =
+    $convert.base64Decode('Cg9TZXR0aW5nc1JlcXVlc3Q=');
 
 @$core.Deprecated('Use settingsDescriptor instead')
 const Settings$json = {
@@ -132,7 +305,14 @@ const UserData$json = {
   '1': 'UserData',
   '2': [
     {'1': 'used_device_ids', '3': 1, '4': 3, '5': 9, '10': 'usedDeviceIds'},
-    {'1': 'saved_sessions', '3': 2, '4': 3, '5': 11, '6': '.clientipc.UserData.SavedSessionsEntry', '10': 'savedSessions'},
+    {
+      '1': 'saved_sessions',
+      '3': 2,
+      '4': 3,
+      '5': 11,
+      '6': '.clientipc.UserData.SavedSessionsEntry',
+      '10': 'savedSessions'
+    },
   ],
   '3': [UserData_SavedSessionsEntry$json],
 };
@@ -142,7 +322,14 @@ const UserData_SavedSessionsEntry$json = {
   '1': 'SavedSessionsEntry',
   '2': [
     {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
-    {'1': 'value', '3': 2, '4': 1, '5': 11, '6': '.clientipc.SavedSession', '10': 'value'},
+    {
+      '1': 'value',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.SessionData',
+      '10': 'value'
+    },
   ],
   '7': {'7': true},
 };
@@ -151,20 +338,8 @@ const UserData_SavedSessionsEntry$json = {
 final $typed_data.Uint8List userDataDescriptor = $convert.base64Decode(
     'CghVc2VyRGF0YRImCg91c2VkX2RldmljZV9pZHMYASADKAlSDXVzZWREZXZpY2VJZHMSTQoOc2'
     'F2ZWRfc2Vzc2lvbnMYAiADKAsyJi5jbGllbnRpcGMuVXNlckRhdGEuU2F2ZWRTZXNzaW9uc0Vu'
-    'dHJ5Ug1zYXZlZFNlc3Npb25zGlkKElNhdmVkU2Vzc2lvbnNFbnRyeRIQCgNrZXkYASABKAlSA2'
-    'tleRItCgV2YWx1ZRgCIAEoCzIXLmNsaWVudGlwYy5TYXZlZFNlc3Npb25SBXZhbHVlOgI4AQ==');
-
-@$core.Deprecated('Use savedSessionDescriptor instead')
-const SavedSession$json = {
-  '1': 'SavedSession',
-  '2': [
-    {'1': 'index', '3': 1, '4': 1, '5': 5, '10': 'index'},
-  ],
-};
-
-/// Descriptor for `SavedSession`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List savedSessionDescriptor = $convert.base64Decode(
-    'CgxTYXZlZFNlc3Npb24SFAoFaW5kZXgYASABKAVSBWluZGV4');
+    'dHJ5Ug1zYXZlZFNlc3Npb25zGlgKElNhdmVkU2Vzc2lvbnNFbnRyeRIQCgNrZXkYASABKAlSA2'
+    'tleRIsCgV2YWx1ZRgCIAEoCzIWLmNsaWVudGlwYy5TZXNzaW9uRGF0YVIFdmFsdWU6AjgB');
 
 @$core.Deprecated('Use emptyValueDescriptor instead')
 const EmptyValue$json = {
@@ -172,8 +347,8 @@ const EmptyValue$json = {
 };
 
 /// Descriptor for `EmptyValue`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List emptyValueDescriptor = $convert.base64Decode(
-    'CgpFbXB0eVZhbHVl');
+final $typed_data.Uint8List emptyValueDescriptor =
+    $convert.base64Decode('CgpFbXB0eVZhbHVl');
 
 @$core.Deprecated('Use valueDescriptor instead')
 const Value$json = {
@@ -181,9 +356,33 @@ const Value$json = {
   '2': [
     {'1': 'string_value', '3': 1, '4': 1, '5': 9, '9': 0, '10': 'stringValue'},
     {'1': 'int_value', '3': 2, '4': 1, '5': 5, '9': 0, '10': 'intValue'},
-    {'1': 'json_value', '3': 3, '4': 1, '5': 11, '6': '.clientipc.MapValue', '9': 0, '10': 'jsonValue'},
-    {'1': 'list_value', '3': 4, '4': 1, '5': 11, '6': '.clientipc.ListValue', '9': 0, '10': 'listValue'},
-    {'1': 'empty', '3': 5, '4': 1, '5': 11, '6': '.clientipc.EmptyValue', '9': 0, '10': 'empty'},
+    {
+      '1': 'json_value',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.MapValue',
+      '9': 0,
+      '10': 'jsonValue'
+    },
+    {
+      '1': 'list_value',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.ListValue',
+      '9': 0,
+      '10': 'listValue'
+    },
+    {
+      '1': 'empty',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.EmptyValue',
+      '9': 0,
+      '10': 'empty'
+    },
   ],
   '8': [
     {'1': 'kind'},
@@ -202,7 +401,14 @@ final $typed_data.Uint8List valueDescriptor = $convert.base64Decode(
 const MapValue$json = {
   '1': 'MapValue',
   '2': [
-    {'1': 'map', '3': 1, '4': 3, '5': 11, '6': '.clientipc.MapValue.MapEntry', '10': 'map'},
+    {
+      '1': 'map',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.clientipc.MapValue.MapEntry',
+      '10': 'map'
+    },
   ],
   '3': [MapValue_MapEntry$json],
 };
@@ -212,7 +418,14 @@ const MapValue_MapEntry$json = {
   '1': 'MapEntry',
   '2': [
     {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
-    {'1': 'value', '3': 2, '4': 1, '5': 11, '6': '.clientipc.Value', '10': 'value'},
+    {
+      '1': 'value',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.Value',
+      '10': 'value'
+    },
   ],
   '7': {'7': true},
 };
@@ -227,7 +440,14 @@ final $typed_data.Uint8List mapValueDescriptor = $convert.base64Decode(
 const ListValue$json = {
   '1': 'ListValue',
   '2': [
-    {'1': 'list', '3': 1, '4': 3, '5': 11, '6': '.clientipc.Value', '10': 'list'},
+    {
+      '1': 'list',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.clientipc.Value',
+      '10': 'list'
+    },
   ],
 };
 
@@ -263,13 +483,59 @@ final $typed_data.Uint8List sftpRequestResponseDescriptor = $convert.base64Decod
 const Msg$json = {
   '1': 'Msg',
   '2': [
-    {'1': 'data', '3': 1, '4': 1, '5': 11, '6': '.clientipc.Msg.Data', '9': 0, '10': 'data'},
-    {'1': 'pty_request', '3': 2, '4': 1, '5': 11, '6': '.clientipc.Msg.PtyRequest', '9': 0, '10': 'ptyRequest'},
-    {'1': 'shell_request', '3': 3, '4': 1, '5': 11, '6': '.clientipc.Msg.ShellRequest', '9': 0, '10': 'shellRequest'},
-    {'1': 'channel_init', '3': 4, '4': 1, '5': 11, '6': '.clientipc.Msg.ChannelInit', '9': 0, '10': 'channelInit'},
-    {'1': 'pty_resize', '3': 5, '4': 1, '5': 11, '6': '.clientipc.Msg.PtyResize', '9': 0, '10': 'ptyResize'},
+    {
+      '1': 'data',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.Msg.Data',
+      '9': 0,
+      '10': 'data'
+    },
+    {
+      '1': 'pty_request',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.Msg.PtyRequest',
+      '9': 0,
+      '10': 'ptyRequest'
+    },
+    {
+      '1': 'shell_request',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.Msg.ShellRequest',
+      '9': 0,
+      '10': 'shellRequest'
+    },
+    {
+      '1': 'channel_init',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.Msg.ChannelInit',
+      '9': 0,
+      '10': 'channelInit'
+    },
+    {
+      '1': 'pty_resize',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.Msg.PtyResize',
+      '9': 0,
+      '10': 'ptyResize'
+    },
   ],
-  '3': [Msg_Data$json, Msg_PtyRequest$json, Msg_ShellRequest$json, Msg_ChannelInit$json, Msg_PtyResize$json],
+  '3': [
+    Msg_Data$json,
+    Msg_PtyRequest$json,
+    Msg_ShellRequest$json,
+    Msg_ChannelInit$json,
+    Msg_PtyResize$json
+  ],
   '8': [
     {'1': 'type'},
   ],
@@ -375,8 +641,24 @@ final $typed_data.Uint8List fileTransferRequestDescriptor = $convert.base64Decod
 const FileTransferStatus$json = {
   '1': 'FileTransferStatus',
   '2': [
-    {'1': 'progress', '3': 1, '4': 1, '5': 11, '6': '.clientipc.FileTransferStatus.Progress', '9': 0, '10': 'progress'},
-    {'1': 'completed', '3': 2, '4': 1, '5': 11, '6': '.clientipc.FileTransferStatus.Completed', '9': 0, '10': 'completed'},
+    {
+      '1': 'progress',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.FileTransferStatus.Progress',
+      '9': 0,
+      '10': 'progress'
+    },
+    {
+      '1': 'completed',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.FileTransferStatus.Completed',
+      '9': 0,
+      '10': 'completed'
+    },
   ],
   '3': [FileTransferStatus_Progress$json, FileTransferStatus_Completed$json],
   '8': [
@@ -457,8 +739,8 @@ const FileReadResponse$json = {
 };
 
 /// Descriptor for `FileReadResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List fileReadResponseDescriptor = $convert.base64Decode(
-    'ChBGaWxlUmVhZFJlc3BvbnNlEhIKBGRhdGEYASABKAxSBGRhdGE=');
+final $typed_data.Uint8List fileReadResponseDescriptor = $convert
+    .base64Decode('ChBGaWxlUmVhZFJlc3BvbnNlEhIKBGRhdGEYASABKAxSBGRhdGE=');
 
 @$core.Deprecated('Use fileCloseResponseDescriptor instead')
 const FileCloseResponse$json = {
@@ -512,14 +794,21 @@ const DirMetadata$json = {
 };
 
 /// Descriptor for `DirMetadata`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List dirMetadataDescriptor = $convert.base64Decode(
-    'CgtEaXJNZXRhZGF0YRISCgRwYXRoGAEgASgJUgRwYXRo');
+final $typed_data.Uint8List dirMetadataDescriptor =
+    $convert.base64Decode('CgtEaXJNZXRhZGF0YRISCgRwYXRoGAEgASgJUgRwYXRo');
 
 @$core.Deprecated('Use fileListDescriptor instead')
 const FileList$json = {
   '1': 'FileList',
   '2': [
-    {'1': 'files', '3': 1, '4': 3, '5': 11, '6': '.clientipc.FileData', '10': 'files'},
+    {
+      '1': 'files',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.clientipc.FileData',
+      '10': 'files'
+    },
   ],
 };
 
@@ -553,8 +842,9 @@ const PtyRequestResponse$json = {
 };
 
 /// Descriptor for `PtyRequestResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List ptyRequestResponseDescriptor = $convert.base64Decode(
-    'ChJQdHlSZXF1ZXN0UmVzcG9uc2USHQoKY2hhbm5lbF9pZBgBIAEoCVIJY2hhbm5lbElk');
+final $typed_data.Uint8List ptyRequestResponseDescriptor =
+    $convert.base64Decode(
+        'ChJQdHlSZXF1ZXN0UmVzcG9uc2USHQoKY2hhbm5lbF9pZBgBIAEoCVIJY2hhbm5lbElk');
 
 @$core.Deprecated('Use genKeysRequestDescriptor instead')
 const GenKeysRequest$json = {
@@ -562,8 +852,8 @@ const GenKeysRequest$json = {
 };
 
 /// Descriptor for `GenKeysRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List genKeysRequestDescriptor = $convert.base64Decode(
-    'Cg5HZW5LZXlzUmVxdWVzdA==');
+final $typed_data.Uint8List genKeysRequestDescriptor =
+    $convert.base64Decode('Cg5HZW5LZXlzUmVxdWVzdA==');
 
 @$core.Deprecated('Use genKeysResponseDescriptor instead')
 const GenKeysResponse$json = {
@@ -571,8 +861,8 @@ const GenKeysResponse$json = {
 };
 
 /// Descriptor for `GenKeysResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List genKeysResponseDescriptor = $convert.base64Decode(
-    'Cg9HZW5LZXlzUmVzcG9uc2U=');
+final $typed_data.Uint8List genKeysResponseDescriptor =
+    $convert.base64Decode('Cg9HZW5LZXlzUmVzcG9uc2U=');
 
 @$core.Deprecated('Use streamRequestDescriptor instead')
 const StreamRequest$json = {
@@ -597,25 +887,31 @@ const StreamResponse$json = {
 };
 
 /// Descriptor for `StreamResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List streamResponseDescriptor = $convert.base64Decode(
-    'Cg5TdHJlYW1SZXNwb25zZRISCgRkYXRhGAEgASgMUgRkYXRh');
+final $typed_data.Uint8List streamResponseDescriptor =
+    $convert.base64Decode('Cg5TdHJlYW1SZXNwb25zZRISCgRkYXRhGAEgASgMUgRkYXRh');
 
 @$core.Deprecated('Use newSessionRequestDescriptor instead')
 const NewSessionRequest$json = {
   '1': 'NewSessionRequest',
   '2': [
-    {'1': 'connection_id', '3': 1, '4': 1, '5': 9, '10': 'connectionId'},
-    {'1': 'username', '3': 2, '4': 1, '5': 9, '10': 'username'},
     {'1': 'private_key', '3': 3, '4': 1, '5': 9, '10': 'privateKey'},
     {'1': 'known_hosts_path', '3': 4, '4': 1, '5': 9, '10': 'knownHostsPath'},
+    {
+      '1': 'session_data',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.clientipc.SessionData',
+      '10': 'sessionData'
+    },
   ],
 };
 
 /// Descriptor for `NewSessionRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List newSessionRequestDescriptor = $convert.base64Decode(
-    'ChFOZXdTZXNzaW9uUmVxdWVzdBIjCg1jb25uZWN0aW9uX2lkGAEgASgJUgxjb25uZWN0aW9uSW'
-    'QSGgoIdXNlcm5hbWUYAiABKAlSCHVzZXJuYW1lEh8KC3ByaXZhdGVfa2V5GAMgASgJUgpwcml2'
-    'YXRlS2V5EigKEGtub3duX2hvc3RzX3BhdGgYBCABKAlSDmtub3duSG9zdHNQYXRo');
+    'ChFOZXdTZXNzaW9uUmVxdWVzdBIfCgtwcml2YXRlX2tleRgDIAEoCVIKcHJpdmF0ZUtleRIoCh'
+    'Brbm93bl9ob3N0c19wYXRoGAQgASgJUg5rbm93bkhvc3RzUGF0aBI5CgxzZXNzaW9uX2RhdGEY'
+    'BSABKAsyFi5jbGllbnRpcGMuU2Vzc2lvbkRhdGFSC3Nlc3Npb25EYXRh');
 
 @$core.Deprecated('Use newSessionResponseDescriptor instead')
 const NewSessionResponse$json = {
@@ -626,8 +922,9 @@ const NewSessionResponse$json = {
 };
 
 /// Descriptor for `NewSessionResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List newSessionResponseDescriptor = $convert.base64Decode(
-    'ChJOZXdTZXNzaW9uUmVzcG9uc2USHQoKc2Vzc2lvbl9pZBgBIAEoCVIJc2Vzc2lvbklk');
+final $typed_data.Uint8List newSessionResponseDescriptor =
+    $convert.base64Decode(
+        'ChJOZXdTZXNzaW9uUmVzcG9uc2USHQoKc2Vzc2lvbl9pZBgBIAEoCVIJc2Vzc2lvbklk');
 
 @$core.Deprecated('Use newConnectionRequestDescriptor instead')
 const NewConnectionRequest$json = {
@@ -635,7 +932,15 @@ const NewConnectionRequest$json = {
   '2': [
     {'1': 'coordinator_url', '3': 1, '4': 1, '5': 9, '10': 'coordinatorUrl'},
     {'1': 'target_id', '3': 2, '4': 1, '5': 9, '10': 'targetId'},
-    {'1': 'own_ipv6', '3': 3, '4': 1, '5': 9, '9': 0, '10': 'ownIpv6', '17': true},
+    {
+      '1': 'own_ipv6',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'ownIpv6',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_own_ipv6'},
@@ -660,4 +965,3 @@ const NewConnectionResponse$json = {
 final $typed_data.Uint8List newConnectionResponseDescriptor = $convert.base64Decode(
     'ChVOZXdDb25uZWN0aW9uUmVzcG9uc2USIwoNY29ubmVjdGlvbl9pZBgBIAEoCVIMY29ubmVjdG'
     'lvbklk');
-

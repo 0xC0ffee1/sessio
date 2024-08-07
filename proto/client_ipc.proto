@@ -14,13 +14,13 @@ service ClientIPC {
     rpc GenKeys(GenKeysRequest) returns (GenKeysResponse);
     rpc GetPublicKey(GetKeyRequest) returns (PublicKey);
 
-    //Open a SSH channel and a bi-directional stream
+    //Open a generic SSH channel and a bi-directional stream
     rpc OpenChannel(stream Msg) returns (stream Msg);
 
-    rpc LocalPortForward(LocalPortForwardRequest) returns (LocalPortForwardResponse);
+    rpc LocalPortForward(SessionData) returns (LocalPortForwardResponse);
 
     //SFTP RPCs
-    rpc OpenSftpChannel(SftpRequest) returns (SftpRequestResponse);
+    rpc OpenSftpChannel(SessionData) returns (SftpRequestResponse);
     rpc ListDirectory(Path) returns (FileList);
     rpc FileDownload(FileTransferRequest) returns (stream FileTransferStatus);
     rpc FileUpload(FileTransferRequest) returns (stream FileTransferStatus);
@@ -30,6 +30,48 @@ service ClientIPC {
 
     rpc SaveSettings(Settings) returns (Settings);
     rpc SaveUserData(UserData) returns (UserData);
+
+    rpc GetActiveSessions(SessionRequest) returns (SessionMap);
+}
+
+message SessionMap {
+    //Device, session data
+    map<string, SessionData> map = 1;
+    //Device, Device status
+    map<string, DeviceStatus> parents = 2;
+}
+
+message DeviceStatus{
+    bool connected = 1;
+}
+
+message SessionRequest{
+    optional string parent = 1;
+}
+
+message SessionData{
+    oneof kind {
+        PTYSession pty = 1;
+        SFTPSession sftp = 2;
+        LPFSession lpf = 3;
+    }
+
+    message PTYSession{
+        
+    }
+    message SFTPSession{
+        
+    }
+    message LPFSession{
+        string local_host = 1;
+        uint32 local_port = 2;
+        string remote_host = 3;
+        uint32 remote_port = 4;
+    }
+    //ID of the server
+    optional string session_id = 4;
+    string username = 5;
+    string device_id = 6;
 }
 
 message LocalPortForwardResponse{
@@ -79,11 +121,7 @@ message Settings {
 
 message UserData {
     repeated string used_device_ids = 1;
-    map<string, SavedSession> saved_sessions = 2;
-}
-
-message SavedSession {
-    int32 index = 1;
+    map<string, SessionData> saved_sessions = 2;
 }
 
 message EmptyValue {
@@ -117,6 +155,7 @@ message SftpRequestResponse{
     string channel_id = 1;
 }
 
+//This is mainly used for generic channels that require a continuous stream to frontend (not SFTP or Local port forward)
 message Msg{
     oneof type{
         Data data = 1;
@@ -139,6 +178,7 @@ message Msg{
         
     }
 
+    //Initializing this generic channel
     message ChannelInit{
         string session_id = 1;
     }
@@ -253,10 +293,9 @@ message StreamResponse {
 }
 
 message NewSessionRequest {
-    string connection_id = 1;
-    string username = 2;
     string private_key = 3;
     string known_hosts_path = 4;
+    SessionData session_data = 5;
 }
 
 message NewSessionResponse {

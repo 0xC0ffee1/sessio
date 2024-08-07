@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:sessio_ui/model/sftp/browser.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-
 class FileTransferOverlay extends StatefulWidget {
   final int fileSize;
   final Stream<TransferStatus> transferStream;
@@ -55,9 +54,11 @@ class _FileTransferOverlayState extends State<FileTransferOverlay> {
                     double speed = 0;
                     final timestamp = DateTime.now();
                     if (previousTimestamp != null) {
-                      final elapsedTime =
-                          timestamp.difference(previousTimestamp!).inMilliseconds;
-                      final bytesTransferred = status.bytesRead - previousBytesRead;
+                      final elapsedTime = timestamp
+                          .difference(previousTimestamp!)
+                          .inMilliseconds;
+                      final bytesTransferred =
+                          status.bytesRead - previousBytesRead;
                       speed = bytesTransferred /
                           elapsedTime *
                           1000 /
@@ -118,11 +119,12 @@ class FileBrowserView extends StatefulWidget {
   _FileBrowserViewState createState() => _FileBrowserViewState();
 }
 
-class _FileBrowserViewState extends State<FileBrowserView> with AutomaticKeepAliveClientMixin {
-
+class _FileBrowserViewState extends State<FileBrowserView>
+    with AutomaticKeepAliveClientMixin {
   void _startFileTransfer(int fileSize, Stream<TransferStatus> transferStream) {
     setState(() {
-      widget._browser.setCurrentTransferData(TransferData(fileSize: fileSize, transferStream: transferStream));
+      widget._browser.setCurrentTransferData(
+          TransferData(fileSize: fileSize, transferStream: transferStream));
     });
   }
 
@@ -164,11 +166,11 @@ class _FileBrowserViewState extends State<FileBrowserView> with AutomaticKeepAli
                 ),
               ],
             ),
-            
             if (widget._browser.getCurrentTransfer() != null)
               FileTransferOverlay(
                 fileSize: widget._browser.getCurrentTransfer()!.fileSize,
-                transferStream: widget._browser.getCurrentTransfer()!.transferStream,
+                transferStream:
+                    widget._browser.getCurrentTransfer()!.transferStream,
                 onCancel: _cancelFileTransfer,
               ),
           ],
@@ -182,8 +184,8 @@ class _FileBrowserViewState extends State<FileBrowserView> with AutomaticKeepAli
             if (res != null) {
               int fileSize = res.files.single.size;
 
-              final transferStream = widget._browser.addFile(
-                  res.files.single.path!, res.files.single.name);
+              final transferStream = widget._browser
+                  .addFile(res.files.single.path!, res.files.single.name);
 
               _startFileTransfer(fileSize, transferStream);
             }
@@ -194,7 +196,6 @@ class _FileBrowserViewState extends State<FileBrowserView> with AutomaticKeepAli
     );
   }
 }
-
 
 class PathNavigator extends StatelessWidget {
   @override
@@ -240,14 +241,16 @@ extension ByteSizeFormat on int {
 }
 
 class FileListView extends StatelessWidget {
-  final void Function(int fileSize, Stream<TransferStatus> transferStream) onFileTransferStart;
+  final void Function(int fileSize, Stream<TransferStatus> transferStream)
+      onFileTransferStart;
 
   const FileListView({
     Key? key,
     required this.onFileTransferStart,
   }) : super(key: key);
 
-  Future<void> _handleFileDownload(FileMeta file, BuildContext context, FileBrowser browser) async {
+  Future<void> _handleFileDownload(
+      FileMeta file, BuildContext context, FileBrowser browser) async {
     String? outputFile;
     if (Platform.isAndroid || Platform.isIOS) {
       outputFile = await FilePicker.platform.saveFile(
@@ -327,7 +330,8 @@ class FileListView extends StatelessWidget {
                         break;
                     }
                   },
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<String>>[
                     const PopupMenuItem<String>(
                       value: 'download',
                       child: Row(

@@ -14,7 +14,7 @@ class SftpBrowserState with ChangeNotifier {
   Stream<TransferStatus> get currentTransferStream => _currentTransferStream;
   bool get isLoading => _isLoading;
 
-  void setCurrentTransferStream(Stream<TransferStatus> stream){
+  void setCurrentTransferStream(Stream<TransferStatus> stream) {
     this._currentTransferStream = stream;
   }
 

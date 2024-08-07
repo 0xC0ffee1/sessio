@@ -13,29 +13,6 @@ import 'package:sessio_ui/model/terminal_state.dart';
 import 'package:sessio_ui/src/generated/client_ipc.pbgrpc.dart';
 import 'package:path_provider/path_provider.dart';
 
-typedef StartGrpcServerNative = Void Function(Pointer<Utf8> path);
-typedef StartGrpcServer = void Function(Pointer<Utf8> path);
-
-class NativeGrpcServer {
-  late final DynamicLibrary _lib;
-
-  NativeGrpcServer() {
-    if (Platform.isAndroid) {
-      _lib = DynamicLibrary.open(
-          'libgrpc_server.so'); // Correct way to load the library
-    } else if (Platform.isIOS) {
-      _lib = DynamicLibrary.process();
-    } else {
-      throw UnsupportedError('This platform is not supported.');
-    }
-  }
-
-  // Bind the native function
-  late final StartGrpcServer startGrpcServer = _lib
-      .lookup<NativeFunction<StartGrpcServerNative>>('start_grpc_server')
-      .asFunction();
-}
-
 class GrpcService {
   late ClientIPCClient _client;
 
@@ -43,19 +20,21 @@ class GrpcService {
     this._client = await _createClientIPCClient();
   }
 
-  void startGrpcServer(String path) {
-    final nativeAdd = NativeGrpcServer();
-    final pathPointer = path.toNativeUtf8();
-    nativeAdd.startGrpcServer(pathPointer);
-    malloc.free(pathPointer);
+  Future<SessionMap> getActiveSessions() async {
+    final response = await _client.getActiveSessions(SessionRequest());
+    return response;
+  }
+
+  Future<void> deleteSessionSave(String id) async {
+    final user_data = await _client.getSaveData(GetSaveDataRequest());
+    user_data.savedSessions.remove(id);
+    await _client.saveUserData(user_data);
   }
 
   Future<ClientIPCClient> _createClientIPCClient() async {
     final ClientChannel channel;
     Directory appDir = await getApplicationSupportDirectory();
     if (Platform.isAndroid) {
-      final DynamicLibrary _lib = DynamicLibrary.open("libgrpc_server.so");
-      startGrpcServer(appDir.path + "/sessio.socket");
       //Waiting for the tokio runtime to start
       await Future.delayed(Duration(seconds: 1));
     }
@@ -163,8 +142,7 @@ class GrpcService {
     return "";
   }
 
-  Future<NewSessionResponse> _newSession(
-      String clientId, String username) async {
+  Future<NewSessionResponse> _newSession(SessionData data) async {
     Settings settings = await client.getSettings(SettingsRequest());
     var wifiIPv6 = await getIpv6();
     wifiIPv6 = wifiIPv6.split("%")[
@@ -173,47 +151,69 @@ class GrpcService {
     NewConnectionResponse connectionResponse =
         await client.newConnection(NewConnectionRequest()
           ..coordinatorUrl = settings.coordinatorUrl
-          ..targetId = clientId
+          ..targetId = data.deviceId
           ..ownIpv6 = wifiIPv6);
 
     NewSessionResponse sessionResponse =
         await client.newSession(NewSessionRequest()
-          ..connectionId = connectionResponse.connectionId
           ..privateKey = "keys/id_ed25519"
           ..knownHostsPath = "known_hosts"
-          ..username = username);
+          ..sessionData = data);
 
     return sessionResponse;
   }
 
-  Future<SftpBrowser> connectSFTP(String clientId, String username) async {
+  Future<SftpBrowser> connectSFTP(
+      String clientId, String username, String? sessionId) async {
     final t = DateTime.now().millisecondsSinceEpoch;
-    NewSessionResponse sessionResponse = await _newSession(clientId, username);
+    NewSessionResponse sessionResponse = await _newSession(SessionData(
+        sessionId: sessionId,
+        deviceId: clientId,
+        username: username,
+        sftp: SessionData_SFTPSession()));
 
     final res = await client
-        .openSftpChannel(SftpRequest(sessionId: sessionResponse.sessionId));
+        .openSftpChannel(SessionData(sessionId: sessionResponse.sessionId));
     final browser = SftpBrowser(client, sessionResponse.sessionId);
     await browser.refreshFileList();
     return browser;
   }
 
-  void connectLPF(String clientId, String username, String hostLocal, int portLocal, 
-    String hostRemote, int portRemote) async {
+  void connectLPF(
+      String clientId,
+      String username,
+      String hostLocal,
+      int portLocal,
+      String hostRemote,
+      int portRemote,
+      String? sessionId) async {
+    final data = SessionData(
+        sessionId: sessionId,
+        deviceId: clientId,
+        username: username,
+        lpf: SessionData_LPFSession(
+            localHost: hostLocal,
+            localPort: portLocal,
+            remoteHost: hostRemote,
+            remotePort: portRemote));
 
     final t = DateTime.now().millisecondsSinceEpoch;
-    NewSessionResponse sessionResponse = await _newSession(clientId, username);
+    NewSessionResponse sessionResponse = await _newSession(data);
+    data.sessionId = sessionResponse.sessionId;
 
-    await client
-        .localPortForward(LocalPortForwardRequest(sessionId: sessionResponse.sessionId,
-        localHost: hostLocal, localPort:  portLocal,
-        remoteHost: hostRemote, remotePort: portRemote));
+    await client.localPortForward(data);
   }
 
-  void connectPTY(
-      String clientId, String username, SessioTerminalState state) async {
+  void connectPTY(String clientId, String username, SessioTerminalState state,
+      String? sessionId) async {
     final streamController = state.streamController;
     var t = DateTime.now().millisecondsSinceEpoch;
-    NewSessionResponse sessionResponse = await _newSession(clientId, username);
+    NewSessionResponse sessionResponse = await _newSession(SessionData(
+        sessionId: sessionId,
+        username: username,
+        deviceId: clientId,
+        pty: SessionData_PTYSession()));
+
     state.terminal
         .write("Connected! Session ID is: ${sessionResponse.sessionId} \r\n");
 

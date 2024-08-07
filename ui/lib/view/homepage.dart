@@ -3,7 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:sessio_ui/grpc_service.dart';
@@ -14,7 +18,10 @@ import 'package:sessio_ui/view/mobile_keyboard.dart';
 import 'package:sessio_ui/view/settings_page.dart';
 import 'package:sessio_ui/view/sftp_browser.dart';
 import 'package:sessio_ui/view/terminal_session_view.dart';
+import 'package:workmanager/workmanager.dart';
 import 'package:xterm/xterm.dart';
+
+import '../main.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
@@ -35,20 +42,103 @@ class _MyHomePageState extends State<MyHomePage> {
   final PageController _pageController = PageController();
 
   Map<String, List<Widget>> sessionTree = {};
+  Map<String, bool> deviceStatus = {};
 
   late Future<void> serviceFuture;
 
   @override
   void initState() {
     super.initState();
-    serviceFuture = Provider.of<GrpcService>(context, listen: false).init();
+    serviceFuture = _loadSessions();
+    initAndroid();
+  }
+
+  void initAndroid() {
+    if (!Platform.isAndroid) return;
     checkPerms();
+    initializeService();
+  }
+
+  Future<void> _loadSessions() async {
+    await Provider.of<GrpcService>(context, listen: false).init();
+    final sessionMap = await Provider.of<GrpcService>(context, listen: false)
+        .getActiveSessions();
+
+    for (var entry in sessionMap.map.entries) {
+      var sessionData = entry.value;
+      var clientId = sessionData.deviceId;
+
+      // Update device status
+      deviceStatus[clientId] = sessionMap.parents[clientId]?.connected ?? false;
+
+      if (sessionData.hasPty()) {
+        await _addNewSession(
+            clientId, sessionData.username, 'PTY', sessionData.sessionId);
+      } else if (sessionData.hasSftp()) {
+        await _addNewSession(
+            clientId, sessionData.username, 'SFTP', sessionData.sessionId);
+      } else if (sessionData.hasLpf()) {
+        var lpf = sessionData.lpf;
+        await _addLocalPFSession(
+            clientId,
+            sessionData.username,
+            lpf.localHost,
+            lpf.localPort,
+            lpf.remoteHost,
+            lpf.remotePort,
+            sessionData.sessionId);
+      }
+    }
+  }
+
+  Future<void> initializeService() async {
+    if (await FlutterBackgroundService().isRunning()) return;
+
+    final service = FlutterBackgroundService();
+    const notificationId = 888;
+    const notificationChannelId = 'sessio_grpc_service';
+
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      notificationChannelId, // id
+      'sessio_grpc_service', // title
+      description:
+          'This channel is used for important notifications.', // description
+      importance: Importance.low, // importance must be at low or higher level
+    );
+
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    await service.configure(
+        androidConfiguration: AndroidConfiguration(
+          // this will be executed when app is in foreground or background in separated isolate
+          onStart: onStart,
+
+          // auto start service
+          autoStart: true,
+          isForegroundMode: true,
+
+          notificationChannelId:
+              notificationChannelId, // this must match with notification channel you created above.
+          initialNotificationTitle: 'Sessio',
+          initialNotificationContent: 'Sessio is running',
+          foregroundServiceNotificationId: notificationId,
+        ),
+        iosConfiguration: IosConfiguration());
   }
 
   void checkPerms() async {
-    if (!Platform.isAndroid) return;
     if (!await Permission.manageExternalStorage.isGranted) {
       await Permission.manageExternalStorage.request();
+    }
+    if (!await Permission.notification.isGranted &&
+        !await Permission.notification.isPermanentlyDenied) {
+      await Permission.notification.request();
     }
   }
 
@@ -73,122 +163,51 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextField(
-                        controller: usernameController,
-                        decoration: InputDecoration(
-                            border: OutlineInputBorder(), hintText: "Username"),
-                      ),
+                      _buildTextField(usernameController, 'Username'),
                       SizedBox(height: 10),
-                      TextField(
-                        controller: clientIdController,
-                        decoration: InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText: "Device ID"),
-                      ),
+                      _buildTextField(clientIdController, 'Device ID'),
                       SizedBox(height: 20),
                       Text(
                         'Select Session Type',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      Wrap(
+                        spacing: 10.0,
                         children: [
-                          FilterChip(
-                            avatar: Icon(Icons.terminal,
-                                color: sessionType == 'PTY'
-                                    ? Colors.white
-                                    : Colors.black),
-                            label: Container(
-                              width: 50, // Ensures consistent width
-                              child: Center(
-                                child: Text('PTY'),
-                              ),
-                            ),
-                            selected: sessionType == 'PTY',
-                            onSelected: (selected) {
-                              setState(() {
-                                sessionType = 'PTY';
-                              });
-                            },
-                            selectedColor: Colors.pink,
-                            backgroundColor: Colors.grey[200],
-                            labelStyle: TextStyle(
-                              color: sessionType == 'PTY'
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                            showCheckmark: false,
+                          _buildFilterChip(
+                            context,
+                            setState,
+                            'PTY',
+                            sessionType,
+                            Icons.terminal,
+                            () => setState(() => sessionType = 'PTY'),
                           ),
-                          FilterChip(
-                            avatar: Icon(Icons.folder_open,
-                                color: sessionType == 'SFTP'
-                                    ? Colors.white
-                                    : Colors.black),
-                            label: Container(
-                              width: 50, // Ensures consistent width
-                              child: Center(
-                                child: Text('SFTP'),
-                              ),
-                            ),
-                            selected: sessionType == 'SFTP',
-                            onSelected: (selected) {
-                              setState(() {
-                                sessionType = 'SFTP';
-                              });
-                            },
-                            selectedColor: Colors.pink,
-                            backgroundColor: Colors.grey[200],
-                            labelStyle: TextStyle(
-                              color: sessionType == 'SFTP'
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                            showCheckmark: false,
+                          _buildFilterChip(
+                            context,
+                            setState,
+                            'SFTP',
+                            sessionType,
+                            Icons.folder_open,
+                            () => setState(() => sessionType = 'SFTP'),
                           ),
-                          FilterChip(
-                            avatar: Icon(Icons.security,
-                                color: sessionType == 'L-PF'
-                                    ? Colors.white
-                                    : Colors.black),
-                            label: Container(
-                              width: 50, // Ensures consistent width
-                              child: Center(
-                                child: Text('L-PF'),
-                              ),
-                            ),
-                            selected: sessionType == 'L-PF',
-                            onSelected: (selected) {
-                              setState(() {
-                                sessionType = 'L-PF';
-                              });
-                            },
-                            selectedColor: Colors.pink,
-                            backgroundColor: Colors.grey[200],
-                            labelStyle: TextStyle(
-                              color: sessionType == 'L-PF'
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                            showCheckmark: false,
+                          _buildFilterChip(
+                            context,
+                            setState,
+                            'L-PF',
+                            sessionType,
+                            Symbols.valve,
+                            () => setState(() => sessionType = 'L-PF'),
                           ),
                         ],
                       ),
                       if (sessionType == 'L-PF') ...[
                         SizedBox(height: 10),
-                        TextField(
-                          controller: localHostPortController,
-                          decoration: InputDecoration(
-                              border: OutlineInputBorder(),
-                              hintText: "Local Host:Port"),
-                        ),
+                        _buildTextField(
+                            localHostPortController, 'Local Host:Port'),
                         SizedBox(height: 10),
-                        TextField(
-                          controller: remoteHostPortController,
-                          decoration: InputDecoration(
-                              border: OutlineInputBorder(),
-                              hintText: "Remote Host:Port"),
-                        ),
+                        _buildTextField(
+                            remoteHostPortController, 'Remote Host:Port'),
                       ],
                     ],
                   ),
@@ -206,22 +225,21 @@ class _MyHomePageState extends State<MyHomePage> {
                   onPressed: () {
                     Navigator.of(context).pop();
                     if (sessionType == 'L-PF') {
-                      var localHostPort = localHostPortController.text.split(':');
-                      var remoteHostPort = remoteHostPortController.text.split(':');
+                      var localHostPort =
+                          localHostPortController.text.split(':');
+                      var remoteHostPort =
+                          remoteHostPortController.text.split(':');
                       _addLocalPFSession(
-                        clientIdController.text,
-                        usernameController.text,
-                        localHostPort[0],
-                        int.parse(localHostPort[1]),
-                        remoteHostPort[0],
-                        int.parse(remoteHostPort[1]),
-                      );
+                          clientIdController.text,
+                          usernameController.text,
+                          localHostPort[0],
+                          int.parse(localHostPort[1]),
+                          remoteHostPort[0],
+                          int.parse(remoteHostPort[1]),
+                          null);
                     } else {
-                      _addNewSession(
-                        clientIdController.text,
-                        usernameController.text,
-                        sessionType,
-                      );
+                      _addNewSession(clientIdController.text,
+                          usernameController.text, sessionType, null);
                     }
                   },
                 ),
@@ -233,24 +251,98 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Future<void> _addLocalPFSession(String clientId, String username, String hostLocal, int portLocal,
-  String hostRemote, int portRemote) async{
-    Provider.of<GrpcService>(context, listen: false)
-              .connectLPF(clientId, username, hostLocal, portLocal, hostRemote, portRemote);
+  Widget _buildTextField(TextEditingController controller, String hintText) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        border: OutlineInputBorder(),
+        hintText: hintText,
+      ),
+    );
   }
 
-  Future<void> _addNewSession(
-      String clientId, String username, String type) async {
+  Widget _buildFilterChip(
+      BuildContext context,
+      StateSetter setState,
+      String label,
+      String selectedType,
+      IconData icon,
+      VoidCallback onSelected) {
+    bool isSelected = selectedType == label;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: FilterChip(
+        avatar: Icon(icon, color: isSelected ? Colors.white : Colors.black),
+        label: Container(
+          width: 50,
+          child: Center(child: Text(label)),
+        ),
+        selected: isSelected,
+        onSelected: (selected) => onSelected(),
+        selectedColor: Colors.pink,
+        backgroundColor: Colors.grey[200],
+        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
+        showCheckmark: false,
+      ),
+    );
+  }
+
+  Future<void> _addLocalPFSession(
+      String clientId,
+      String username,
+      String hostLocal,
+      int portLocal,
+      String hostRemote,
+      int portRemote,
+      String? sessionId) async {
+    Provider.of<GrpcService>(context, listen: false).connectLPF(clientId,
+        username, hostLocal, portLocal, hostRemote, portRemote, sessionId);
+
     if (!sessionTree.containsKey(clientId)) {
       sessionTree[clientId] = [];
     }
     sessionTree[clientId]!.add(
       Row(
         children: [
+          Icon(Symbols.valve),
+          SizedBox(width: 8),
+          Text("L-PF"),
+        ],
+      ),
+    );
+
+    setState(() {
+      sessionViews.add(Scaffold(
+        appBar: AppBar(title: Text("Local port forward")),
+      ));
+    });
+  }
+
+  Future<void> _addNewSession(
+      String clientId, String username, String type, String? sessionId) async {
+    if (!sessionTree.containsKey(clientId)) {
+      sessionTree[clientId] = [];
+    }
+    int currentIndex = sessionTree[clientId]!.length;
+    sessionTree[clientId]!.add(
+      Row(
+        children: [
           Icon(type == "PTY" ? Icons.terminal : Icons.folder_open),
           SizedBox(width: 8),
           Text(type),
-          //add del button here: Icon(Icons.delete)
+          Spacer(),
+          IconButton(onPressed: () {
+            if(sessionId != null){
+              Provider.of<GrpcService>(context, listen: false).deleteSessionSave(sessionId);
+            }
+            setState(() {
+              sessionTree[clientId]!.removeAt(currentIndex);
+              if(sessionTree[clientId]!.isEmpty) {
+                sessionTree.remove(clientId);
+              }
+            });
+
+          }, icon: Icon(Icons.delete))
         ],
       ),
     );
@@ -267,19 +359,19 @@ class _MyHomePageState extends State<MyHomePage> {
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           Provider.of<GrpcService>(context, listen: false)
-              .connectPTY(clientId, username, sessionState);
+              .connectPTY(clientId, username, sessionState, sessionId);
         });
       });
     } else if (type == "SFTP") {
       SftpBrowser browser =
           await Provider.of<GrpcService>(context, listen: false)
-              .connectSFTP(clientId, username);
+              .connectSFTP(clientId, username, sessionId);
       setState(() {
         sessionViews.add(
           Center(child: FileBrowserView(browser: browser)),
         );
       });
-    } 
+    }
   }
 
   Widget _buildConnStatus() {
@@ -289,9 +381,10 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _buildMioLeftNavRail() {
+    final theme = Theme.of(context);
     return Row(children: [
       NavigationRail(
-        backgroundColor: Color.fromARGB(255, 45, 45, 45),
+        backgroundColor: theme.colorScheme.surfaceBright,
         indicatorColor: const Color.fromARGB(50, 233, 30, 99),
         selectedIndex: _selectedRailIndex <= 1 ? _selectedRailIndex : 0,
         minWidth: 80,
@@ -320,6 +413,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _buildSessionListView() {
+    int offset = 0;
     return ListView(
       padding: EdgeInsets.zero, // Remove any padding
       children: [
@@ -342,18 +436,17 @@ class _MyHomePageState extends State<MyHomePage> {
           ]),
         ),
         ...sessionTree.keys.map((parent) {
-          return ExpansionTile(
+          final tile = ExpansionTile(
             shape: Border(),
             title: Row(children: [
               _buildConnStatus(),
               SizedBox(width: 8),
               Text(
                 parent,
-                style: TextStyle(color: Colors.white),
               )
             ]),
             children: sessionTree[parent]!.asMap().entries.map((entry) {
-              int index = entry.key;
+              int index = entry.key + offset;
               Widget session = entry.value;
               return Padding(
                 padding: const EdgeInsets.only(left: 16.0),
@@ -365,61 +458,51 @@ class _MyHomePageState extends State<MyHomePage> {
                     setState(() {
                       _selectedSessionIndex =
                           index + 2; // Ensure session indices start from 2
+                      print("Setting index to ${_selectedSessionIndex}");
                     });
                   },
                 ),
               );
             }).toList(),
           );
+          offset += sessionTree[parent]!.length;
+          return tile;
         }).toList(),
       ],
     );
   }
 
   Widget _buildMioNavigationDrawer() {
+    final theme = Theme.of(context);
     return Row(
       children: [
-        AnimatedContainer(
-          duration: Duration(milliseconds: 200),
-          curve: Curves.easeIn,
-          width: _isDrawerOpen ? 200 : 0,
-          color: Color.fromARGB(
-              255, 40, 40, 40), // Ensure background color matches
-          child: ClipRect(
-            child: Align(
-                alignment: Alignment.topLeft,
-                widthFactor: _isDrawerOpen ? 1.0 : 0.0,
-                child: _buildSessionListView()),
-          ),
+        Stack(
+          children: [
+            AnimatedContainer(
+              duration: Duration(milliseconds: 200),
+              curve: Curves.easeIn,
+              width: _isDrawerOpen ? 200 : 0,
+              color: theme.colorScheme
+                  .surfaceContainerHigh, // Ensure background color matches
+              child: ClipRect(
+                child: Align(
+                    alignment: Alignment.topLeft,
+                    widthFactor: _isDrawerOpen ? 1.0 : 0.0,
+                    child: _buildSessionListView()),
+              ),
+            ),
+          ],
         ),
         VerticalDivider(thickness: 1, width: 1),
-        if (_selectedRailIndex == 0) _buildDrawerToggleButton()
       ],
-    );
-  }
-
-  Widget _buildDrawerToggleButton() {
-    return Transform.translate(
-      offset: Offset(-25, 0), // Move the icon 25px to the left
-      child: TextButton(
-        onPressed: () {
-          setState(() {
-            _isDrawerOpen = !_isDrawerOpen;
-          });
-        },
-        child: Icon(
-          _isDrawerOpen ? Icons.arrow_back_ios : Icons.arrow_forward_ios,
-          color: Colors.white,
-        ),
-      ),
     );
   }
 
   void _updateCurrentPageIndex(int index) {
     if (index != 0 && _isDrawerOpen) {
       _isDrawerOpen = !_isDrawerOpen;
-    } else if (index == 0 && !_isDrawerOpen) {
-      _isDrawerOpen = true;
+    } else if (index == 0) {
+      _isDrawerOpen = !_isDrawerOpen;
     }
   }
 

@@ -24,13 +24,12 @@ enum TransferStatusType {
   completed,
 }
 
-class TransferData{
+class TransferData {
   final int fileSize;
   final Stream<TransferStatus> transferStream;
 
-  const TransferData({required this.fileSize, 
-  required this.transferStream});
-} 
+  const TransferData({required this.fileSize, required this.transferStream});
+}
 
 class TransferStatus {
   final TransferStatusType type;

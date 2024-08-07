@@ -14,6 +14,7 @@ use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
 use homedir::home;
 use tokio::net::{TcpStream, UdpSocket};
+use tokio::time;
 use std::process::{Command, Stdio};
 use std::str;
 use async_trait::async_trait;
@@ -106,12 +107,22 @@ async fn attempt_holepunch(id: String, coordinator: Url,
     mut endpoint_v4: Endpoint, 
     mut endpoint_v6: Endpoint) 
     -> anyhow::Result<(), anyhow::Error> {
+
+    let mut registration_interval = time::interval(Duration::from_secs(60));
     loop {
 
         CoordinatorClient::configure_client(&mut endpoint_v4);
         CoordinatorClient::configure_client(&mut endpoint_v6);
 
-        let mut client = CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint_v4.clone()).await;
+        let mut client = loop {
+            match CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint_v4.clone()).await {
+                Ok(client) => break client,
+                Err(e) => {
+                    info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
+                    time::sleep(Duration::from_secs(5)).await;
+                }
+            }
+        };
         _ = client.register_endpoint(endpoint_v6.local_addr().unwrap()).await;
 
         _ = client.new_session().await;
@@ -119,40 +130,50 @@ async fn attempt_holepunch(id: String, coordinator: Url,
 
         loop {
             info!("Waiting for client to connect.");
-            let response = client.read_response::<HashMap<String, String>>().await.unwrap();
-            match response.get("id").map(String::as_str) {
-                Some("CONNECT_TO") => {
-                    info!("Attempting connection");
-                    
-                    let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
+            tokio::select! {
+                _ = registration_interval.tick() => {
+                    info!("Registering with the server");
+                    client.register_endpoint(endpoint_v6.local_addr().unwrap()).await.unwrap();
+                }
+                response = client.read_response::<HashMap<String, String>>() => {
+                    let response = response?;
+                    match response.get("id").map(String::as_str) {
+                        Some("CONNECT_TO") => {
+                            info!("Attempting connection");
+                            
+                            let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
 
-                    let endpoint: &Endpoint = if target.is_ipv4() {
-                        &endpoint_v4
-                    } else {
-                        &endpoint_v6
-                    };
+                            let endpoint: &Endpoint = if target.is_ipv4() {
+                                &endpoint_v4
+                            } else {
+                                &endpoint_v6
+                            };
 
-                    match endpoint.connect(target, "client") {
-                        Ok(_) => {
-                            info!("Connection attempt made!");
+                            match endpoint.connect(target, "client") {
+                                Ok(_) => {
+                                    info!("Connection attempt made!");
+                                }
+                                Err(e) => {
+                                    info!("Connection failed: {}", e);
+                                }
+                            }
+                            client.send_packet(&json!({"id":"SERVER_SENT_CONNECTION_REQUEST", "own_id":id.clone()})).await?;
+                            
                         }
-                        Err(e) => {
-                            info!("Connection failed: {}", e);
+                        Some("SESSION_FINISHED") => {
+                            break;
+                        }
+                        _ => {
+                            // Handle other messages if needed
                         }
                     }
-                    let _ = client.send_packet(&json!({"id":"SERVER_SENT_CONNECTION_REQUEST", "own_id":id.clone()})).await;
-                    
-                }
-                Some("SESSION_FINISHED") => {
-                    break;
-                }
-                _ => {
-
                 }
             }
         }
     }
 }
+
+
 
 #[tokio::main]
 pub async fn run(opt: Opt) {

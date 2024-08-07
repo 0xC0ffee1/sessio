@@ -37,36 +37,63 @@ class _TerminalSessionViewState extends State<TerminalSessionView> {
   Widget build(BuildContext context) {
     final terminal = widget.terminalState.terminal;
     final terminalController = widget.terminalState.terminalController;
+    final theme = Theme.of(context);
+
+    final terminalView = TerminalView(
+      terminal,
+      controller: terminalController,
+      autofocus: true,
+      theme: theme.brightness == Brightness.light
+          ? getLightTheme()
+          : TerminalThemes.defaultTheme,
+      backgroundOpacity: 0.0,
+      onSecondaryTapDown: (details, offset) async {
+        final selection = terminalController.selection;
+        if (selection != null) {
+          final text = terminal.buffer.getText(selection);
+          terminalController.clearSelection();
+          await Clipboard.setData(ClipboardData(text: text));
+        } else {
+          final data = await Clipboard.getData('text/plain');
+          final text = data?.text;
+          if (text != null) {
+            terminal.paste(text);
+          }
+        }
+      },
+    );
+
     return Scaffold(
-      body: Column(
-        children: [
-          Expanded(
-            child: KeyboardListener(
-              focusNode: focusNode,
-              onKeyEvent: _handleKeyEvent,
-              child: TerminalView(
-                terminal,
-                controller: terminalController,
-                autofocus: true,
-                backgroundOpacity: 0.0,
-                onSecondaryTapDown: (details, offset) async {
-                  final selection = terminalController.selection;
-                  if (selection != null) {
-                    final text = terminal.buffer.getText(selection);
-                    terminalController.clearSelection();
-                    await Clipboard.setData(ClipboardData(text: text));
-                  } else {
-                    final data = await Clipboard.getData('text/plain');
-                    final text = data?.text;
-                    if (text != null) {
-                      terminal.paste(text);
-                    }
-                  }
-                },
-              ),
-            ),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 600) {
+            return Column(
+              children: [
+                Expanded(child: terminalView),
+              ],
+            );
+          } else {
+            return Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(16.0),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainer,
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                        child: terminalView,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+        },
       ),
       floatingActionButton: LayoutBuilder(
         builder: (context, constraints) {
@@ -106,5 +133,32 @@ class _TerminalSessionViewState extends State<TerminalSessionView> {
         },
       ),
     );
+  }
+
+  TerminalTheme getLightTheme() {
+    return TerminalTheme(
+        cursor: Colors.black,
+        selection: Colors.black,
+        foreground: Colors.black,
+        background: Colors.white,
+        black: Colors.black,
+        white: Colors.white,
+        red: Colors.red,
+        green: Colors.green,
+        yellow: Color.fromARGB(255, 155, 135, 12),
+        blue: Colors.blue,
+        magenta: Colors.purple,
+        cyan: Colors.cyan,
+        brightBlack: Colors.black26,
+        brightRed: Colors.redAccent,
+        brightGreen: Colors.greenAccent,
+        brightYellow: Color.fromARGB(255, 236, 183, 83),
+        brightBlue: Colors.blueAccent,
+        brightMagenta: Colors.purpleAccent,
+        brightCyan: Colors.cyanAccent,
+        brightWhite: Colors.white30,
+        searchHitBackground: Colors.white,
+        searchHitBackgroundCurrent: Colors.black,
+        searchHitForeground: Colors.black);
   }
 }

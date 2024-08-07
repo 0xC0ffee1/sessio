@@ -14,10 +14,8 @@ class SftpBrowser with ChangeNotifier implements FileBrowser {
 
   final ClientIPCClient _client;
   final String _sessionId;
-  
 
   SftpBrowser(this._client, this._sessionId);
-  
 
   //Uploads from local machine to remote
   @override
@@ -27,14 +25,15 @@ class SftpBrowser with ChangeNotifier implements FileBrowser {
     final responseStream = _client.fileUpload(FileTransferRequest(
         sessionId: _sessionId, localPath: localPath, remotePath: remotePath));
 
+    final StreamController<TransferStatus> controller =
+        StreamController<TransferStatus>.broadcast();
 
-    final StreamController<TransferStatus> controller = StreamController<TransferStatus>.broadcast();
-    
     // Listen to the response stream and add events to the broadcast controller
     responseStream.listen((response) {
       switch (response.whichTyp()) {
         case FileTransferStatus_Typ.progress:
-          controller.add(TransferStatus.progress(bytesRead: response.progress.bytesRead));
+          controller.add(
+              TransferStatus.progress(bytesRead: response.progress.bytesRead));
           break;
         case FileTransferStatus_Typ.completed:
           controller.add(TransferStatus.completed());
@@ -61,13 +60,15 @@ class SftpBrowser with ChangeNotifier implements FileBrowser {
     ));
 
     // Create a broadcast stream controller
-    final StreamController<TransferStatus> controller = StreamController<TransferStatus>.broadcast();
+    final StreamController<TransferStatus> controller =
+        StreamController<TransferStatus>.broadcast();
 
     // Listen to the response stream and add events to the broadcast controller
     responseStream.listen((response) {
       switch (response.whichTyp()) {
         case FileTransferStatus_Typ.progress:
-          controller.add(TransferStatus.progress(bytesRead: response.progress.bytesRead));
+          controller.add(
+              TransferStatus.progress(bytesRead: response.progress.bytesRead));
           break;
         case FileTransferStatus_Typ.completed:
           controller.add(TransferStatus.completed());
@@ -130,17 +131,17 @@ class SftpBrowser with ChangeNotifier implements FileBrowser {
 
   @override
   List<FileMeta> get currentFiles => _currentFiles;
-  
+
   @override
   TransferData? getCurrentTransfer() {
     return _currentTransfer;
   }
-  
+
   @override
   void setCurrentTransferData(TransferData data) {
     _currentTransfer = data;
   }
-  
+
   @override
   void setTransferCancelled() {
     _currentTransfer = null;

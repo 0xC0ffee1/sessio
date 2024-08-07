@@ -18,6 +18,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout};
 
+use crate::ipc::clientipc::session_data::{Kind as SessionKind, PtySession};
+use crate::ipc::clientipc::SessionData;
 #[cfg(not(windows))]
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(windows)]
@@ -43,7 +45,7 @@ use russh::*;
 use russh_keys::*;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::{mpsc, Mutex};
-use tokio::task;
+use tokio::{task, time};
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use futures::stream;
 use crossterm::{
@@ -90,7 +92,7 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
     .filter_level(log::LevelFilter::Info)
     .init();
 
-    info!("Key path: {:?}", cli.private_key);
+    /* info!("Key path: {:?}", cli.private_key);
 
     let mut client = Client::default();
 
@@ -98,6 +100,7 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
 
     let session_id = client.new_session(
         cli.target_id,
+        SessionDataSessionKind::Pty(PtySession{}),
         "asd".to_string(),
         cli.private_key.clone(),
         cli.known_hosts_path.clone()
@@ -128,7 +131,7 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
     };
 
     println!("Exitcode: {:?}", code);
-    let _ = session.close().await;
+    let _ = session.close().await; */
     Ok(())
 }
 
@@ -205,10 +208,14 @@ pub struct Client {
     pub data_folder_path: Option<PathBuf>
 }
 
+
 //The name "Session" is confusing, it's actually a SSH connection
 pub struct Session {
     handle: Handle<ClientHandler>,
-    id: String,
+    pub id: String,
+    pub server_id: String,
+    pub username: String,
+    pub data: SessionData,
     pub channels: HashMap<ChannelId, Arc<Mutex<Channel<Msg>>>>,
     pub sftp_session: Option<SftpSession>
 }
@@ -251,12 +258,16 @@ impl Client {
 
     pub async fn get_json_as<T>(file: File) -> Result<T> 
     where
-    T: serde::de::DeserializeOwned
+    T: serde::de::DeserializeOwned + Default
     {
         let mut reader = BufReader::new(file);
         let mut contents = String::new();
         reader.read_to_string(&mut contents).await?;
-        let data: T = serde_json::from_str(&contents)?;
+        let data: T = if contents.is_empty() {
+            T::default()
+        } else {
+            serde_json::from_str(&contents)?
+        };
         Ok(data)
     }
 
@@ -280,7 +291,11 @@ impl Client {
         let mut reader = BufReader::new(file);
         let mut contents = String::new();
         reader.read_to_string(&mut contents).await?;
-        let mut data: HashMap<String, T> = serde_json::from_str(&contents)?;
+        let mut data: HashMap<String, T> = if contents.is_empty() {
+            HashMap::new()
+        } else {
+            serde_json::from_str(&contents)?
+        };
         let value = data.remove(key);
         Ok(value)
     }
@@ -294,7 +309,11 @@ impl Client {
         let mut reader = BufReader::new(reader);
         let mut contents = String::new();
         reader.read_to_string(&mut contents).await?;
-        let mut data: HashMap<String, Value> = serde_json::from_str(&contents)?;
+        let mut data: HashMap<String, Value> = if contents.is_empty() {
+            HashMap::new()
+        } else {
+            serde_json::from_str(&contents)?
+        };
         
         let new_value = serde_json::to_value(value)?;
 
@@ -332,11 +351,6 @@ impl Client {
         let elapsed_time = end_time - start_time;
         println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
 
-        let config = client::Config {
-            inactivity_timeout: Some(Duration::from_secs(60 * 60)),
-            ..<_>::default()
-        };
-
         self.connections.insert(target_id.clone(), conn);
 
         Ok(())
@@ -345,7 +359,9 @@ impl Client {
     pub async fn new_session<T>(
         &mut self,
         target_id: String,
+        data: SessionData,
         username: String,
+        session_id: Option<String>,
         private_key_path: T,
         known_hosts_path: T
     )  -> anyhow::Result<(String)> where T: AsRef<Path> {
@@ -392,7 +408,7 @@ impl Client {
 
         let session_handler = ClientHandler {
             remote_addr: connection.remote_address(),
-            server_id: target_id,
+            server_id: target_id.clone(),
             connection: connection.clone(),
             known_hosts_path: known_hosts_path.to_path_buf()
         };
@@ -411,15 +427,21 @@ impl Client {
         if !auth_res {
             anyhow::bail!("Authentication (with publickey) failed");
         }
-
+        let id = if session_id.is_none() {
+            Uuid::new_v4().to_string()
+        } else {
+            session_id.unwrap()
+        };
         let session = Session {
-            id: username.clone(),
+            id: id.clone(),
+            username: username,
+            server_id: target_id.to_string(),
+            data: data.clone(),
             handle,
             channels: HashMap::new(),
             sftp_session: None
         };
-
-        let id = Uuid::new_v4().to_string();
+      
         self.sessions.insert(id.clone(), Arc::new(Mutex::new(session)));
 
         Ok((id))
@@ -490,7 +512,16 @@ async fn attempt_holepunch(target: String, coordinator: Url,
     mut endpoint_v4: Endpoint,
     mut endpoint_v6: Endpoint) -> io::Result<Connection> {
 
-    let mut client = CoordinatorClient::connect(coordinator, Uuid::new_v4().to_string(), endpoint_v4.clone()).await;
+    let mut client = loop {
+        //Add id verification
+        match CoordinatorClient::connect(coordinator.clone(), Uuid::new_v4().to_string(), endpoint_v4.clone()).await {
+            Ok(client) => break client,
+            Err(e) => {
+                info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
+                time::sleep(Duration::from_secs(5)).await;
+            }
+        }
+    };
     let _ = client.register_endpoint(endpoint_v6.local_addr().unwrap()).await;
 
     let _ = client.connect_to(target).await;

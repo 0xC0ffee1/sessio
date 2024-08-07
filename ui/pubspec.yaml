@@ -44,7 +44,9 @@ dependencies:
   network_info_plus: ^6.0.0
   ffi: ^2.1.2
   permission_handler: ^11.3.1
-
+  flutter_background_service: ^5.0.7
+  flutter_local_notifications: ^17.2.1+2
+  workmanager: ^0.5.2
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

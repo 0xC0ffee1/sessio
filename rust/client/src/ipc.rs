@@ -7,13 +7,14 @@ use russh_sftp::{client::SftpSession, protocol::Stat};
 use url::Url;
 use uuid::Uuid;
 use tokio::{fs::File, io::{AsyncReadExt, AsyncWriteExt}, sync::mpsc, time::Instant};
-use std::{collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
+use std::{any::Any, collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
 use clientipc::{
-    client_ipc_server::{ClientIpc, ClientIpcServer}, file_transfer_status::Progress, msg::Type, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest, InitData, InitResponse, LocalPortForwardRequest, LocalPortForwardResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, PublicKey, Settings, SettingsRequest, SftpRequest, SftpRequestResponse, StreamResponse, UserData, Value
+    client_ipc_server::{ClientIpc, ClientIpcServer}, file_transfer_status::Progress, msg::Type, session_data, DeviceStatus, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest, InitData, InitResponse, LocalPortForwardRequest, LocalPortForwardResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, PublicKey, SessionData, SessionMap, SessionRequest, Settings, SettingsRequest, SftpRequest, SftpRequestResponse, StreamResponse, UserData, Value
 };
 use clientipc::file_transfer_status::Typ;
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
 use clientipc::value::Kind;
+use clientipc::session_data::Kind as SessionKind;
 
 use tokio::io::BufReader;
 use log::info;
@@ -41,8 +42,6 @@ struct ClientIpcHandler {
     client: Arc<Mutex<Client>>
 }
 
-
-
 #[tonic::async_trait]
 impl ClientIpc for ClientIpcHandler {
     type OpenChannelStream =
@@ -61,18 +60,56 @@ impl ClientIpc for ClientIpcHandler {
         Ok(Response::new(InitResponse {}))
     }
 
-    async fn local_port_forward(&self, request: Request<LocalPortForwardRequest>) 
+    async fn get_active_sessions(&self, request: Request<SessionRequest>)
+    -> Result<Response<SessionMap>, Status> {
+        let mut client = self.client.lock().await;
+        let mut new_map = HashMap::new();
+        let mut parent_map = HashMap::new();
+        
+        for (k, v) in client.sessions.iter() {
+            let mut session = v.lock().await;
+            session.data.session_id = Some(session.id.clone());
+            new_map.insert(session.id.clone(), session.data.clone());
+            parent_map.insert(session.server_id.clone(), DeviceStatus {
+                //Since we're loading these from memory
+                //Todo check if connection has timed out
+                connected: client.connections.get(&session.server_id.clone()).unwrap().close_reason().is_none()
+            });
+        }
+
+        if let Ok(user_data) = Client::get_json_as::<UserData>(client.get_save_file().await.unwrap()).await {
+            for (k, mut data) in user_data.saved_sessions.iter() {
+                let mut final_data = data.clone();
+                final_data.session_id = Some(k.to_string());
+                new_map.insert(k.to_string(), final_data.clone());
+                parent_map.insert(final_data.device_id, DeviceStatus {
+                    connected: client.sessions.contains_key(k) && client.connections.get(&data.device_id).unwrap().close_reason().is_none()
+                });
+            }   
+        }
+
+        Ok(Response::new(SessionMap {
+            map: new_map,
+            parents: parent_map
+        }))
+    }
+
+    async fn local_port_forward(&self, request: Request<SessionData>) 
     -> Result<Response<LocalPortForwardResponse>, Status> {
         let request = request.into_inner();
+        let Some(crate::ipc::clientipc::session_data::Kind::Lpf(ref lpf_data)) = request.kind else {
+            return Err(Status::new(tonic::Code::InvalidArgument, "Session kind must be LPF"));
+        };
+        
         let mut client = self.client.lock().await;
 
-        let session_guard = match client.sessions.get_mut(&request.session_id) {
+        let session_guard = match client.sessions.get_mut(&request.session_id.unwrap()) {
             Some(session) => session,
             None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
         };
 
-        session_guard.lock().await.direct_tcpip_forward(&request.local_host, 
-            request.local_port, &request.remote_host, request.remote_port).await.map_err(|e| 
+        session_guard.lock().await.direct_tcpip_forward(&lpf_data.local_host, 
+            lpf_data.local_port, &lpf_data.remote_host, lpf_data.remote_port).await.map_err(|e| 
                 Status::new(tonic::Code::Internal, e.to_string()))?;
         
         Ok(Response::new(LocalPortForwardResponse {}))
@@ -143,11 +180,11 @@ impl ClientIpc for ClientIpcHandler {
         Ok(Response::new(data))
     }
 
-    async fn open_sftp_channel(&self, request: Request<SftpRequest>) 
+    async fn open_sftp_channel(&self, request: Request<SessionData>) 
     -> Result<Response<SftpRequestResponse>, Status> {
         let request = request.into_inner();
         let mut client = self.client.lock().await;
-        let session_guard = match client.sessions.get_mut(&request.session_id) {
+        let session_guard = match client.sessions.get_mut(&request.session_id.unwrap()) {
             Some(session) => session,
             None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
         };
@@ -403,16 +440,39 @@ impl ClientIpc for ClientIpcHandler {
         info!("IPC: Requesting new session!");
         let mut client = self.client.lock().await;
 
-        let username = request.username.clone();
+        let Some(session_data) = request.session_data else {
+            return Err(Status::new(tonic::Code::InvalidArgument, "You must specify session data!"));
+        };
 
-        let res = client.new_session(request.connection_id.clone(), 
-        request.username, 
-        request.private_key, 
-        request.known_hosts_path).await;
+        let mut session_data_cloned = session_data.clone();
+
+        if session_data.kind.is_none() {
+            return Err(Status::new(tonic::Code::InvalidArgument, "You must specify the session kind!"));
+        };
+
+        let res = client.new_session(session_data.device_id.clone(), 
+        session_data_cloned.clone(),
+        session_data.username,
+        session_data.session_id,
+        request.private_key,
+        request.known_hosts_path
+        ).await;
+
+
         
         info!("IPC: Session requested!");
         match res {
             Ok(id) => {
+                if session_data_cloned.session_id.is_none() {
+                    //This is kinda messy
+                    let mut save_file = client.get_save_file().await.unwrap();
+                    let mut user_data = Client::get_json_as::<UserData>(save_file).await.unwrap();
+                    session_data_cloned.session_id = Some(id.clone());
+                    user_data.saved_sessions.insert(id.clone(), session_data_cloned);
+                    save_file = client.get_save_file().await.unwrap();
+                    let _ = Client::save_json_as(save_file, user_data).await;
+                }
+
                 Ok(Response::new(NewSessionResponse{
                     session_id: id
                 }))
@@ -448,17 +508,10 @@ impl ClientIpc for ClientIpcHandler {
             None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
         };
 
-        info!("IPC: Opening a channel! #1");
-        
-        info!("IPC: Opening a channel! #2");
-
         let channel_id = {
             let mut session = session_guard.lock().await;
-            info!("IPC: Opening a channel! #3");
             session.new_channel().await.unwrap()
         };
-
-        info!("IPC: Opening a channel! #4");
 
         let session_clone = session_guard.clone();
 

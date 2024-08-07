@@ -23,6 +23,14 @@ if (flutterVersionName == null) {
     flutterVersionName = "1.0"
 }
 
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        if (details.requested.group == 'org.jetbrains.kotlin' && details.requested.name == 'kotlin-stdlib-jdk8') {
+            details.useTarget 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
+        }
+    }
+}
+
 android {
     namespace = "com.example.sessio_ui"
     compileSdk = flutter.compileSdkVersion

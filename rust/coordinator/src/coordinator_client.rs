@@ -73,13 +73,13 @@ impl rustls::client::ServerCertVerifier for SkipServerVerification {
 
 impl CoordinatorClient {
 
-    pub async fn connect(coordinator_url: Url, id_own: String, mut endpoint: Endpoint) -> Self {
+    pub async fn connect(coordinator_url: Url, id_own: String, mut endpoint: Endpoint) -> Result<Self> {
 
         let sock_list = coordinator_url
             .socket_addrs(|| Some(2222))
             .map_err(|_| "Couldn't resolve to any address").unwrap();
         
-        let connection = endpoint.connect(sock_list[0], "asd").unwrap().await.unwrap();
+        let connection = endpoint.connect(sock_list[0], "asd").unwrap().await?;
         info!(
             "[Coordinator client] Connected to: {}",
             connection.remote_address(),
@@ -87,9 +87,7 @@ impl CoordinatorClient {
         
         let (mut send_stream, mut recv_stream) = connection
             .open_bi()
-            .await
-            .map_err(|e| format!("failed to open stream: {}", e)).unwrap();
-
+            .await?;
 
         let (response_tx, mut response_rx) = mpsc::channel::<serde_json::Value>(100);
 
@@ -137,12 +135,13 @@ impl CoordinatorClient {
             }
         });
 
+        Ok(
         CoordinatorClient {
             conn,
             id_own,
             send_stream,
             response_rx
-        }
+        })
     }
 
     pub fn configure_client( endpoint: &mut Endpoint) {
