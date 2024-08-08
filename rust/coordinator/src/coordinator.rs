@@ -4,6 +4,7 @@ use std::{collections::HashMap, default};
 use std::sync::Arc;
 use std::str;
 use log::{error, info};
+use rustls::crypto::CryptoProvider;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{io, sync::Mutex};
@@ -29,6 +30,8 @@ use crate::Opt;
 
 /// Returns default server configuration along with its certificate.
 async fn configure_server(key_path: &PathBuf, cert_path: &PathBuf) -> Result<ServerConfig> {
+    rustls::crypto::ring::default_provider().install_default().expect("Failed to install rustls crypto provider");
+
     let (certs, key) = get_certs(key_path, cert_path).await?;
 
     let mut server_crypto = rustls::ServerConfig::builder()

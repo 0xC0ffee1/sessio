@@ -154,6 +154,7 @@ pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
 }
 
 #[derive(Debug)]
+//The actual authenticity of the server is verified by the SSH protocol
 struct SkipServerVerification(Arc<rustls::crypto::CryptoProvider>);
 
 impl SkipServerVerification {
