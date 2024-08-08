@@ -66,6 +66,7 @@ pub struct Opt {
 
 /// Returns default server configuration along with its certificate.
 fn configure_server() -> anyhow::Result<ServerConfig> {
+    rustls::crypto::ring::default_provider().install_default().expect("Failed to install rustls crypto provider");
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
 
     let cert_der = CertificateDer::from(cert.cert);

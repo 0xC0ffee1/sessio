@@ -208,7 +208,7 @@ impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
     }
 }
 fn configure_client() -> Result<ClientConfig, Box<dyn Error>> {
-
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let mut client_config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(
         rustls::ClientConfig::builder()
             .dangerous()
