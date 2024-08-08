@@ -1,6 +1,8 @@
+use core::fmt;
 use std::pin::Pin;
 use std::task::Poll;
 use std::task::Context;
+use quinn::WriteError;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::io;
 
@@ -30,7 +32,9 @@ impl tokio::io::AsyncWrite for BiStream {
         buf: &[u8]
     ) -> Poll<io::Result<usize>> {
         let self_mut = self.get_mut(); 
-        Pin::new(&mut self_mut.send_stream).poll_write(cx, buf)
+        Pin::new(&mut self_mut.send_stream)
+            .poll_write(cx, buf)
+            .map_err(|e| io::Error::from(e))
     }
 
     fn poll_flush(

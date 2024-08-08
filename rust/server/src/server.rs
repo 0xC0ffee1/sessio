@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use quinn::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use rustls::internal::msgs::base;
 use serde_json::json;
 use tokio::process::Command as TokioCommand;
@@ -64,14 +65,15 @@ pub struct Opt {
 }
 
 /// Returns default server configuration along with its certificate.
-fn configure_server() -> Result<(ServerConfig, Vec<u8>), Box<dyn std::error::Error>> {
+fn configure_server() -> anyhow::Result<ServerConfig> {
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-    let cert_der = cert.serialize_der().unwrap();
-    let priv_key = cert.serialize_private_key_der();
-    let priv_key = rustls::PrivateKey(priv_key);
-    let cert_chain = vec![rustls::Certificate(cert_der.clone())];
 
-    let mut server_config = ServerConfig::with_single_cert(cert_chain, priv_key)?;
+    let cert_der = CertificateDer::from(cert.cert);
+    let priv_key = PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());
+
+    let mut server_config =
+        ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())?;
+
     let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
     transport_config.max_concurrent_uni_streams(0_u8.into());
     transport_config.max_idle_timeout(Some(VarInt::from_u32(60_000).into()));
@@ -79,14 +81,14 @@ fn configure_server() -> Result<(ServerConfig, Vec<u8>), Box<dyn std::error::Err
     #[cfg(any(windows, os = "linux"))]
     transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
 
-    Ok((server_config, cert_der))
+    Ok(server_config)
 }
 
 #[allow(unused)]
-pub fn make_server_endpoint(bind_addr: SocketAddr) -> Result<(Endpoint, Vec<u8>), Box<dyn std::error::Error>> {
-    let (server_config, server_cert) = configure_server()?;
+pub fn make_server_endpoint(bind_addr: SocketAddr) -> anyhow::Result<Endpoint> {
+    let server_config = configure_server()?;
     let endpoint = Endpoint::server(server_config, bind_addr)?;
-    Ok((endpoint, server_cert))
+    Ok(endpoint)
 }
 
 #[derive(Deserialize, Debug)]
@@ -111,8 +113,8 @@ async fn attempt_holepunch(id: String, coordinator: Url,
     let mut registration_interval = time::interval(Duration::from_secs(60));
     loop {
 
-        CoordinatorClient::configure_client(&mut endpoint_v4);
-        CoordinatorClient::configure_client(&mut endpoint_v6);
+        CoordinatorClient::configure_crypto(&mut endpoint_v4);
+        CoordinatorClient::configure_crypto(&mut endpoint_v6);
 
         let mut client = loop {
             match CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint_v4.clone()).await {
@@ -202,8 +204,8 @@ pub async fn run(opt: Opt) {
     let addr_v4 = "0.0.0.0:2222";
     let v6_ip = common::utils::ipv6::get_first_global_ipv6().unwrap_or(Ipv6Addr::UNSPECIFIED);
 
-    let (endpoint_v4, _) = make_server_endpoint(addr_v4.parse().unwrap()).unwrap();
-    let (endpoint_v6, _) = make_server_endpoint(SocketAddr::V6(SocketAddrV6::new(v6_ip, 0, 0, 0))).unwrap();
+    let endpoint_v4 = make_server_endpoint(addr_v4.parse().unwrap()).unwrap();
+    let endpoint_v6 = make_server_endpoint(SocketAddr::V6(SocketAddrV6::new(v6_ip, 0, 0, 0))).unwrap();
 
     let endpoint_v4_clone = endpoint_v4.clone();
     let endpoint_v6_clone = endpoint_v6.clone();
@@ -315,8 +317,6 @@ impl QuicServer for Server {
                 "[server] connection accepted: ({}, {})",
                 conn.remote_address(),
                 sni);
-
-            
 
             //A single connection can spawn multiple streams
             tokio::spawn(async move {

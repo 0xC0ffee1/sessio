@@ -1,36 +1,42 @@
+use std::path::PathBuf;
 use std::time::Duration;
 use std::{collections::HashMap, default};
 use std::sync::Arc;
 use std::str;
 use log::{error, info};
+use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{io, sync::Mutex};
-
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use std::net::{Ipv4Addr, SocketAddr};
 use clap::Parser;
 use quinn::{crypto, Endpoint, ServerConfig, VarInt};
 
-use anyhow::Error;
+use quinn_proto::crypto::rustls::QuicServerConfig;
+
+use anyhow::{Context, Error};
 use serde::Deserialize;
 
 use serde_json::{json, Value};
 use anyhow::{anyhow, Result};
 use common::utils::streams::BiStream;
 
-use uuid::{uuid, Uuid};  
 
+use uuid::{uuid, Uuid};
 
+use crate::Opt;
 
 /// Returns default server configuration along with its certificate.
-fn configure_server() -> Result<(ServerConfig, Vec<u8>), Box<dyn std::error::Error>> {
-    let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-    let cert_der = cert.serialize_der().unwrap();
-    let priv_key = cert.serialize_private_key_der();
-    let priv_key = rustls::PrivateKey(priv_key);
-    let cert_chain = vec![rustls::Certificate(cert_der.clone())];
+async fn configure_server(key_path: &PathBuf, cert_path: &PathBuf) -> Result<ServerConfig> {
+    let (certs, key) = get_certs(key_path, cert_path).await?;
 
-    let mut server_config = ServerConfig::with_single_cert(cert_chain, priv_key)?;
+    let mut server_crypto = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)?;
+
+    let mut server_config =
+        quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
     let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
     transport_config.max_concurrent_uni_streams(0_u8.into());
     transport_config.max_idle_timeout(Some(VarInt::from_u32(60_000).into()));
@@ -38,18 +44,34 @@ fn configure_server() -> Result<(ServerConfig, Vec<u8>), Box<dyn std::error::Err
     #[cfg(any(windows, os = "linux"))]
     transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
 
-    Ok((server_config, cert_der))
+    Ok(server_config)
 }
 
-#[allow(unused)]
-pub fn make_server_endpoint(bind_addr: SocketAddr) -> Result<(Endpoint, Vec<u8>), Box<dyn std::error::Error>> {
-    let (server_config, server_cert) = configure_server()?;
-    let endpoint = Endpoint::server(server_config, bind_addr)?;
-    Ok((endpoint, server_cert))
+async fn get_certs<'a>(key_path: &PathBuf, cert_path: &PathBuf) -> Result<(Vec<CertificateDer<'a>>, PrivateKeyDer<'a>)> {
+    let key = fs::read(key_path).await.with_context(|| "failed to read private key")?;
+    let key = if key_path.extension().map_or(false, |x| x == "der") {
+        PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key))
+    } else {
+        rustls_pemfile::private_key(&mut &*key)
+            .context("malformed PKCS #1 private key")?
+            .ok_or_else(|| anyhow::Error::msg("no private keys found"))?
+    };
+    let cert_chain = fs::read(cert_path).await.context("failed to read certificate chain")?;
+    let cert_chain = if cert_path.extension().map_or(false, |x| x == "der") {
+        vec![CertificateDer::from(cert_chain)]
+    } else {
+        rustls_pemfile::certs(&mut &*cert_chain)
+            .collect::<Result<_, _>>()
+            .context("invalid PEM-encoded certificate")?
+    };
+
+    Ok((cert_chain, key))
 }
+
+
 
 #[tokio::main]
-pub async fn run(addr: SocketAddr) {
+pub async fn run(options: Opt) {
     let mut builder = env_logger::Builder::from_default_env();
     if cfg!(debug_assertions) {
         // Debug mode
@@ -59,8 +81,8 @@ pub async fn run(addr: SocketAddr) {
     }
     builder.init();
     
-
-    let (endpoint, _) = make_server_endpoint(addr).unwrap();
+    let server_config = configure_server(&options.key, &options.cert).await.unwrap();
+    let endpoint = Endpoint::server(server_config, options.listen).unwrap();
 
     let mut sh = Server::default();
 
@@ -172,7 +194,7 @@ fn read_packet_field<'a>(field: &str, packet: &'a HashMap<String, String>) -> Op
 
 
 async fn close_client_connection(connection: quinn::Connection, client: Arc<Client>, sessions: Arc<Mutex<HashMap<String, Session>>>){
-    if let Err(f_e) = client.stream.send_stream.lock().await.finish().await {
+    if let Err(f_e) = client.stream.send_stream.lock().await.finish() {
         error!("Failed to close stream {}! Closing connection.", f_e);
         connection.close(0u32.into(), b"Closing connection");
     }
@@ -257,7 +279,7 @@ async fn handle_connection(connection: quinn::Connection,
                 json!({"status": "200"})
             }
             Some("CLIENT_CONNECTED") => {
-                //Sent by client
+                //Sent by ssh client
                 let mut client_addr = connection.remote_address();
                 let Some(target_id) = read_packet_field("target_client_id", &packet) else {
                     continue;
@@ -325,7 +347,7 @@ async fn handle_connection(connection: quinn::Connection,
                 if let Some(session) = sessions.get_mut(target_id) {
                     let _ = session.server.stream.send_packet::<Value>(&json!({"id" : "SESSION_FINISHED"})).await;
 
-                    let _ = session.server.stream.send_stream.lock().await.finish().await;
+                    let _ = session.server.stream.send_stream.lock().await.finish();
                     sessions.remove(target_id);
                     
 
@@ -354,16 +376,18 @@ async fn handle_connection(connection: quinn::Connection,
 trait QuicServer{
     async fn run_quic(
         &mut self,
-        connection: &Endpoint,
-    ) -> Result<(), std::io::Error>;
+        connection: &Endpoint
+    ) -> Result<()>;
 }
+
+pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
 impl QuicServer for Server {
     
     async fn run_quic(
         &mut self,
-        endpoint: &Endpoint,
-    ) -> Result<(), io::Error> {
+        endpoint: &Endpoint
+        ) -> Result<()> {
        
         loop{
             info!("Waiting for connections..");

@@ -2,6 +2,7 @@
 use log::info;
 use log4rs::encode::json;
 use quinn::{ClientConfig, Endpoint, VarInt};
+use rustls::RootCertStore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::net::UdpSocket;
@@ -11,8 +12,12 @@ use quinn::Connection;
 use url::Url;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+
+use quinn_proto::crypto::rustls::QuicClientConfig;
+
 
 use anyhow::{anyhow, Result};
 
@@ -55,20 +60,6 @@ pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
     transport_config
-}
-
-impl rustls::client::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
 }
 
 impl CoordinatorClient {
@@ -144,13 +135,18 @@ impl CoordinatorClient {
         })
     }
 
-    pub fn configure_client( endpoint: &mut Endpoint) {
-        let crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(SkipServerVerification::new())
-            .with_no_client_auth();
+    pub fn configure_crypto(endpoint: &mut Endpoint) {
+        let root_store = RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.into(),
+        };
 
-        let mut client_config = ClientConfig::new(Arc::new(crypto));
+        let mut client_crypto = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+
+        let mut client_config =
+        quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto).unwrap()));
+
         let mut transport_config = enable_mtud_if_supported();
         transport_config.max_idle_timeout(Some(VarInt::from_u32(60_000).into()));
         transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(1)));
@@ -213,15 +209,15 @@ impl CoordinatorClient {
         Ok(())
     }
 
-    pub async fn connect_to(&mut self, target: String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn connect_to(&mut self, target: String) -> Result<SocketAddr, Box<dyn std::error::Error>> {
 
         let register_msg = serde_json::json!({"id": "CLIENT_CONNECTED", "target_client_id": target});
 
         self.send_packet(&register_msg).await;
         let res = self.read_response::<HashMap<String, String>>().await;
-        info!("{}", res.unwrap().get("status").unwrap());
+        let addr: SocketAddr = res.unwrap().get("server").unwrap().parse()?;
 
-        Ok(())
+        Ok(addr)
     }
 
     pub async fn new_session(&mut self) -> Result<(), Box<dyn std::error::Error>> {

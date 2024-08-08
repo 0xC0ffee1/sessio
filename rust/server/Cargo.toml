@@ -7,7 +7,7 @@ edition = "2021"
 common = { path = "../common" }
 coordinator = { path = "../coordinator" }
 tokio = { version = "1.0", features = ["full"] }
-quinn = "0.10.2"
+quinn = "0.11.3"
 tokio-util = { version = "0.6", features = ["io"] }
 russh = "0.44.0"
 russh-keys = "0.44.0"
@@ -23,7 +23,7 @@ clap = { version = "4.5.6", features = ["derive"] }
 url = "2.5.0"
 rustls = { version = "0.21.12", features = ["quic","dangerous_configuration"] }
 rustls-pemfile = "2.1.2"
-rcgen = "0.12.1"
+rcgen = "0.13"
 
 log4rs = "1.2.0"
 serde = "1.0.203"

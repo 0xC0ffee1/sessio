@@ -100,15 +100,18 @@ impl ClientIpc for ClientIpcHandler {
         let Some(crate::ipc::clientipc::session_data::Kind::Lpf(ref lpf_data)) = request.kind else {
             return Err(Status::new(tonic::Code::InvalidArgument, "Session kind must be LPF"));
         };
-        
-        let mut client = self.client.lock().await;
 
-        let session_guard = match client.sessions.get_mut(&request.session_id.unwrap()) {
-            Some(session) => session,
-            None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+        let session = {
+            let mut client = self.client.lock().await;
+    
+            let session_guard = match client.sessions.get_mut(&request.session_id.unwrap()) {
+                Some(session) => session,
+                None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+            };
+            session_guard.clone()
         };
 
-        session_guard.lock().await.direct_tcpip_forward(&lpf_data.local_host, 
+        session.lock().await.direct_tcpip_forward(&lpf_data.local_host, 
             lpf_data.local_port, &lpf_data.remote_host, lpf_data.remote_port).await.map_err(|e| 
                 Status::new(tonic::Code::Internal, e.to_string()))?;
         
