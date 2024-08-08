@@ -70,7 +70,7 @@ impl CoordinatorClient {
             .socket_addrs(|| Some(2222))
             .map_err(|_| "Couldn't resolve to any address").unwrap();
         
-        let connection = endpoint.connect(sock_list[0], "asd").unwrap().await?;
+        let connection = endpoint.connect(sock_list[0], &coordinator_url.host().unwrap().to_string()).unwrap().await?;
         info!(
             "[Coordinator client] Connected to: {}",
             connection.remote_address(),
