@@ -21,9 +21,10 @@ portable-pty = "0.8.1"
 
 clap = { version = "4.5.6", features = ["derive"] }
 url = "2.5.0"
-rustls = { version = "0.23.5"}
+rustls = { version = "0.23.5", features = ["std"]}
 rustls-pemfile = "2.1.2"
 rcgen = "0.13"
+
 
 log4rs = "1.2.0"
 serde = "1.0.203"

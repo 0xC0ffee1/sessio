@@ -70,6 +70,7 @@ impl CoordinatorClient {
             .socket_addrs(|| Some(2222))
             .map_err(|_| "Couldn't resolve to any address").unwrap();
         
+        info!("Connecting to name {}", &coordinator_url.host().unwrap().to_string());
         let connection = endpoint.connect(sock_list[0], &coordinator_url.host().unwrap().to_string()).unwrap().await?;
         info!(
             "[Coordinator client] Connected to: {}",
@@ -209,15 +210,14 @@ impl CoordinatorClient {
         Ok(())
     }
 
-    pub async fn connect_to(&mut self, target: String) -> Result<SocketAddr, Box<dyn std::error::Error>> {
+    pub async fn connect_to(&mut self, target: String) -> Result<(), Box<dyn std::error::Error>> {
 
         let register_msg = serde_json::json!({"id": "CLIENT_CONNECTED", "target_client_id": target});
 
         self.send_packet(&register_msg).await;
-        let res = self.read_response::<HashMap<String, String>>().await;
-        let addr: SocketAddr = res.unwrap().get("server").unwrap().parse()?;
+        let _ = self.read_response::<HashMap<String, String>>().await;
 
-        Ok(addr)
+        Ok(())
     }
 
     pub async fn new_session(&mut self) -> Result<(), Box<dyn std::error::Error>> {
