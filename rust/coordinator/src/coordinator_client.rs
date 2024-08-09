@@ -72,7 +72,7 @@ impl CoordinatorClient {
         let external_v4 = client_v4.query_external_address_async(sock_v4).await.ok();
 
         //Just making sure it is ipv6
-        let client_v6 = StunClient::new("2001:4860:4864:5:8000::1".parse().unwrap());
+        let client_v6 = StunClient::new("[2001:4860:4864:5:8000::1]:19302".parse().unwrap());
         let external_v6 = client_v6.query_external_address_async(sock_v6).await.ok();
 
         (external_v4, external_v6)
