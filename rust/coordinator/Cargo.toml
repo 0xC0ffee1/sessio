@@ -30,7 +30,7 @@ serde_json = "1.0.118"
 rustls-pki-types = "1.8.0"
 quinn-proto = "0.11.6"
 webpki-roots = "0.26.3"
-
+stunclient = { git = "https://github.com/vi/rust-stunclient" }
 
 
 [dependencies.uuid]

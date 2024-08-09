@@ -5,7 +5,7 @@ use clap::Parser;
 use client::Msg;
 use russh::client::Handle;
 use key::KeyPair;
-use quinn::{ClientConfig, Connection, Endpoint, VarInt};
+use quinn::{ClientConfig, Connection, Endpoint, EndpointConfig, VarInt};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use serde_json::{json, Value};
 use ssh_key::known_hosts;
@@ -46,7 +46,7 @@ use bytes::Bytes;
 use anyhow::{bail, Context, Result};
 use russh::*;
 use russh_keys::*;
-use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use tokio::sync::{mpsc, Mutex};
 use tokio::{task, time};
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
@@ -58,7 +58,6 @@ use crossterm::{
 };
 
 
-use std::net::UdpSocket;
 
 use coordinator::coordinator_client::CoordinatorClient;
 use common::utils::streams::BiStream;
@@ -230,9 +229,18 @@ fn configure_client() -> Result<ClientConfig, Box<dyn Error>> {
 ///
 /// - server_certs: list of trusted certificates.
 #[allow(unused)]
-pub fn make_client_endpoint(addr: SocketAddr) -> Result<Endpoint, Box<dyn Error>> {
+pub fn make_client_endpoint(socket: UdpSocket) -> Result<Endpoint, Box<dyn Error>> {
     let client_cfg = configure_client()?;
-    let mut endpoint = Endpoint::client(addr)?;
+
+    let runtime = quinn::default_runtime()
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
+
+    let mut endpoint = Endpoint::new_with_abstract_socket(
+    EndpointConfig::default(), 
+    None,
+    runtime.wrap_udp_socket(socket.into_std()?)?,
+    runtime)?;
+    
     endpoint.set_default_client_config(client_cfg);
     Ok(endpoint)
 }
@@ -377,13 +385,16 @@ impl Client {
             }
         }
 
-        let v6_ip = ipv6.unwrap_or(Ipv6Addr::UNSPECIFIED);
+        let sock_v4 = UdpSocket::bind::<SocketAddr>("0.0.0.0:0".parse().unwrap()).await.unwrap();
+        let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap()).await.unwrap();
         
-        let endpoint_v4 = make_client_endpoint("0.0.0.0:0".parse().unwrap()).unwrap();
-        let endpoint_v6 = make_client_endpoint(SocketAddr::V6(SocketAddrV6::new(v6_ip, 0, 0, 0))).unwrap();
+        let ext_ips = CoordinatorClient::get_external_ips(&sock_v4, &sock_v6).await;
+        
+        let endpoint_v4 = make_client_endpoint(sock_v4).unwrap();
+        let endpoint_v6 = make_client_endpoint(sock_v6).unwrap();
 
         let start_time = Utc::now();
-        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v4.clone(), endpoint_v6.clone()).await?;
+        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v4, endpoint_v6, ext_ips).await?;
         let end_time = Utc::now();
         let elapsed_time = end_time - start_time;
         println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
@@ -547,7 +558,8 @@ impl russh::client::Handler for ClientHandler {
 
 async fn attempt_holepunch(target: String, coordinator: Url, 
     mut endpoint_v4: Endpoint,
-    mut endpoint_v6: Endpoint) -> io::Result<Connection> {
+    mut endpoint_v6: Endpoint,
+    external_ips: (Option<SocketAddr>, Option<SocketAddr>)) -> io::Result<Connection> {
 
     let mut client = loop {
         //Add id verification
@@ -560,7 +572,7 @@ async fn attempt_holepunch(target: String, coordinator: Url,
         }
     };
     
-    let _ = client.register_endpoint(endpoint_v6.local_addr().unwrap()).await;
+    let _ = client.register_endpoint(external_ips).await;
     let _ = client.connect_to(target).await;
 
     loop {

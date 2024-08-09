@@ -31,7 +31,7 @@ use log::{debug, error, info};
 use tokio::fs::read_to_string;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener};
 use clap::Parser;
-use quinn::{crypto, Connection, Endpoint, ServerConfig, VarInt};
+use quinn::{crypto, Connection, Endpoint, EndpointConfig, ServerConfig, VarInt};
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtyPair, PtySize, PtySystem, SlavePty};
 use anyhow::{bail, Context, Error};
@@ -86,9 +86,18 @@ fn configure_server() -> anyhow::Result<ServerConfig> {
 }
 
 #[allow(unused)]
-pub fn make_server_endpoint(bind_addr: SocketAddr) -> anyhow::Result<Endpoint> {
+pub fn make_server_endpoint(socket: UdpSocket) -> anyhow::Result<Endpoint> {
     let server_config = configure_server()?;
-    let endpoint = Endpoint::server(server_config, bind_addr)?;
+
+    let runtime = quinn::default_runtime()
+    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
+
+    let mut endpoint = Endpoint::new_with_abstract_socket(
+    EndpointConfig::default(), 
+    Some(server_config),
+    runtime.wrap_udp_socket(socket.into_std()?)?,
+    runtime)?;
+    
     Ok(endpoint)
 }
 
@@ -108,12 +117,12 @@ impl ServerConf {
 
 async fn attempt_holepunch(id: String, coordinator: Url, 
     mut endpoint_v4: Endpoint, 
-    mut endpoint_v6: Endpoint) 
+    mut endpoint_v6: Endpoint,
+    external_ips: (Option<SocketAddr>, Option<SocketAddr>)) 
     -> anyhow::Result<(), anyhow::Error> {
 
     let mut registration_interval = time::interval(Duration::from_secs(60));
     loop {
-
         CoordinatorClient::configure_crypto(&mut endpoint_v4);
         CoordinatorClient::configure_crypto(&mut endpoint_v6);
 
@@ -126,7 +135,7 @@ async fn attempt_holepunch(id: String, coordinator: Url,
                 }
             }
         };
-        _ = client.register_endpoint(endpoint_v6.local_addr().unwrap()).await;
+        _ = client.register_endpoint(external_ips).await;
 
         _ = client.new_session().await;
         info!("Created new session!");
@@ -136,7 +145,7 @@ async fn attempt_holepunch(id: String, coordinator: Url,
             tokio::select! {
                 _ = registration_interval.tick() => {
                     info!("Registering with the server");
-                    client.register_endpoint(endpoint_v6.local_addr().unwrap()).await.unwrap();
+                    client.register_endpoint(external_ips).await.unwrap();
                 }
                 response = client.read_response::<HashMap<String, String>>() => {
                     let response = response?;
@@ -200,19 +209,19 @@ pub async fn run(opt: Opt) {
     };
 
     
-    let conf: ServerConf = ServerConf::new();
+    let sock_v4 = UdpSocket::bind::<SocketAddr>("0.0.0.0:0".parse().unwrap()).await.unwrap();
+    let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap()).await.unwrap();
+    
+    let ext_ips = CoordinatorClient::get_external_ips(&sock_v4, &sock_v6).await;
 
-    let addr_v4 = "0.0.0.0:2222";
-    let v6_ip = common::utils::ipv6::get_first_global_ipv6().unwrap_or(Ipv6Addr::UNSPECIFIED);
-
-    let endpoint_v4 = make_server_endpoint(addr_v4.parse().unwrap()).unwrap();
-    let endpoint_v6 = make_server_endpoint(SocketAddr::V6(SocketAddrV6::new(v6_ip, 0, 0, 0))).unwrap();
+    let endpoint_v4 = make_server_endpoint(sock_v4).unwrap();
+    let endpoint_v6 = make_server_endpoint(sock_v6).unwrap();
 
     let endpoint_v4_clone = endpoint_v4.clone();
     let endpoint_v6_clone = endpoint_v6.clone();
 
     tokio::spawn(async move {
-        attempt_holepunch(opt.id, opt.coordinator, endpoint_v4_clone, endpoint_v6_clone).await;
+        attempt_holepunch(opt.id, opt.coordinator, endpoint_v4_clone, endpoint_v6_clone, ext_ips).await;
     });
 
     let config = Arc::new(config);
@@ -223,6 +232,7 @@ pub async fn run(opt: Opt) {
         let mut sh = Server {};
         sh.run_quic(config_v4, &endpoint_v4).await.unwrap();
     });
+    
     let config_v6 = config.clone();
     let v6_handle = tokio::spawn(async move {
         let mut sh = Server {};

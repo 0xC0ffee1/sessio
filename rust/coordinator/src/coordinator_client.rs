@@ -1,10 +1,11 @@
 
 use log::info;
 use log4rs::encode::json;
-use quinn::{ClientConfig, Endpoint, VarInt};
+use quinn::{AsyncUdpSocket, ClientConfig, Endpoint, VarInt};
 use rustls::RootCertStore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use stunclient::StunClient;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
@@ -63,6 +64,19 @@ pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
 }
 
 impl CoordinatorClient {
+
+    pub async fn get_external_ips(sock_v4: &UdpSocket, sock_v6: &UdpSocket) -> (Option<SocketAddr>, Option<SocketAddr>) {
+        
+        //stun.l.google.com in ipv4, if ipv6 is enabled, that would resolve to ipv6
+        let client_v4 = StunClient::new("74.125.250.129:19302".parse().unwrap());
+        let external_v4 = client_v4.query_external_address_async(sock_v4).await.ok();
+
+        //Just making sure it is ipv6
+        let client_v6 = StunClient::new("2001:4860:4864:5:8000::1".parse().unwrap());
+        let external_v6 = client_v6.query_external_address_async(sock_v6).await.ok();
+
+        (external_v4, external_v6)
+    }
 
     pub async fn connect(coordinator_url: Url, id_own: String, mut endpoint: Endpoint) -> Result<Self> {
 
@@ -193,15 +207,10 @@ impl CoordinatorClient {
         Ok(())
     }
     
-    pub async fn register_endpoint(&mut self, ipv6_addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn register_endpoint(&mut self, (ext_ipv4, 
+        ext_ipv6): (Option<SocketAddr>, Option<SocketAddr>)) -> Result<(), Box<dyn std::error::Error>> {
 
-        let ipv6 = if !ipv6_addr.ip().is_unspecified() {
-            ipv6_addr.to_string()
-        } else {
-           "None".into()
-        };
-
-        let register_msg = serde_json::json!({"id": "REGISTER", "own_id": self.id_own, "ipv6": ipv6});
+        let register_msg = serde_json::json!({"id": "REGISTER", "own_id": self.id_own, "ipv4": ext_ipv4, "ipv6": ext_ipv6});
 
         self.send_packet(&register_msg).await;
         let res = self.read_response::<HashMap<String, String>>().await;
