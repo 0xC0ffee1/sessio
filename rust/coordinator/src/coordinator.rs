@@ -93,11 +93,11 @@ pub async fn run(options: Opt) {
     sh.run_quic(&endpoint).await.unwrap();
 }
 
-
 struct Session {
     //Server initiates a new session
     server: Arc<Client>,
     client: Option<Arc<Client>>,
+    using_ipv6: bool
 }
 
 struct Client {
@@ -278,7 +278,60 @@ async fn handle_connection(connection: quinn::Connection,
                 sessions.insert(own_id.to_string(), Session {
                     server: client.clone(), //self
                     client: None,
+                    using_ipv6: false,
                 });
+                json!({"status": "200"})
+            }
+            Some("UPDATE_IP") => {
+                let Some(own_id) = read_packet_field("own_id", &packet) else {
+                    continue;
+                };
+
+                let Some(addr_ipv6_str) = read_packet_field("ipv6", &packet) else {
+                    continue;
+                };
+
+                let addr_ipv6 = addr_ipv6_str.parse::<SocketAddr>().ok();
+
+                let addr_ipv4 = connection.remote_address();
+
+                let mut clients = clients.lock().await;
+                //Damn
+                if let Some(client) = clients.get_mut(own_id) {
+                    if let Some(session_id) = client.session_id.lock().await.as_ref() {
+                        let mut sessions = sessions.lock().await;
+                        if let Some(session) = sessions.get_mut(session_id) {
+                            let change_packet;
+                            if session.using_ipv6 && addr_ipv6.is_none() {
+                                //Protocol change
+                                change_packet = json!({"id" : "PEER_IP_CHANGED", "peer_id": own_id, "new_ip" : addr_ipv4});
+                                session.using_ipv6 = false;
+                            }
+                            else if (!session.using_ipv6 && client.stream.addr != addr_ipv4) || 
+                                (session.using_ipv6 && addr_ipv6.is_some() && client.ipv6.lock().await.unwrap() != addr_ipv6.unwrap()) 
+                                {
+                                let addr = if session.using_ipv6 {
+                                    addr_ipv6.unwrap()
+                                } else {addr_ipv4};
+
+                                change_packet = json!({"id" : "PEER_IP_CHANGED", "peer_id": own_id, "new_ip" : addr});
+                            }
+                            else {
+                                continue;
+                            }
+
+                            if session.client.as_ref().unwrap().id.lock().await.clone().unwrap() == own_id.to_string() {
+                                //Client
+                                let _ = session.server.stream.send_packet::<Value>(&change_packet).await;
+                            }
+                            else {
+                                //Server
+                                let _ = session.client.as_ref().unwrap().stream.send_packet::<Value>(&change_packet).await;
+                            }
+                        }
+                    }
+                }
+
                 json!({"status": "200"})
             }
             Some("CLIENT_CONNECTED") => {
@@ -299,7 +352,10 @@ async fn handle_connection(connection: quinn::Connection,
                     //Check if both support ipv6
                     if session.server.ipv6.lock().await.is_some() {
                         // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
-                        client_addr = client.ipv6.lock().await.clone().unwrap_or(client_addr);
+                        if let Some(client_ipv6) = client.ipv6.lock().await.as_ref() {
+                            client_addr = client_ipv6.clone();
+                            session.using_ipv6 = true;
+                        }
                     }
 
                     //Telling the server to send the first packet in the UDP hole punch process

@@ -89,6 +89,8 @@ fn configure_server() -> anyhow::Result<ServerConfig> {
 pub fn make_server_endpoint(socket: UdpSocket) -> anyhow::Result<Endpoint> {
     let server_config = configure_server()?;
 
+    //todo set IPV6_V6ONLY false on windows
+
     let runtime = quinn::default_runtime()
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
 
@@ -116,18 +118,15 @@ impl ServerConf {
 
 
 async fn attempt_holepunch(id: String, coordinator: Url, 
-    mut endpoint_v4: Endpoint, 
-    mut endpoint_v6: Endpoint,
-    external_ips: (Option<SocketAddr>, Option<SocketAddr>)) 
+    mut endpoint: Endpoint) 
     -> anyhow::Result<(), anyhow::Error> {
 
-    let mut registration_interval = time::interval(Duration::from_secs(60));
+    let mut registration_interval = time::interval(Duration::from_secs(2));
     loop {
-        CoordinatorClient::configure_crypto(&mut endpoint_v4);
-        CoordinatorClient::configure_crypto(&mut endpoint_v6);
+        CoordinatorClient::configure_crypto(&mut endpoint);
 
         let mut client = loop {
-            match CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint_v4.clone()).await {
+            match CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint.clone()).await {
                 Ok(client) => break client,
                 Err(e) => {
                     info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
@@ -135,7 +134,8 @@ async fn attempt_holepunch(id: String, coordinator: Url,
                 }
             }
         };
-        _ = client.register_endpoint(external_ips).await;
+        let ipv6 = CoordinatorClient::get_new_external_ipv6(endpoint.local_addr()?.port()).await;
+        _ = client.register_endpoint(ipv6).await;
 
         _ = client.new_session().await;
         info!("Created new session!");
@@ -145,7 +145,9 @@ async fn attempt_holepunch(id: String, coordinator: Url,
             tokio::select! {
                 _ = registration_interval.tick() => {
                     info!("Registering with the server");
-                    client.register_endpoint(external_ips).await.unwrap();
+                    let ipv6 = CoordinatorClient::get_new_external_ipv6(endpoint.local_addr()?.port()).await;
+
+                    client.update_external_ip(ipv6).await.unwrap();
                 }
                 response = client.read_response::<HashMap<String, String>>() => {
                     let response = response?;
@@ -154,12 +156,6 @@ async fn attempt_holepunch(id: String, coordinator: Url,
                             info!("Attempting connection");
                             
                             let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
-
-                            let endpoint: &Endpoint = if target.is_ipv4() {
-                                &endpoint_v4
-                            } else {
-                                &endpoint_v6
-                            };
 
                             match endpoint.connect(target, "client") {
                                 Ok(_) => {
@@ -171,6 +167,11 @@ async fn attempt_holepunch(id: String, coordinator: Url,
                             }
                             client.send_packet(&json!({"id":"SERVER_SENT_CONNECTION_REQUEST", "own_id":id.clone()})).await?;
                             
+                        }
+                        Some("PEER_IP_CHANGED") => {
+                            //Just sending a packet to the client for the mappings
+                            let new_ip: SocketAddr = response.get("new_ip").unwrap().parse().unwrap();
+                            endpoint.connect(new_ip, "client");
                         }
                         Some("SESSION_FINISHED") => {
                             break;
@@ -208,40 +209,30 @@ pub async fn run(opt: Opt) {
         ..Default::default()
     };
 
-    
-    let sock_v4 = UdpSocket::bind::<SocketAddr>("0.0.0.0:0".parse().unwrap()).await.unwrap();
+    //Dual stack
     let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap()).await.unwrap();
-    
-    let ext_ips = CoordinatorClient::get_external_ips(&sock_v4, &sock_v6).await;
 
-    let endpoint_v4 = make_server_endpoint(sock_v4).unwrap();
+    //let endpoint_v4 = make_server_endpoint(sock_v4).unwrap();
     let endpoint_v6 = make_server_endpoint(sock_v6).unwrap();
 
-    let endpoint_v4_clone = endpoint_v4.clone();
+    //let endpoint_v4_clone = endpoint_v4.clone();
     let endpoint_v6_clone = endpoint_v6.clone();
 
     tokio::spawn(async move {
-        attempt_holepunch(opt.id, opt.coordinator, endpoint_v4_clone, endpoint_v6_clone, ext_ips).await;
+        attempt_holepunch(opt.id, opt.coordinator, endpoint_v6_clone).await;
     });
 
     let config = Arc::new(config);
     
     println!("Started!");
-    let config_v4 = config.clone();
-    let v4_handle = tokio::spawn(async move {
-        let mut sh = Server {};
-        sh.run_quic(config_v4, &endpoint_v4).await.unwrap();
-    });
-    
+
     let config_v6 = config.clone();
     let v6_handle = tokio::spawn(async move {
         let mut sh = Server {};
         sh.run_quic(config_v6, &endpoint_v6).await.unwrap();
     });
-    let (v4,v6) = tokio::join!(v4_handle, v6_handle);
-    // Handle potential errors
-    v4.unwrap();
-    v6.unwrap();
+    let v6 = tokio::join!(v6_handle);
+
 }
 
 fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error::Error>> {

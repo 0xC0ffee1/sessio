@@ -20,7 +20,7 @@ use std::sync::Arc;
 use quinn_proto::crypto::rustls::QuicClientConfig;
 
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -66,6 +66,8 @@ pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
 impl CoordinatorClient {
 
     pub async fn get_external_ips(sock_v4: &UdpSocket, sock_v6: &UdpSocket) -> (Option<SocketAddr>, Option<SocketAddr>) {
+
+        //@TODO maybe make a ip discovery service on coord server
         
         //stun.l.google.com in ipv4, if ipv6 is enabled, that would resolve to ipv6
         let client_v4 = StunClient::new("74.125.250.129:19302".parse().unwrap());
@@ -76,6 +78,26 @@ impl CoordinatorClient {
         let external_v6 = client_v6.query_external_address_async(sock_v6).await.ok();
 
         (external_v4, external_v6)
+    }
+
+    //The ipv6 might be different if using a vpn
+    /// Gets the current external ipv6 when the port is known.
+    /// This is done because we can't reuse the same socket that quinn::Endpoint has taken ownership of (in a cross-platform way).
+    /// The weakness of this approach is that this assumes the port stays the same, so systems using NAT64 for example won't work with this.
+    pub async fn get_new_external_ipv6(port: u16) -> Option<SocketAddr> {
+
+        let sock = UdpSocket::bind("[::]:0").await.unwrap();
+
+        //Just making sure it is ipv6
+        let client_v6 = StunClient::new("[2001:4860:4864:5:8000::1]:19302".parse().unwrap());
+        let external_v6 = client_v6.query_external_address_async(&sock).await.ok();
+
+        if let Some(v6) = external_v6 {
+            Some(SocketAddr::new(v6.ip(), port)) 
+        }
+        else {
+            None
+        }
     }
 
     pub async fn connect(coordinator_url: Url, id_own: String, mut endpoint: Endpoint) -> Result<Self> {
@@ -207,10 +229,20 @@ impl CoordinatorClient {
         Ok(())
     }
     
-    pub async fn register_endpoint(&mut self, (ext_ipv4, 
-        ext_ipv6): (Option<SocketAddr>, Option<SocketAddr>)) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update_external_ip(&mut self, ext_ipv6: Option<SocketAddr>) -> Result<(), Box<dyn std::error::Error>> {
 
-        let register_msg = serde_json::json!({"id": "REGISTER", "own_id": self.id_own, "ipv4": ext_ipv4, "ipv6": ext_ipv6});
+        let register_msg = serde_json::json!({"id": "UPDATE_IP", "own_id": self.id_own, "ipv6": ext_ipv6});
+
+        self.send_packet(&register_msg).await;
+        let res = self.read_response::<HashMap<String, String>>().await;
+        info!("{}", res.unwrap().get("status").unwrap());
+
+        Ok(())
+    }
+
+    pub async fn register_endpoint(&mut self, ext_ipv6: Option<SocketAddr>) -> Result<(), Box<dyn std::error::Error>> {
+
+        let register_msg = serde_json::json!({"id": "REGISTER", "own_id": self.id_own, "ipv6": ext_ipv6});
 
         self.send_packet(&register_msg).await;
         let res = self.read_response::<HashMap<String, String>>().await;

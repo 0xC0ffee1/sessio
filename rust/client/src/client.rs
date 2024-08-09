@@ -385,16 +385,13 @@ impl Client {
             }
         }
 
-        let sock_v4 = UdpSocket::bind::<SocketAddr>("0.0.0.0:0".parse().unwrap()).await.unwrap();
+        //let sock_v4 = UdpSocket::bind::<SocketAddr>("0.0.0.0:0".parse().unwrap()).await.unwrap();
         let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap()).await.unwrap();
-        
-        let ext_ips = CoordinatorClient::get_external_ips(&sock_v4, &sock_v6).await;
-        
-        let endpoint_v4 = make_client_endpoint(sock_v4).unwrap();
+
         let endpoint_v6 = make_client_endpoint(sock_v6).unwrap();
 
         let start_time = Utc::now();
-        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v4, endpoint_v6, ext_ips).await?;
+        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v6).await?;
         let end_time = Utc::now();
         let elapsed_time = end_time - start_time;
         println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
@@ -557,13 +554,12 @@ impl russh::client::Handler for ClientHandler {
 
 
 async fn attempt_holepunch(target: String, coordinator: Url, 
-    mut endpoint_v4: Endpoint,
-    mut endpoint_v6: Endpoint,
-    external_ips: (Option<SocketAddr>, Option<SocketAddr>)) -> io::Result<Connection> {
+    mut endpoint: Endpoint,
+) -> io::Result<Connection> {
 
     let mut client = loop {
         //Add id verification
-        match CoordinatorClient::connect(coordinator.clone(), Uuid::new_v4().to_string(), endpoint_v4.clone()).await {
+        match CoordinatorClient::connect(coordinator.clone(), Uuid::new_v4().to_string(), endpoint.clone()).await {
             Ok(client) => break client,
             Err(e) => {
                 info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
@@ -572,7 +568,8 @@ async fn attempt_holepunch(target: String, coordinator: Url,
         }
     };
     
-    let _ = client.register_endpoint(external_ips).await;
+    let ipv6 = CoordinatorClient::get_new_external_ipv6(endpoint.local_addr()?.port()).await;
+    let _ = client.register_endpoint(ipv6).await;
     let _ = client.connect_to(target).await;
 
     loop {
@@ -582,12 +579,6 @@ async fn attempt_holepunch(target: String, coordinator: Url,
             Some("CONNECT_TO") => {
                 let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
                 let target_id = response.get("target_id").unwrap();
-
-                let endpoint: &Endpoint = if target.is_ipv4() {
-                    &endpoint_v4
-                } else {
-                    &endpoint_v6
-                };
 
                 match endpoint.connect(target, "server").unwrap().await {
                     Ok(conn) => {
