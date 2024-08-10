@@ -50,7 +50,7 @@ use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use tokio::sync::{mpsc, Mutex};
 use tokio::{task, time};
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
-use futures::stream;
+use futures::{select, stream};
 use crossterm::{
     execute, queue,
     terminal::{disable_raw_mode, enable_raw_mode, size as terminal_size, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
@@ -375,6 +375,42 @@ impl Client {
         Ok(old_value)
     }
 
+    async fn connection_update_task(mut c_client: CoordinatorClient){
+        let mut update_interval = time::interval(Duration::from_secs(2));
+        loop {
+            tokio::select! {
+                _ = update_interval.tick() => {
+                    let ext_ipv6 = CoordinatorClient::get_new_external_ipv6(c_client.borrow_endpoint().
+                local_addr().unwrap().port()).await;
+                    let _ = c_client.update_external_ip(ext_ipv6.clone()).await;
+                    match ext_ipv6 {
+                        Some(ip) => {
+                            info!("Updated external ipv6 to {}", ip);
+                        }
+                        None =>{
+                            info!("Updated external ipv6 to None");
+                        }
+                    }
+                   
+                }
+                response = c_client.read_response::<HashMap<String, String>>() => {
+                    let response = response.unwrap();
+                    match response.get("id").map(String::as_str) {
+                        Some("PEER_IP_CHANGED") => {
+                            //Server ip has changed
+                            //Just sending a packet to the client for the mappings
+
+                            //todo: Create a periodic timer for client to send update packet, and listen for ip changes from server
+                            let new_ip: SocketAddr = response.get("new_ip").unwrap().parse().unwrap();
+                            let _ = c_client.borrow_endpoint().connect(new_ip, "client");
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
     //Create a new connection and on success return the its ID
     pub async fn new_connection(&mut self, target_id: String, coordinator: Url, ipv6: Option<Ipv6Addr>) -> anyhow::Result<()> {
         if let Some(conn) = self.connections.get_mut(&target_id) {
@@ -391,7 +427,24 @@ impl Client {
         let endpoint_v6 = make_client_endpoint(sock_v6).unwrap();
 
         let start_time = Utc::now();
-        let conn = attempt_holepunch(target_id.clone(), coordinator, endpoint_v6).await?;
+
+        let mut c_client = loop {
+            //Add id verification
+            match CoordinatorClient::connect(coordinator.clone(), Uuid::new_v4().to_string(), endpoint_v6.clone()).await {
+                Ok(client) => break client,
+                Err(e) => {
+                    info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
+                    time::sleep(Duration::from_secs(5)).await;
+                }
+            }
+        };
+
+        let conn = attempt_holepunch(&mut c_client, target_id.clone(), coordinator, endpoint_v6).await?;
+
+        tokio::spawn(async move {
+            Client::connection_update_task(c_client).await;
+        });
+
         let end_time = Utc::now();
         let elapsed_time = end_time - start_time;
         println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
@@ -553,21 +606,10 @@ impl russh::client::Handler for ClientHandler {
 }
 
 
-async fn attempt_holepunch(target: String, coordinator: Url, 
+async fn attempt_holepunch(client: &mut CoordinatorClient, target: String, coordinator: Url, 
     mut endpoint: Endpoint,
 ) -> io::Result<Connection> {
 
-    let mut client = loop {
-        //Add id verification
-        match CoordinatorClient::connect(coordinator.clone(), Uuid::new_v4().to_string(), endpoint.clone()).await {
-            Ok(client) => break client,
-            Err(e) => {
-                info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
-                time::sleep(Duration::from_secs(5)).await;
-            }
-        }
-    };
-    
     let ipv6 = CoordinatorClient::get_new_external_ipv6(endpoint.local_addr()?.port()).await;
     let _ = client.register_endpoint(ipv6).await;
     let _ = client.connect_to(target).await;
@@ -583,7 +625,6 @@ async fn attempt_holepunch(target: String, coordinator: Url,
                 match endpoint.connect(target, "server").unwrap().await {
                     Ok(conn) => {
                         let _ = client.send_packet(&json!({"id":"CONNECT_OK", "target_id":target_id})).await;
-                        let _ = client.close_connection().await;
                         return Ok(conn);
                     }
                     Err(e) => {

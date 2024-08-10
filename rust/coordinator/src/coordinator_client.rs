@@ -38,7 +38,8 @@ pub struct CoordinatorClient {
     conn: Connection,
     id_own: String,
     send_stream: quinn::SendStream,
-    response_rx: tokio::sync::mpsc::Receiver<Value>
+    response_rx: tokio::sync::mpsc::Receiver<Value>,
+    endpoint: Endpoint
 }
 
 struct SkipServerVerification;
@@ -168,8 +169,13 @@ impl CoordinatorClient {
             conn,
             id_own,
             send_stream,
-            response_rx
+            response_rx,
+            endpoint
         })
+    }
+
+    pub fn borrow_endpoint(&mut self) -> &mut Endpoint {
+        return &mut self.endpoint;
     }
 
     pub fn configure_crypto(endpoint: &mut Endpoint) {
@@ -235,7 +241,6 @@ impl CoordinatorClient {
 
         self.send_packet(&register_msg).await;
         let res = self.read_response::<HashMap<String, String>>().await;
-        info!("{}", res.unwrap().get("status").unwrap());
 
         Ok(())
     }

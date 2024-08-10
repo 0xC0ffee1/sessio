@@ -169,7 +169,10 @@ async fn attempt_holepunch(id: String, coordinator: Url,
                             
                         }
                         Some("PEER_IP_CHANGED") => {
+                            //Client ip has changed
                             //Just sending a packet to the client for the mappings
+
+                            //todo: Create a periodic timer for client to send update packet, and listen for ip changes from server
                             let new_ip: SocketAddr = response.get("new_ip").unwrap().parse().unwrap();
                             endpoint.connect(new_ip, "client");
                         }
