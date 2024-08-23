@@ -7,10 +7,10 @@ edition = "2021"
 common = { path = "../common" }
 coordinator = { path = "../coordinator" }
 tokio = { version = "1.0", features = ["full"] }
-quinn = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn" }
+quinn = "0.11.2"
 tokio-util = { version = "0.6", features = ["io"] }
-russh = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh" }
-russh-keys = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh-keys" }
+russh = "0.44.1"
+russh-keys = "0.44.0"
 async-trait = "0.1.80"
 env_logger = "0.10"
 anyhow = "1.0.86"
@@ -43,7 +43,7 @@ async-stream = "0.3.5"
 russh-sftp = "2.0.3"
 pnet = "0.35.0"
 if-addrs = "0.13.1"
-quinn-proto = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn-proto" }
+quinn-proto = "0.11.2"
 
 
 [target.'cfg(target_os="android")'.dependencies]

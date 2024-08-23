@@ -556,7 +556,7 @@ impl Client {
             session_id: id.clone()
         };
 
-        let (mut handle, mut migrate_tx) = russh::client::connect_stream(config, Box::new(bi_stream), session_handler).await?;
+        let mut handle = russh::client::connect_stream(config, Box::new(bi_stream), session_handler).await?;
 
         //let signal_thread = create_signal_thread();
 

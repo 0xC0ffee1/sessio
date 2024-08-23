@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 tokio = { version = "1.0", features = ["full"] }
-quinn = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn" }
+quinn = "0.11.2"
 tokio-util = { version = "0.6", features = ["io"] }
-russh = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh" }
-russh-keys = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh-keys" }
+russh = "0.44.1"
+russh-keys = "0.44.0"
 async-trait = "0.1.80"
 env_logger = "0.10"
 anyhow = "1.0.86"
@@ -28,7 +28,7 @@ toml = "0.8.14"
 bytes = "1.6.0"
 serde_json = "1.0.118"
 rustls-pki-types = "1.8.0"
-quinn-proto = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn-proto" }
+quinn-proto = "0.11.2"
 webpki-roots = "0.26.3"
 stunclient = { git = "https://github.com/vi/rust-stunclient" }
 stun-client = "0.1.4"

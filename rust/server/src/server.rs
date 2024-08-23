@@ -219,8 +219,6 @@ pub async fn run(opt: Opt) {
     let config_v6 = config.clone();
     let v6_handle = tokio::spawn(async move {
         let mut sh = Server {
-            conns: Arc::new(Mutex::new(HashMap::new())),
-            migrations: Arc::new(Mutex::new(Vec::new())),
             holepuncher
         };
         sh.run_quic(config_v6, &endpoint_v6).await.unwrap();
@@ -251,8 +249,6 @@ struct ServerSession {
 }
 
 struct Server {
-    conns: Arc<Mutex<HashMap<SocketAddr, Vec<Sender<MigrationMsg>>>>>,
-    migrations: Arc<Mutex<Vec<SocketAddr>>>,
     holepuncher: HolepunchService
 }
 
@@ -288,10 +284,6 @@ impl QuicServer for Server {
         config: Arc<server::Config>,
         endpoint: &Endpoint
     ) -> Result<(), io::Error> {
-
-        let conns = self.conns.clone();
-        let migrations = self.migrations.clone();
-
         let config_cloned = config.clone();
         
         loop{
@@ -325,7 +317,6 @@ impl QuicServer for Server {
                 sni);
 
             //A single connection can spawn multiple streams
-            let conns = self.conns.clone();
 
             tokio::spawn(async move {
                 loop {
@@ -347,7 +338,6 @@ impl QuicServer for Server {
 
                     info!("New client connected!");
 
-                    let conns_cloned = conns.clone();
                     tokio::spawn(async move {
                         let session = match russh::server::run_stream(conf, Box::new(bi_stream), handler).await {
                             Ok(s) => s,
@@ -356,16 +346,6 @@ impl QuicServer for Server {
                                 return
                             }
                         };
-
-                        {
-                            let mut conns = conns_cloned.lock().await;
-                            if let Some(migrate_txs) = conns.get_mut(&remote) {
-                                migrate_txs.push(session.migrate_tx.clone())
-                            }
-                            else {
-                                conns.insert(remote, vec![session.migrate_tx.clone()]);
-                            }
-                        }
 
                         match session.await {
                             Ok(_) => {

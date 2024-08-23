@@ -1,7 +1,6 @@
 use std::pin::Pin;
 use std::task::Poll;
 use std::task::Context;
-use russh::SshStream;
 use std::io;
 use log::{error, trace};  // Add the log crate for logging
 
@@ -10,7 +9,6 @@ pub struct BiStream {
     pub recv_stream: quinn::RecvStream,
 }
 
-impl SshStream for BiStream {}
 
 impl tokio::io::AsyncRead for BiStream {
     fn poll_read(
