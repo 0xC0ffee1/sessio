@@ -7,26 +7,34 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use common::utils::map_ipv4_to_ipv6;
+use coordinator::common::{Packet, PacketBase, ServerConnectionRequest, ServerPacket};
+use coordinator::holepuncher::HolepunchService;
 use quinn::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use rustls::internal::msgs::base;
 use serde_json::json;
+
 use tokio::process::Command as TokioCommand;
+
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
 use homedir::home;
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::time;
+use tokio::sync::broadcast::Receiver;
+
+use tokio::{select, time};
+use toml::ser;
 use std::process::{Command, Stdio};
 use std::str;
 use async_trait::async_trait;
 use russh::server::{Msg, Server as _, Session};
 use russh::*;
 use russh_keys::*;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex, mpsc::Sender};
 use rand::rngs::OsRng;
 use ssh_key::{Algorithm, HashAlg, LineEnding, PrivateKey, PublicKey};
 use russh_keys::key::KeyPair;
-use rand::CryptoRng;
+use rand::{seq, CryptoRng};
 use log::{debug, error, info};
 use tokio::fs::read_to_string;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener};
@@ -39,8 +47,7 @@ use std::pin::Pin;
 use std::task::Poll;
 use serde::Deserialize;
 use russh::Channel;
-use std::sync::mpsc::channel;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use common::utils::keygen::generate_keypair;
 use coordinator::coordinator_client::*;
@@ -79,7 +86,7 @@ fn configure_server() -> anyhow::Result<ServerConfig> {
     transport_config.max_concurrent_uni_streams(0_u8.into());
     transport_config.max_idle_timeout(Some(VarInt::from_u32(60_000).into()));
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
-    #[cfg(any(windows, os = "linux"))]
+    #[cfg(windows)]
     transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
 
     Ok(server_config)
@@ -93,6 +100,7 @@ pub fn make_server_endpoint(socket: UdpSocket) -> anyhow::Result<Endpoint> {
 
     let runtime = quinn::default_runtime()
     .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
+
 
     let mut endpoint = Endpoint::new_with_abstract_socket(
     EndpointConfig::default(), 
@@ -116,79 +124,59 @@ impl ServerConf {
     }
 }
 
-
-async fn attempt_holepunch(id: String, coordinator: Url, 
-    mut endpoint: Endpoint) 
-    -> anyhow::Result<(), anyhow::Error> {
-
-    let mut registration_interval = time::interval(Duration::from_secs(2));
-    loop {
-        CoordinatorClient::configure_crypto(&mut endpoint);
-
-        let mut client = loop {
-            match CoordinatorClient::connect(coordinator.clone(), id.clone(), endpoint.clone()).await {
-                Ok(client) => break client,
-                Err(e) => {
-                    info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
-                    time::sleep(Duration::from_secs(5)).await;
-                }
-            }
-        };
-        let ipv6 = CoordinatorClient::get_new_external_ipv6(endpoint.local_addr()?.port()).await;
-        _ = client.register_endpoint(ipv6).await;
-
-        _ = client.new_session().await;
-        info!("Created new session!");
-
-        loop {
-            info!("Waiting for client to connect.");
-            tokio::select! {
-                _ = registration_interval.tick() => {
-                    info!("Registering with the server");
-                    let ipv6 = CoordinatorClient::get_new_external_ipv6(endpoint.local_addr()?.port()).await;
-
-                    client.update_external_ip(ipv6).await.unwrap();
-                }
-                response = client.read_response::<HashMap<String, String>>() => {
-                    let response = response?;
-                    match response.get("id").map(String::as_str) {
-                        Some("CONNECT_TO") => {
-                            info!("Attempting connection");
-                            
-                            let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
-
-                            match endpoint.connect(target, "client") {
-                                Ok(_) => {
-                                    info!("Connection attempt made!");
-                                }
-                                Err(e) => {
-                                    info!("Connection failed: {}", e);
-                                }
-                            }
-                            client.send_packet(&json!({"id":"SERVER_SENT_CONNECTION_REQUEST", "own_id":id.clone()})).await?;
-                            
-                        }
-                        Some("PEER_IP_CHANGED") => {
-                            //Client ip has changed
-                            //Just sending a packet to the client for the mappings
-
-                            //todo: Create a periodic timer for client to send update packet, and listen for ip changes from server
-                            let new_ip: SocketAddr = response.get("new_ip").unwrap().parse().unwrap();
-                            endpoint.connect(new_ip, "client");
-                        }
-                        Some("SESSION_FINISHED") => {
-                            break;
-                        }
-                        _ => {
-                            // Handle other messages if needed
-                        }
-                    }
-                }
-            }
-        }
-    }
+#[derive(Clone)]
+struct PeerChangeMsg{
+    pub id: String,
+    pub new_ip: SocketAddr,
+    pub old_ip: SocketAddr
 }
 
+async fn listen_to_coordinator(endpoint: Endpoint, holepuncher: &HolepunchService) {
+
+    let mut receiver: Receiver<Packet> = holepuncher.c_client.subscribe_to_packets().await;
+    let sender = holepuncher.c_client.new_packet_sender();
+
+    let token = holepuncher.c_client.token.clone();
+    let id = holepuncher.c_client.id_own.clone();
+
+    tokio::spawn(async move {
+        loop {
+            let packet = match receiver.recv().await {
+                Ok(packet) => packet,
+                Err(e) => {
+                    log::error!("Coordinator listener closed. {}", e);
+                    break;
+                }
+            };
+            match packet {
+                Packet::ConnectTo(data) => {
+                    match endpoint.connect(data.target, "client") {
+                        Ok(_) => {
+                            info!("Connection attempt made!");
+                        }
+                        Err(e) => {
+                            info!("Connection failed: {}", e);
+                        }
+                    }
+                    let _ = sender.send(ServerPacket {
+                        base: Some(PacketBase {
+                            own_id: id.clone(),
+                            token: token.clone()
+                        }),
+                        packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
+                            client_id: data.target_id
+                        })
+                    }).await;
+                }
+                Packet::PeerIpChanged(data) => {
+                    //Creating NAT mappings
+                    _ = endpoint.connect(data.new_ip, "client");
+                }
+                _ => {}
+            }
+        }
+    });   
+}
 
 
 #[tokio::main]
@@ -208,22 +196,21 @@ pub async fn run(opt: Opt) {
         inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
         auth_rejection_time: std::time::Duration::from_secs(3),
         auth_rejection_time_initial: Some(std::time::Duration::from_secs(0)),
-        keys: vec![host_key],
+        keys: vec![host_key.clone()],
         ..Default::default()
     };
 
     //Dual stack
     let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap()).await.unwrap();
 
+    let ipv6 = CoordinatorClient::get_external_ipv6(&sock_v6).await;
     //let endpoint_v4 = make_server_endpoint(sock_v4).unwrap();
-    let endpoint_v6 = make_server_endpoint(sock_v6).unwrap();
+    let mut endpoint_v6 = make_server_endpoint(sock_v6).unwrap();
 
-    //let endpoint_v4_clone = endpoint_v4.clone();
-    let endpoint_v6_clone = endpoint_v6.clone();
-
-    tokio::spawn(async move {
-        attempt_holepunch(opt.id, opt.coordinator, endpoint_v6_clone).await;
-    });
+    CoordinatorClient::configure_crypto(&mut endpoint_v6);
+    let holepuncher = HolepunchService::new(opt.coordinator, endpoint_v6.clone(),
+     host_key, ipv6, opt.id).await.unwrap();
+    listen_to_coordinator(endpoint_v6.clone(), &holepuncher).await;
 
     let config = Arc::new(config);
     
@@ -231,7 +218,11 @@ pub async fn run(opt: Opt) {
 
     let config_v6 = config.clone();
     let v6_handle = tokio::spawn(async move {
-        let mut sh = Server {};
+        let mut sh = Server {
+            conns: Arc::new(Mutex::new(HashMap::new())),
+            migrations: Arc::new(Mutex::new(Vec::new())),
+            holepuncher
+        };
         sh.run_quic(config_v6, &endpoint_v6).await.unwrap();
     });
     let v6 = tokio::join!(v6_handle);
@@ -259,7 +250,11 @@ struct ServerSession {
     user: Option<String>
 }
 
-struct Server {}
+struct Server {
+    conns: Arc<Mutex<HashMap<SocketAddr, Vec<Sender<MigrationMsg>>>>>,
+    migrations: Arc<Mutex<Vec<SocketAddr>>>,
+    holepuncher: HolepunchService
+}
 
 struct PtyStream{
     reader: Mutex<Box<dyn Read + Send>>,
@@ -272,7 +267,7 @@ trait QuicServer{
     async fn run_quic(
         &mut self,
         config: Arc<russh::server::Config>,
-        connection: &Endpoint,
+        connection: &Endpoint
     ) -> Result<(), std::io::Error>;
 }
 
@@ -285,14 +280,20 @@ impl server::Server for Server {
     }
 }
 
+
 impl QuicServer for Server {
 
     async fn run_quic(
         &mut self,
         config: Arc<server::Config>,
-        endpoint: &Endpoint,
+        endpoint: &Endpoint
     ) -> Result<(), io::Error> {
+
+        let conns = self.conns.clone();
+        let migrations = self.migrations.clone();
+
         let config_cloned = config.clone();
+        
         loop{
             let conf = config_cloned.clone();
             info!("Waiting for connections..");
@@ -324,9 +325,12 @@ impl QuicServer for Server {
                 sni);
 
             //A single connection can spawn multiple streams
+            let conns = self.conns.clone();
+
             tokio::spawn(async move {
                 loop {
                     let conf = conf.clone();
+                    let remote = conn.remote_address();
                     let (mut quinn_send, mut quinn_recv) = match conn.accept_bi().await {
                         Ok(stream) => stream,
                         Err(e) => {
@@ -343,16 +347,30 @@ impl QuicServer for Server {
 
                     info!("New client connected!");
 
+                    let conns_cloned = conns.clone();
                     tokio::spawn(async move {
-                        let session = match russh::server::run_stream(conf, bi_stream, handler).await {
+                        let session = match russh::server::run_stream(conf, Box::new(bi_stream), handler).await {
                             Ok(s) => s,
                             Err(e) => {
                                 error!("Connection setup failed");
                                 return
                             }
                         };
+
+                        {
+                            let mut conns = conns_cloned.lock().await;
+                            if let Some(migrate_txs) = conns.get_mut(&remote) {
+                                migrate_txs.push(session.migrate_tx.clone())
+                            }
+                            else {
+                                conns.insert(remote, vec![session.migrate_tx.clone()]);
+                            }
+                        }
+
                         match session.await {
-                            Ok(_) => debug!("Connection closed"),
+                            Ok(_) => {
+                                debug!("Connection closed")
+                            },
                             Err(e) => {
                                 error!("Connection closed with error {}", e);
                                 //TODO handle errors
@@ -366,42 +384,7 @@ impl QuicServer for Server {
 }
 
 
-async fn read_authorized_keys(user: &str) -> anyhow::Result<Vec<key::PublicKey>> {
-    
-    let path = home(user)?
-    .with_context(|| format!("Home directory not found for user {}", user))?
-    .join(".sessio/authorized_keys");
 
-    if !path.exists() {
-        // Create the file and its parent directories if they don't exist
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-        
-        tokio::fs::File::create(&path).await?;
-    }
-
-    let mut file = tokio::fs::File::open(&path).await?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).await?;
-
-    let mut keys = Vec::new();
-
-    for line in contents.lines() {
-        let mut split = line.split_whitespace();
-        
-        split.next();
-
-        if let Ok(public_key) = russh_keys::parse_public_key_base64(split.next().unwrap()) {
-            keys.push(public_key);
-        }
-        else {
-            anyhow::bail!("Failed to read authorized public key {}", line)
-        }
-    }
-
-    Ok(keys)
-}
 
 
 impl ServerSession {
@@ -529,16 +512,14 @@ impl server::Handler for ServerSession {
                         reader.read(&mut buffer).map(|n| (n, buffer))
 
                     }).await {
-                        Ok(Ok((n, buffer))) if n == 0 => {
+                        Ok(Ok((n, _))) if n == 0 => {
                             debug!("PTY: No more data to read.");
                             break;
                         }
                         Ok(Ok((n,buffer))) => {
-                            debug!("PTY read {} bytes", n);
-                            //info!("Sending {}", String::from_utf8_lossy(&buffer[0..n]));
                             if let Err(e) = handle_reader.data(channel_id, CryptoVec::from_slice(&buffer[0..n])).await {
                                 error!("Error sending PTY data to client: {:?}", e);
-                                break;
+                                continue;
                             }
                         }
                         Ok(Err(e)) => {
@@ -599,7 +580,7 @@ impl server::Handler for ServerSession {
         let ptys_guard = clone.lock().await;
         let pty = ptys_guard.get(&channel_id).unwrap();
 
-        let _ = ptys_guard.get(&channel_id).unwrap().master.lock().await.resize(PtySize {
+        let _ = pty.master.lock().await.resize(PtySize {
             rows: row_height as u16,
             cols: col_width as u16,
             pixel_width: pix_width as u16,
@@ -672,7 +653,7 @@ impl server::Handler for ServerSession {
         log::debug!("Attempting to authenticate user: {}", user);
         log::debug!("Public key: {:?}", public_key);
 
-        let authorized_keys = read_authorized_keys(user).await.map_err(|e| {
+        let authorized_keys = common::utils::keygen::read_authorized_keys(Some(user)).await.map_err(|e| {
             error!("{}", e);
             russh::Error::CouldNotReadKey 
         })?;

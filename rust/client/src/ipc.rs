@@ -2,6 +2,7 @@ pub mod clientipc {
     tonic::include_proto!("clientipc");
 }
 
+use coordinator::coordinator_client::CoordinatorClient;
 use futures::{stream, Stream, StreamExt};
 use russh_sftp::{client::SftpSession, protocol::Stat};
 use url::Url;
@@ -9,8 +10,9 @@ use uuid::Uuid;
 use tokio::{fs::File, io::{AsyncReadExt, AsyncWriteExt}, sync::mpsc, time::Instant};
 use std::{any::Any, collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
 use clientipc::{
-    client_ipc_server::{ClientIpc, ClientIpcServer}, file_transfer_status::Progress, msg::Type, session_data, DeviceStatus, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest, InitData, InitResponse, LocalPortForwardRequest, LocalPortForwardResponse, Msg, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, PublicKey, SessionData, SessionMap, SessionRequest, Settings, SettingsRequest, SftpRequest, SftpRequestResponse, StreamResponse, UserData, Value
+    client_ipc_server::{ClientIpc, ClientIpcServer}, file_transfer_status::Progress, msg::Type, session_data, ClientEvent, CoordinatorStartRequest, CoordinatorStartResponse, DeviceStatus, FileCloseResponse, FileData, FileList, FileMetadataResponse, FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferStatus, FileWriteRequest, FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest, LocalPortForwardRequest, LocalPortForwardResponse, Msg, NatFilterRequest, NatFilterResponse, NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, PublicKey, SessionData, SessionMap, SessionRequest, SettingCheckRequest, SettingCheckResponse, Settings, SettingsRequest, SftpRequest, SftpRequestResponse, StreamResponse, SubscribeRequest, UserData, Value
 };
+use clientipc::client_event_service_server::{ClientEventService};
 use clientipc::file_transfer_status::Typ;
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
 use clientipc::value::Kind;
@@ -41,6 +43,33 @@ use common::utils::keygen::generate_keypair;
 struct ClientIpcHandler {
     client: Arc<Mutex<Client>>
 }
+struct ClientEventsHandler {
+    client: Arc<Mutex<Client>>
+}
+
+#[tonic::async_trait]
+impl ClientEventService for ClientEventsHandler {
+    type SubscribeStream =
+        Pin<Box<dyn Stream<Item = Result<ClientEvent, Status>> + Send  + 'static>>;
+    
+    async fn subscribe(&self, request: Request<SubscribeRequest>) -> Result<Response<Self::SubscribeStream>, Status> {
+        let mut receiver = {
+            let mut client = self.client.lock().await;
+            client.event_bus.subscribe().await
+        };
+
+        let res = async_stream::try_stream! {
+            loop {
+                let Ok(event) = receiver.recv().await else {
+                   log::error!("Failed to receive event");
+                   break;
+                };
+                yield event;
+            }
+        };
+        Ok(Response::new(Box::pin(res) as Self::SubscribeStream))
+    }
+}
 
 #[tonic::async_trait]
 impl ClientIpc for ClientIpcHandler {
@@ -51,13 +80,31 @@ impl ClientIpc for ClientIpcHandler {
 
     type FileUploadStream = Self::FileDownloadStream;
 
-    async fn init_client(&self, request: Request<InitData>)
-    -> Result<Response<InitResponse>, Status> {
-        let request = request.into_inner();
-        let mut client = self.client.lock().await;
-        client.set_data_folder(PathBuf::from(request.data_folder_path));
 
-        Ok(Response::new(InitResponse {}))
+    async fn start_coordinator(&self, request: Request<CoordinatorStartRequest>) -> 
+    Result<Response<CoordinatorStartResponse>, Status> {
+        let mut client = self.client.lock().await;
+        if client.check_coordinator_enabled() {
+            return Ok(Response::new(CoordinatorStartResponse {
+                started: true
+            }));
+        }
+        if let Err(e) = client.init_coordinator().await {
+            log::error!("Failed to start coordinator! {}", e);
+        };
+
+        Ok(Response::new(CoordinatorStartResponse {
+            started: client.check_coordinator_enabled()
+        }))
+    }
+
+    async fn check_settings_validity(&self, request: Request<SettingCheckRequest>) -> 
+    Result<Response<SettingCheckResponse>, Status> {
+        let mut client = self.client.lock().await;
+
+        Ok(Response::new(SettingCheckResponse {
+            valid: client.check_coordinator_enabled()
+        }))
     }
 
     async fn get_active_sessions(&self, request: Request<SessionRequest>)
@@ -77,7 +124,7 @@ impl ClientIpc for ClientIpcHandler {
             });
         }
 
-        if let Ok(user_data) = Client::get_json_as::<UserData>(client.get_save_file().await.unwrap()).await {
+        if let Ok(user_data) = Client::get_json_as::<UserData>(Client::get_save_file(&client.data_folder_path).await.unwrap()).await {
             for (k, mut data) in user_data.saved_sessions.iter() {
                 let mut final_data = data.clone();
                 final_data.session_id = Some(k.to_string());
@@ -123,7 +170,7 @@ impl ClientIpc for ClientIpcHandler {
         let request = request.into_inner();
         let mut client = self.client.lock().await;
 
-        let file = client.get_settings_file().await.map_err(|e| {
+        let file = Client::get_settings_file(&client.data_folder_path).await.map_err(|e| {
             Status::new(tonic::Code::Internal, e.to_string())
         })?;
     
@@ -140,7 +187,7 @@ impl ClientIpc for ClientIpcHandler {
         let request = request.into_inner();
         let mut client = self.client.lock().await;
 
-        let file = client.get_save_file().await.map_err(|e| {
+        let file = Client::get_save_file(&client.data_folder_path).await.map_err(|e| {
             Status::new(tonic::Code::Internal, e.to_string())
         })?;
     
@@ -156,7 +203,7 @@ impl ClientIpc for ClientIpcHandler {
         let request = request.into_inner();
         let mut client = self.client.lock().await;
 
-        let file = client.get_settings_file().await.map_err(|e| {
+        let file = Client::get_settings_file(&client.data_folder_path).await.map_err(|e| {
             Status::new(tonic::Code::Internal, e.to_string())
         })?;
     
@@ -172,7 +219,7 @@ impl ClientIpc for ClientIpcHandler {
         let request = request.into_inner();
         let mut client = self.client.lock().await;
 
-        let file = client.get_save_file().await.map_err(|e| {
+        let file = Client::get_save_file(&client.data_folder_path).await.map_err(|e| {
             Status::new(tonic::Code::Internal, e.to_string())
         })?;
     
@@ -181,6 +228,20 @@ impl ClientIpc for ClientIpcHandler {
         })?;
 
         Ok(Response::new(data))
+    }
+
+    async fn get_nat_filter_type(&self, request: Request<NatFilterRequest>)
+    -> Result<Response<NatFilterResponse>, Status>{
+        let nat_type_res = CoordinatorClient::get_nat_type().await;
+        let nat_type = match nat_type_res {
+            Ok(nat_type) => nat_type,
+            Err(e) => {
+                return Err(Status::new(tonic::Code::Internal, format!("Could not perform NAT Test: {}", e)));
+            }  
+        };
+        Ok(Response::new(NatFilterResponse {
+            r#type: nat_type as i32
+        }))
     }
 
     async fn open_sftp_channel(&self, request: Request<SessionData>) 
@@ -335,59 +396,54 @@ impl ClientIpc for ClientIpcHandler {
         };
 
         let res = async_stream::try_stream! {
-        let mut buf = vec![0u8; 1024*512];
-        let mut bytes_written: i32 = 0;
-        loop {
-            let n = match local_file.read(&mut buf).await {
-                Ok(n) if n == 0 => break, // EOF
-                Ok(n) => n,
-                Err(e) => {
-                    log::error!("Failed to read from local file: {}", e);
+            let mut buf = vec![0u8; 1024*512];
+            let mut bytes_written: i32 = 0;
+            loop {
+                let n = match local_file.read(&mut buf).await {
+                    Ok(n) if n == 0 => break, // EOF
+                    Ok(n) => n,
+                    Err(e) => {
+                        log::error!("Failed to read from local file: {}", e);
+                        break;
+                    }
+                };
+
+                let start_time = Instant::now();
+                if let Err(e) = remote_file.write_all(&buf[..n]).await {
+                    log::error!("Failed to write to remote file: {}", e);
                     break;
+                    //return Err(Status::new(tonic::Code::Internal, format!("Failed to write to remote file: {}", e)));
                 }
-            };
+                let elapsed_time = start_time.elapsed();
 
-            let start_time = Instant::now();
-            if let Err(e) = remote_file.write_all(&buf[..n]).await {
-                log::error!("Failed to write to remote file: {}", e);
-                break;
-                //return Err(Status::new(tonic::Code::Internal, format!("Failed to write to remote file: {}", e)));
+                log::info!("Buffer written in {:?}", elapsed_time);
+
+                bytes_written += n as i32;
+                let progress = Progress {
+                    bytes_read: bytes_written
+                };
+
+                let file_transfer_status = FileTransferStatus {
+                    typ: Some(Typ::Progress(progress)),
+                };
+
+                yield file_transfer_status;
             }
-            let elapsed_time = start_time.elapsed();
-
-            log::info!("Buffer written in {:?}", elapsed_time);
-
-            bytes_written += n as i32;
-            let progress = Progress {
-                bytes_read: bytes_written
-            };
-
-            let file_transfer_status = FileTransferStatus {
-                typ: Some(Typ::Progress(progress)),
-            };
-
-            yield file_transfer_status;
-
-        }
         };
         
         Ok(Response::new(Box::pin(res) as Self::FileUploadStream))
     }
 
 
+    //Add eventbuses for connections, to monitor their states
+    //Also for sessions
     async fn new_connection(&self, request: Request<NewConnectionRequest>) 
     -> Result<Response<NewConnectionResponse>, Status> {
         let request = request.into_inner();
 
-        let Ok(url) = request.coordinator_url.parse() else {
-            return Err(Status::new(tonic::Code::InvalidArgument, "Invalid coordinator URL!"));
-        };
-
         let mut client = self.client.lock().await;
-        
-        let ipv6_addr: Option<Ipv6Addr> = request.own_ipv6.and_then(|s| s.parse().ok());
 
-        let res = client.new_connection(request.target_id.clone(), url, ipv6_addr).await;
+        let res = client.new_connection(request.target_id.clone()).await;
         match res {
             Ok(id) => {
                 log::info!("CONN OK");
@@ -405,11 +461,8 @@ impl ClientIpc for ClientIpcHandler {
     async fn gen_keys(&self, request: Request<GenKeysRequest>) -> Result<Response<GenKeysResponse>, Status> {
         let request = request.into_inner();
         let client = self.client.lock().await;
-        let Some(data_folder) = &client.data_folder_path else {
-            return Err(Status::new(tonic::Code::FailedPrecondition, "Data folder not set! Possibly init rpc not called"));
-        };
 
-        let res = generate_keypair(data_folder.join("keys"), ssh_key::Algorithm::Ed25519, "id_ed25519");
+        let res = generate_keypair(client.data_folder_path.join("keys"), ssh_key::Algorithm::Ed25519, "id_ed25519");
 
         match res {
             Ok(_) => {
@@ -424,11 +477,8 @@ impl ClientIpc for ClientIpcHandler {
     async fn get_public_key(&self, request: Request<GetKeyRequest>) -> Result<Response<PublicKey>, Status> {
         let request = request.into_inner();
         let client = self.client.lock().await;
-        let Some(data_folder) = &client.data_folder_path else {
-            return Err(Status::new(tonic::Code::FailedPrecondition, "Data folder not set! Possibly init rpc not called"));
-        };
 
-        let mut file = File::options().read(true).open(data_folder.join("keys/id_ed25519.pub")).await?;
+        let mut file = File::options().read(true).open(client.data_folder_path.join("keys/id_ed25519.pub")).await?;
 
         let mut reader = BufReader::new(file);
         let mut contents = String::new();
@@ -461,18 +511,16 @@ impl ClientIpc for ClientIpcHandler {
         request.known_hosts_path
         ).await;
 
-
-        
         info!("IPC: Session requested!");
         match res {
             Ok(id) => {
                 if session_data_cloned.session_id.is_none() {
                     //This is kinda messy
-                    let mut save_file = client.get_save_file().await.unwrap();
+                    let mut save_file = Client::get_save_file(&client.data_folder_path).await.unwrap();
                     let mut user_data = Client::get_json_as::<UserData>(save_file).await.unwrap();
                     session_data_cloned.session_id = Some(id.clone());
                     user_data.saved_sessions.insert(id.clone(), session_data_cloned);
-                    save_file = client.get_save_file().await.unwrap();
+                    save_file = Client::get_save_file(&client.data_folder_path).await.unwrap();
                     let _ = Client::save_json_as(save_file, user_data).await;
                 }
 
@@ -504,88 +552,66 @@ impl ClientIpc for ClientIpcHandler {
 
         let client_clone = self.client.clone();
 
-        let mut client = client_clone.lock().await;
-        
-        let session_guard = match client.sessions.get_mut(&channel_init.session_id) {
-            Some(session) => session,
-            None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
-        };
+        let session_id = channel_init.session_id.clone();
+        let (mut msg_receiver, server_msg_sender, active, 
+            mut event_receiver) = {
+            let mut client = client_clone.lock().await;
+            let event_receiver = client.event_bus.subscribe().await;
+            let session_guard = match client.sessions.get_mut(&channel_init.session_id) {
+                Some(session) => session,
+                None => return Err(Status::new(tonic::Code::NotFound, "Session not found")),
+            };
 
-        let channel_id = {
             let mut session = session_guard.lock().await;
-            session.new_channel().await.unwrap()
+            let was_active = session.active;
+            if !session.active {
+                session.new_session_channel().await.unwrap();
+            }
+            
+            (session.channel_stream.client_messages.subscribe().await,
+            session.channel_stream.server_messages.new_sender().await,
+            was_active, event_receiver)
         };
-
-        let session_clone = session_guard.clone();
-
+        
         let res = async_stream::try_stream! {
 
-            let (input_tx, input_rx) = mpsc::channel(32);
-            let (output_tx, mut output_rx) = mpsc::channel(32);
-
-            let input_guard = Arc::new(Mutex::new(input_rx));
-            let output_guard = Arc::new(Mutex::new(output_tx));
-
-            let o_clone = output_guard.clone();
-
-            tokio::spawn(async move {
-                while let Some(msg) = stream.next().await {
-                    let msg_clone = msg.clone().unwrap();
-                    match msg {
-                        Ok(msg) => {
-                            match msg.r#type {
-                                Some(Type::Data(data)) => {
-                                    //Sends the data to the shell stream
-                                    input_tx.send(msg_clone).await.unwrap();
-                                }
-                                Some(Type::PtyRequest(req)) => {
-                                    info!("IPC: Opening a pty!");
-                                    let mut session = session_clone.lock().await;
-                                    let _ = session.request_pty(&channel_id, req.col_width, req.row_height).await;
-                                }
-                                Some(Type::PtyResize(req)) => {
-                                    input_tx.send(msg_clone).await.unwrap();
-                                }
-                                Some(Type::ShellRequest(req)) => {
-                                    info!("IPC: Opening a shell!");
-                                    
-                                    let session = session_clone.clone();
-                                    //ignoring until tests complete
-                                    let input = input_guard.clone();
-                                    let output = o_clone.clone();
-                                    tokio::spawn(async move {
-                                        let task = {
-                                            let ses = session.lock().await;
-                                            let channel_guard = ses.channels.get(&channel_id).unwrap().clone();
-
-                                            Session::request_shell(channel_guard, input, output)
-                                        };
-
-                                        if let Err(e) = task.await {
-                                            eprintln!("Failed to request shell: {:?}", e);
-                                        }
-                                    });
-                                }
-                                _ => {}
-                            }
+            let send_handle = tokio::spawn(async move {
+                while let Some(Ok(msg)) = stream.next().await {
+                    match msg.r#type {
+                        Some(Type::ShellRequest(_) | Type::PtyRequest(_)) if !active => {
+                            let _ = server_msg_sender.send(msg);
                         }
-                        Err(e) => {
-                            eprintln!("Failed to receive message: {:?}", e);
-                            break;
+                        Some(Type::Data(_) | Type::PtyResize(_)) => {
+                            let _ = server_msg_sender.send(msg);
+                        }
+                        _ => {
+                            
                         }
                     }
                 }
-                info!("Message listening loop broken");
             });
-            
 
-            // Process output from the shell and send back to the ipc listener
-            while let Some(data) = output_rx.recv().await {
-                let msg = Msg {
-                    r#type: Some(Type::Data(crate::ipc::clientipc::msg::Data { payload: data })),
-                };
-                yield msg;
+            loop {
+                tokio::select!{
+                    msg = msg_receiver.recv() => {
+                        match msg {
+                            Ok(msg) => {
+                                yield msg;
+                            }
+                            Err(e) => {
+                                log::error!("ssh msg receiver error {}", e);
+                            }
+                        }
+                    },
+                    Ok(event) = event_receiver.recv() => {
+                        if let Some(clientipc::client_event::Kind::Close(e)) = event.kind {
+                            if e.id == session_id {break;}
+                        }
+                    }
+                }
             }
+            send_handle.abort();
+
             info!("Message sending loop broken");
         };
 
@@ -593,13 +619,20 @@ impl ClientIpc for ClientIpcHandler {
     }
 }
 
-
 #[cfg(unix)]
 pub async fn start_grpc_server(path_str: &str) {
-    let path = path_str.to_string();
-    let _ = std::fs::remove_file(path_str);
+    use std::{future::Future, time::Duration};
 
-    let uds_res = UnixListener::bind(&path);
+    use clientipc::{client_event::{self, CloseEvent}, client_event_service_server::ClientEventServiceServer};
+    use futures::{stream::FuturesUnordered, TryFutureExt};
+    use log::error;
+    use tokio::time;
+
+    let path = path_str.to_string();
+    let sock_path = format!("{}/sessio.sock", &path);
+    let _ = std::fs::remove_file(&sock_path);
+
+    let uds_res = UnixListener::bind(&sock_path);
     let Ok(uds) = uds_res else {
             info!("Is err {}", uds_res.err().unwrap());
             return;
@@ -607,17 +640,86 @@ pub async fn start_grpc_server(path_str: &str) {
     
     let uds_stream = UnixListenerStream::new(uds);
 
-    let greeter = ClientIpcHandler {
-        client: Arc::new(Mutex::new(Client::default()))
+    let client = Client::new(path_str.to_string()).await.unwrap();
+
+    let mut event_receiver = client.event_bus.subscribe().await;
+    let event_sender = client.event_bus.new_sender().await;
+
+    let client = Arc::new(Mutex::new(client));
+
+    let client_ipc_handler = ClientIpcHandler {
+        client: client.clone()
+    };
+
+    let client_events_handler = ClientEventsHandler {
+        client: client.clone()
     };
 
     info!("Starting grpc server!");
-    let res = Server::builder()
-        .add_service(ClientIpcServer::new(greeter))
-        .serve_with_incoming(uds_stream)
-        .await;
+    let grpc_future = Server::builder()
+        .add_service(ClientIpcServer::new(client_ipc_handler))
+        .add_service(ClientEventServiceServer::new(client_events_handler))
+        .serve_with_incoming(uds_stream);
 
-    info!("exited grpc server, is err {}", res.is_err());
+    let event_listener_future = async {
+        while let Ok(event) = event_receiver.recv().await {
+            let mut client = client.lock().await;
+            let _ = client.handle_event(&event).await;
+        }
+        Ok(()) as Result<(), Box<dyn std::error::Error>>
+    };
+
+    let conn_listener_future = async {
+
+        let mut check_interval = time::interval(Duration::from_secs(5));
+        
+        loop {
+            check_interval.tick().await;
+            let mut client = client.lock().await;
+            
+            let mut keys_to_remove: Vec<String> = vec![];
+            let conns = &mut client.connections;
+            for (device_id,conn) in conns.iter() {
+                if let Some(close_reason) = conn.close_reason() {
+                    let _ = event_sender.send(ClientEvent {
+                        kind: Some(client_event::Kind::Close(CloseEvent {
+                            stream_type: client_event::StreamType::Transport.into(),
+                            close_reason: format!{"Transport closed {}", close_reason.to_string()},
+                            id: device_id.clone()
+                        }))
+                    });
+                    keys_to_remove.push(device_id.clone());
+                }
+            }
+            for key in keys_to_remove {
+                conns.remove(&key);
+            }
+            if let Some(coordinator) = client.coordinator.as_mut()  {
+                if let Some(_) = coordinator.c_client.is_closed() {
+                    _ = coordinator.reconnect().await;
+                }
+            };
+        }
+
+
+        Ok(()) as Result<(), Box<dyn std::error::Error>>
+    };
+
+    let (grpc_result, event_result, _) = tokio::join!(
+        grpc_future,
+        event_listener_future,
+        conn_listener_future
+    );
+
+    if let Err(e) = grpc_result {
+        error!("gRPC server encountered an error: {:?}", e);
+    }
+
+    if let Err(e) = event_result {
+        error!("Event listener encountered an error: {:?}", e);
+    }
+
+    info!("exited grpc server");
 }
 
 #[cfg(windows)]

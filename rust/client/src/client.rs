@@ -3,6 +3,9 @@
 use chrono::Utc;
 use clap::Parser;
 use client::Msg;
+use common::utils::events::EventBus;
+use common::utils::map_ipv4_to_ipv6;
+use coordinator::holepuncher::HolepunchService;
 use russh::client::Handle;
 use key::KeyPair;
 use quinn::{ClientConfig, Connection, Endpoint, EndpointConfig, VarInt};
@@ -10,6 +13,10 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use serde_json::{json, Value};
 use ssh_key::known_hosts;
 use tokio::fs::File;
+
+use tokio::net::unix::pipe::Receiver;
+use tokio::sync::broadcast::Sender;
+
 use tokio::sync::oneshot::channel;
 use uuid::Uuid;
 use std::collections::HashMap;
@@ -21,13 +28,16 @@ use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufRea
 
 use quinn_proto::crypto::rustls::QuicClientConfig;
 
+use crate::ipc::clientipc::client_event::{self, CloseEvent, StreamType};
+use crate::ipc::{self, clientipc};
 use crate::ipc::clientipc::session_data::{Kind as SessionKind, PtySession};
-use crate::ipc::clientipc::SessionData;
+use crate::ipc::clientipc::{Settings};
+use crate::ipc::clientipc::{ClientEvent, SessionData, client_event::ServerMigrateEvent};
 #[cfg(not(windows))]
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(windows)]
 use tokio::signal::windows::ctrl_c;
-use crate::ipc::clientipc::msg::Type;
+use crate::ipc::clientipc::msg::{Data, PtyRequest, Type};
 
 use url::Url;
 
@@ -38,16 +48,15 @@ use russh_keys::*;
 
 use async_trait::async_trait;
 
-
 use std::env;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use bytes::Bytes;
 use anyhow::{bail, Context, Result};
 use russh::*;
 use russh_keys::*;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::{task, time};
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use futures::{select, stream};
@@ -57,14 +66,25 @@ use crossterm::{
     event::{read, Event, KeyCode},
 };
 
-
-
 use coordinator::coordinator_client::CoordinatorClient;
 use common::utils::streams::BiStream;
 
+//Reusable channel where the listening end always takes the receiver
+
+pub struct ChannelBiStream {
+    //The client-bound message listener
+    pub client_messages: EventBus<clientipc::Msg>,
+    pub server_messages: EventBus<clientipc::Msg>
+}
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn, Level};
+
+#[derive(Clone)]
+struct PeerChangeMsg{
+    pub new_ip: SocketAddr,
+    pub old_ip: SocketAddr
+}
 
 #[derive(Parser, Debug)]
 #[clap(name = "client")]
@@ -139,13 +159,13 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
 
 
 /// Enables MTUD if supported by the operating system
-#[cfg(not(any(windows, os = "linux")))]
+#[cfg(unix)]
 pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
     quinn::TransportConfig::default()
 }
 
 /// Enables MTUD if supported by the operating system
-#[cfg(any(windows, os = "linux"))]
+#[cfg(windows)]
 pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
@@ -206,7 +226,9 @@ impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
         self.0.signature_verification_algorithms.supported_schemes()
     }
 }
-fn configure_client() -> Result<ClientConfig, Box<dyn Error>> {
+
+
+fn configure_client() -> Result<ClientConfig> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let mut client_config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(
         rustls::ClientConfig::builder()
@@ -216,20 +238,15 @@ fn configure_client() -> Result<ClientConfig, Box<dyn Error>> {
     )?));
 
     let mut transport_config = enable_mtud_if_supported();
-    transport_config.max_idle_timeout(Some(VarInt::from_u32(60_000).into()));
+    transport_config.max_idle_timeout(Some(VarInt::from_u32(10_000).into()));
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
     client_config.transport_config(Arc::new(transport_config));
 
     Ok(client_config)
 }
 
-/// Constructs a QUIC endpoint configured for use a client only.
-///
-/// ## Args
-///
-/// - server_certs: list of trusted certificates.
 #[allow(unused)]
-pub fn make_client_endpoint(socket: UdpSocket) -> Result<Endpoint, Box<dyn Error>> {
+pub fn make_client_endpoint(socket: UdpSocket) -> Result<Endpoint> {
     let client_cfg = configure_client()?;
 
     let runtime = quinn::default_runtime()
@@ -245,57 +262,123 @@ pub fn make_client_endpoint(socket: UdpSocket) -> Result<Endpoint, Box<dyn Error
     Ok(endpoint)
 }
 
-#[derive(Default)]
 pub struct Client {
     //Map of active connections
     pub connections: HashMap<String, Connection>,
     pub sessions: HashMap<String, Arc<Mutex<Session>>>,
-    pub data_folder_path: Option<PathBuf>
+    pub data_folder_path: PathBuf,
+    pub event_bus: EventBus<ClientEvent>,
+    //This is optional for the initial setting configuration
+    pub coordinator: Option<HolepunchService>,
+    pub endpoint: Endpoint
 }
 
-
 //The name "Session" is confusing, it's actually a SSH connection
+//Because russh does not support for creating a new stream for each channel,
+//we're using one channel per ssh connection here.
+//The ssh connections are still multiplexed through the same QUIC connection.
 pub struct Session {
     handle: Handle<ClientHandler>,
     pub id: String,
     pub server_id: String,
     pub username: String,
     pub data: SessionData,
-    pub channels: HashMap<ChannelId, Arc<Mutex<Channel<Msg>>>>,
-    pub sftp_session: Option<SftpSession>
+    ///Whether this session has a channel open
+    pub active: bool,
+
+    pub channel_stream: ChannelBiStream,
+    pub sftp_session: Option<SftpSession>,
+    pub event_sender: Sender<ClientEvent>
 }
 
 pub struct ClientHandler {
     connection: Connection,
     remote_addr: SocketAddr,
     server_id: String,
+    session_id: String,
+    event_tx: Sender<ClientEvent>,
     known_hosts_path: PathBuf
 }
 
 impl Client {
-
-    pub fn set_data_folder(&mut self, path: PathBuf) {
-        self.data_folder_path = Option::from(path);
+    pub fn check_coordinator_enabled(&self) -> bool {
+        self.coordinator.is_some()
     }
 
-    pub async fn get_settings_file(&self) -> Result<File> {
+    pub async fn init_coordinator(&mut self) -> Result<()> {
+        let data_folder_path = self.data_folder_path.clone();
+        let settings = Client::get_json_as::<Settings>(Client::get_settings_file(&data_folder_path).await?)
+        .await?;
+
+        let coord_url = Url::parse(&settings.coordinator_url)?;
+
+        let ipv6 = CoordinatorClient::get_new_external_ipv6(self.endpoint.local_addr().unwrap().port()).await;
+
+        let key_pair = Client::get_keypair(&data_folder_path)?;
+        
+        self.coordinator = HolepunchService::new(coord_url, self.endpoint.clone(), key_pair, ipv6,
+    settings.device_id).await.ok();
+
+        Ok(())
+    }
+
+    pub async fn handle_event(&mut self, event: &ClientEvent) -> Result<()>{
+        match &event.kind {
+            Some(client_event::Kind::Close(close_event)) => {
+                match close_event.stream_type() {
+                    StreamType::Channel | StreamType::Session => {
+                        if let Some(session) = self.sessions.remove(&close_event.id) {
+                            let mut session = session.lock().await;
+                            session.active = false;
+                        }
+                    }
+                    StreamType::Transport => {
+                        //QUIC connection closed
+                        bail!("Quic connection closed!");
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub async fn new(data_folder_path: String) -> Result<Self> {
+        log::info!("Loading settings from {}", data_folder_path);
+        let data_folder_path = PathBuf::from(data_folder_path);
+        let udp_socket = UdpSocket::bind("[::]:0").await?;
+        let endpoint = make_client_endpoint(udp_socket)?;
+
+        let mut client = Client {
+            data_folder_path: data_folder_path,
+            connections: HashMap::default(),
+            endpoint: endpoint,
+            sessions: HashMap::default(),
+            event_bus: EventBus::default(),
+            coordinator: None
+        };
+
+        client.init_coordinator();
+
+        Ok(client)
+    }
+
+    pub async fn get_settings_file(path: &Path) -> Result<File> {
         let mut f = File::options()
         .read(true)
         .write(true)
         .create(true)
-        .open(self.data_folder_path.as_ref()
-            .context("Data folder not set")?
+        .open(path
             .join("settings.json")).await?;
         Ok(f)
     }
 
-    pub async fn get_save_file(&self) -> Result<File> {
+    pub async fn get_save_file(path: &Path) -> Result<File> {
         let mut f = File::options()
         .read(true)
         .write(true)
         .create(true)
-        .open(self.data_folder_path.as_ref()
-            .context("Data folder not set")?
+        .open(path
             .join("save.json")).await?;
         
         Ok(f)
@@ -375,44 +458,8 @@ impl Client {
         Ok(old_value)
     }
 
-    async fn connection_update_task(mut c_client: CoordinatorClient){
-        let mut update_interval = time::interval(Duration::from_secs(2));
-        loop {
-            tokio::select! {
-                _ = update_interval.tick() => {
-                    let ext_ipv6 = CoordinatorClient::get_new_external_ipv6(c_client.borrow_endpoint().
-                local_addr().unwrap().port()).await;
-                    let _ = c_client.update_external_ip(ext_ipv6.clone()).await;
-                    match ext_ipv6 {
-                        Some(ip) => {
-                            info!("Updated external ipv6 to {}", ip);
-                        }
-                        None =>{
-                            info!("Updated external ipv6 to None");
-                        }
-                    }
-                   
-                }
-                response = c_client.read_response::<HashMap<String, String>>() => {
-                    let response = response.unwrap();
-                    match response.get("id").map(String::as_str) {
-                        Some("PEER_IP_CHANGED") => {
-                            //Server ip has changed
-                            //Just sending a packet to the client for the mappings
-
-                            //todo: Create a periodic timer for client to send update packet, and listen for ip changes from server
-                            let new_ip: SocketAddr = response.get("new_ip").unwrap().parse().unwrap();
-                            let _ = c_client.borrow_endpoint().connect(new_ip, "client");
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-    }
-
     //Create a new connection and on success return the its ID
-    pub async fn new_connection(&mut self, target_id: String, coordinator: Url, ipv6: Option<Ipv6Addr>) -> anyhow::Result<()> {
+    pub async fn new_connection(&mut self, target_id: String) -> anyhow::Result<()> {
         if let Some(conn) = self.connections.get_mut(&target_id) {
             if let None = conn.close_reason() {
                 //Connection is still open, reusing the old one
@@ -420,30 +467,13 @@ impl Client {
                 return Ok(());
             }
         }
-
-        //let sock_v4 = UdpSocket::bind::<SocketAddr>("0.0.0.0:0".parse().unwrap()).await.unwrap();
-        let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap()).await.unwrap();
-
-        let endpoint_v6 = make_client_endpoint(sock_v6).unwrap();
-
         let start_time = Utc::now();
 
-        let mut c_client = loop {
-            //Add id verification
-            match CoordinatorClient::connect(coordinator.clone(), Uuid::new_v4().to_string(), endpoint_v6.clone()).await {
-                Ok(client) => break client,
-                Err(e) => {
-                    info!("Failed to connect to coordination server {}\nRetrying in 5 seconds..", e);
-                    time::sleep(Duration::from_secs(5)).await;
-                }
-            }
+        let Some(coordinator) = self.coordinator.as_mut() else {
+            bail!("Coordinator not initialized!");
         };
 
-        let conn = attempt_holepunch(&mut c_client, target_id.clone(), coordinator, endpoint_v6).await?;
-
-        tokio::spawn(async move {
-            Client::connection_update_task(c_client).await;
-        });
+        let conn = coordinator.attempt_holepunch(target_id.clone()).await?;
 
         let end_time = Utc::now();
         let elapsed_time = end_time - start_time;
@@ -454,6 +484,16 @@ impl Client {
         Ok(())
     }
 
+    pub fn get_keypair(path: &Path) -> Result<KeyPair> {
+        let private_key_path = path.join("keys/id_ed25519");
+        let res = load_secret_key(private_key_path, None)?;
+        Ok(res)
+    }
+
+    pub fn session_exists(&self, session_id: &str) -> bool {
+        self.sessions.contains_key(session_id) 
+    }
+
     pub async fn new_session<T>(
         &mut self,
         target_id: String,
@@ -462,24 +502,22 @@ impl Client {
         session_id: Option<String>,
         private_key_path: T,
         known_hosts_path: T
-    )  -> anyhow::Result<(String)> where T: AsRef<Path> {
+    )  -> anyhow::Result<String> where T: AsRef<Path> {
 
-        let data_folder = self.data_folder_path.as_ref().context("Data folder not set")?;
-        let private_key_path = data_folder.join("keys/id_ed25519");
-        let known_hosts_path = data_folder.join("keys/known_hosts");
+        let known_hosts_path = self.data_folder_path.join("keys/known_hosts");
 
-        let res = load_secret_key(private_key_path, None);
-        //Supports RSA since russh 0.44-beta.1
-        let Ok(key_pair) = res else {
-             bail!("Failed to load key at! {}", res.err().unwrap().to_string());
-        };
+        let key_pair = Client::get_keypair(&self.data_folder_path)?;
 
-        //Reusing the same session
-/*         if(self.sessions.contains_key(&username)) {
-            log::info!("Reusing session {}", username);
-            return Ok(());
+        if let Some(session_id) = &session_id {
+            if let Some(session) = self.sessions.get(session_id) {
+                let session = session.lock().await;
+                if session.active {
+                    log::info!("Reusing session {}", session_id);
+                    return Ok(session_id.clone());
+                }
+            }
         }
- */
+
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(60 * 60)),
             ..<_>::default()
@@ -500,18 +538,25 @@ impl Client {
             .open_bi()
             .await
             .map_err(|e| format!("failed to open stream: {}", e)).unwrap();
-
         
         let bi_stream = BiStream {recv_stream: recv, send_stream: send};
+
+        let id = if session_id.is_none() {
+            Uuid::new_v4().to_string()
+        } else {
+            session_id.unwrap()
+        };
 
         let session_handler = ClientHandler {
             remote_addr: connection.remote_address(),
             server_id: target_id.clone(),
             connection: connection.clone(),
-            known_hosts_path: known_hosts_path.to_path_buf()
+            known_hosts_path: known_hosts_path.to_path_buf(),
+            event_tx: self.event_bus.new_sender().await,
+            session_id: id.clone()
         };
 
-        let mut handle = russh::client::connect_stream(config, bi_stream, session_handler).await?;
+        let (mut handle, mut migrate_tx) = russh::client::connect_stream(config, Box::new(bi_stream), session_handler).await?;
 
         //let signal_thread = create_signal_thread();
 
@@ -525,19 +570,20 @@ impl Client {
         if !auth_res {
             anyhow::bail!("Authentication (with publickey) failed");
         }
-        let id = if session_id.is_none() {
-            Uuid::new_v4().to_string()
-        } else {
-            session_id.unwrap()
-        };
+
         let session = Session {
             id: id.clone(),
             username: username,
             server_id: target_id.to_string(),
             data: data.clone(),
             handle,
-            channels: HashMap::new(),
-            sftp_session: None
+            channel_stream: ChannelBiStream {
+                client_messages: EventBus::default(),
+                server_messages: EventBus::default()
+            },
+            sftp_session: None,
+            active: false,
+            event_sender: self.event_bus.new_sender().await
         };
       
         self.sessions.insert(id.clone(), Arc::new(Mutex::new(session)));
@@ -563,7 +609,7 @@ impl russh::client::Handler for ClientHandler {
         let is_known_res = russh_keys::check_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path);
 
         if let Ok(known) = is_known_res {
-            if(!known){
+            if !known {
                 info!("Learned new host {}:{}", host, port);
                 russh_keys::learn_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path)?;
             }
@@ -572,9 +618,11 @@ impl russh::client::Handler for ClientHandler {
             match e {
                 russh_keys::Error::KeyChanged {line} => {
                     error!("Key changed at line: {}", line);
+                    return Ok(false);
                 }
                 _ => {
                     error!("Unknown error: {}", e.to_string());
+                    return Ok(false);
                 }
             }
         }
@@ -605,52 +653,14 @@ impl russh::client::Handler for ClientHandler {
     } */
 }
 
-
-async fn attempt_holepunch(client: &mut CoordinatorClient, target: String, coordinator: Url, 
-    mut endpoint: Endpoint,
-) -> io::Result<Connection> {
-
-    let ipv6 = CoordinatorClient::get_new_external_ipv6(endpoint.local_addr()?.port()).await;
-    let _ = client.register_endpoint(ipv6).await;
-    let _ = client.connect_to(target).await;
-
-    loop {
-        info!("Waiting for server to connect.");
-        let response = client.read_response::<HashMap<String, String>>().await.unwrap();
-        match response.get("id").map(String::as_str) {
-            Some("CONNECT_TO") => {
-                let target: SocketAddr = response.get("target").unwrap().parse().unwrap();
-                let target_id = response.get("target_id").unwrap();
-
-                match endpoint.connect(target, "server").unwrap().await {
-                    Ok(conn) => {
-                        let _ = client.send_packet(&json!({"id":"CONNECT_OK", "target_id":target_id})).await;
-                        return Ok(conn);
-                    }
-                    Err(e) => {
-                        info!("Connection failed: {}", e);
-                    }
-                }
-            }
-            _ => {
-
-            }
-        }
-
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-    }
-}
-
-
 impl Session {
 
-
-    //This is not optimal as it blocks the whole session
     pub async fn direct_tcpip_forward(&mut self, local_host: &str, local_port: u32, remote_host: &str, remote_port: u32) -> Result<()>{
         let listener = TcpListener::bind((local_host, local_port as u16)).await?;
 
         let remote_host = remote_host.to_string();
 
+        self.active = true;
         loop {
             let (mut stream, addr) = listener.accept().await?;
 
@@ -670,8 +680,8 @@ impl Session {
         }
     }
 
+    //We will have to do this separetely here because Channel::into_stream() consumes the channel
     pub async fn request_sftp(&mut self) -> Result<ChannelId> {
-
         let mut channel = self.handle.channel_open_session().await?;
         info!("Channel opened!");
 
@@ -679,6 +689,7 @@ impl Session {
         channel.request_subsystem(true, "sftp").await?;
         info!("Subsystem requested!");
 
+        self.active = true;
         let sftp = SftpSession::new(channel.into_stream()).await?;
         info!("session created!");
 
@@ -686,108 +697,98 @@ impl Session {
 
         Ok(channel_id)
     }
-
-    pub async fn request_shell(
-        channel_guard: Arc<Mutex<Channel<Msg>>>,
-        mut input_rx: Arc<Mutex<mpsc::Receiver<crate::ipc::clientipc::Msg>>>,
-        output_tx: Arc<Mutex<mpsc::Sender<Vec<u8>>>>,
-    ) -> Result<u32> {
-
-        //Todo make this accept proto messages
-        let mut channel = channel_guard.lock().await;
-
-        let _ = channel.request_shell(false).await;
-
-        let code;
-
-        let mut stdin_closed = false;
-
-        let mut input = input_rx.lock().await;
-
-        loop {
-            tokio::select! {
-                Some(input_msg) = input.recv(), if !stdin_closed => {
-                    match input_msg.r#type {
-                        Some(Type::Data(data)) => {
-                            //Sends the data to the shell stream
-                            info!("IPC: Forwarding data!");
-                            let payload: &[u8] = &data.payload;
-                            channel.data(payload).await;
-                        }
-                        Some(Type::PtyResize(req)) => {
-                            info!("IPC: Resizing PTY!");
-                            channel.window_change(req.col_width, req.row_height, 0, 0).await;
-                        }
-                        _ => {}
-                    }
-                },
-                Some(msg) = channel.wait() => {
-                    match msg {
-                        ChannelMsg::Data { ref data } => {
-                            output_tx.lock().await.send(data.to_vec()).await?;
-                        }
-                        ChannelMsg::ExitStatus { exit_status } => { 
-                            code = exit_status;
-                            if !stdin_closed {
-                                channel.eof().await?;
-                            }
-                            break;
-                        }
-                        _ => {}
-                    }
-                },
-            }
-        }
-        Ok(code)
-    }
     
-    pub async fn new_channel(&mut self) -> Result<ChannelId> {
-        let channel = self.handle.channel_open_session().await?;
-        let channel_id = channel.id();
+    pub async fn new_session_channel(&mut self) -> Result<()> {
+        let mut channel = self.handle.channel_open_session().await?;
 
-        info!("OPENING SESSION {}", channel.id());
+        let mut server_receiver = self.channel_stream.server_messages.subscribe().await;
 
-        self.channels.insert(channel.id(), Arc::new(Mutex::new(channel)));
-
-        Ok(channel_id)
-    }
-
-    pub async fn resize_pty(&mut self, channel_id: &ChannelId, col_width: u32, row_height: u32) -> Result<()>{
-        let channel_guard = self.channels.get(&channel_id).unwrap();
-        let mut channel = channel_guard.lock().await;
-
-        channel
-            .window_change(
-                col_width ,
-                row_height,
-                0,
-                0,
-            )
-            .await?;
+        let client_sender = self.channel_stream.client_messages.new_sender().await;
         
-        info!("PTY Requested!");
-        Ok(())
-    }
-
-    pub async fn request_pty(&mut self, channel_id: &ChannelId, col_width: u32, row_height: u32) -> Result<()>{
-        let channel_guard = self.channels.get(&channel_id).unwrap();
-        let mut channel = channel_guard.lock().await;
-
-        let session = Arc::new(&self);
-
-        channel
-            .request_pty(
-                false,
-                &env::var("TERM").unwrap_or("xterm".into()),
-                col_width ,
-                row_height,
-                0,
-                0,
-                &[], 
-            )
-            .await?;
+        self.active = true;
+        let event_sender = self.event_sender.clone();
+        let channel_id = self.id.clone();
         
-        info!("PTY Requested!");
+        let server_id = self.server_id.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    Ok(msg) = server_receiver.recv() => {
+                        match msg.r#type {
+                            Some(Type::Data(data)) => {
+                                let payload: &[u8] = &data.payload;
+                                if let Err(e) = channel.data(payload).await {
+                                    let _ = event_sender.send(ClientEvent {
+                                        kind: Some(client_event::Kind::Close(CloseEvent {
+                                            stream_type: client_event::StreamType::Session.into(),
+                                            close_reason: format!{"{}", e},
+                                            id: channel_id
+                                        }))
+                                    });
+                                    break;
+                                }
+                            }
+                            Some(Type::ShellRequest(_)) => {
+                                //This will start the PTY data stream from server to client
+                                let _ = channel.request_shell(false).await;
+                            }
+                            Some(Type::PtyRequest(req)) => {
+                                let _ = channel
+                                .request_pty(
+                                    false,
+                                    &env::var("TERM").unwrap_or("xterm".into()),
+                                    req.col_width ,
+                                    req.row_height,
+                                    0,
+                                    0,
+                                    &[], 
+                                )
+                                .await;
+                            }
+                            Some(Type::PtyResize(req)) => {
+                                let _ = channel.window_change(req.col_width, req.row_height, 0, 0).await;
+                            }
+                            Some(_) => {}
+                            None => {}
+                        }
+                    },
+                    msg = channel.wait() => {
+                        match msg {
+                            Some(ChannelMsg::Data { ref data }) => {
+                                client_sender.send(clientipc::Msg { r#type: Some(Type::Data(Data {
+                                    payload: data.to_vec()
+                                })) });
+                            }
+                            Some(ChannelMsg::ExitStatus { exit_status }) => {
+                                info!("Channel received exit! {:?}", exit_status);
+                                let _ = event_sender.send(ClientEvent {
+                                    kind: Some(client_event::Kind::Close(CloseEvent {
+                                        stream_type: client_event::StreamType::Channel.into(),
+                                        close_reason: format!{"{}", exit_status},
+                                        id: channel_id
+                                    }))
+                                });
+                                channel.eof().await;
+                                break;
+                            }
+                            None => {
+                                //This is usually called when timeout happens
+                                let _ = event_sender.send(ClientEvent {
+                                    kind: Some(client_event::Kind::Close(CloseEvent {
+                                        stream_type: client_event::StreamType::Channel.into(),
+                                        close_reason: "Channel closed".into(),
+                                        id: channel_id
+                                    }))
+                                });
+                                channel.eof().await;
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        });
         Ok(())
     }
 

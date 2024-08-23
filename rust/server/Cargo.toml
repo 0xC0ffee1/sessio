@@ -7,10 +7,10 @@ edition = "2021"
 common = { path = "../common" }
 coordinator = { path = "../coordinator" }
 tokio = { version = "1.0", features = ["full"] }
-quinn = "0.11.3"
+quinn = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn" }
 tokio-util = { version = "0.6", features = ["io"] }
-russh = "0.44.0"
-russh-keys = "0.44.0"
+russh = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh" }
+russh-keys = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh-keys" }
 async-trait = "0.1.80"
 env_logger = "0.10"
 anyhow = "1.0.86"

@@ -1,11 +1,52 @@
 use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::io::{Read, Write};
+use std::path::Path;
+use std::io::Write;
+use anyhow::Context;
+use russh_keys::key::PublicKey;
 use ssh_key::{Algorithm, LineEnding, PrivateKey};
-use tokio::io;
+use tokio::io::{self, AsyncReadExt};
 use log::info;
 use rand::rngs::OsRng;
 
+pub async fn read_authorized_keys(user: Option<&str>) -> anyhow::Result<Vec<PublicKey>> {
+
+    let path = if let Some(user) = user {
+        homedir::home(user)?
+    } else {
+        homedir::my_home()?
+    }.with_context(|| format!("Home directory not found for user"))?
+    .join(".sessio/authorized_keys");
+
+    if !path.exists() {
+        // Create the file and its parent directories if they don't exist
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        
+        tokio::fs::File::create(&path).await?;
+    }
+
+    let mut file = tokio::fs::File::open(&path).await?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).await?;
+
+    let mut keys = Vec::new();
+
+    for line in contents.lines() {
+        let mut split = line.split_whitespace();
+        
+        split.next();
+
+        if let Ok(public_key) = russh_keys::parse_public_key_base64(split.next().unwrap()) {
+            keys.push(public_key);
+        }
+        else {
+            anyhow::bail!("Failed to read authorized public key {}", line)
+        }
+    }
+
+    Ok(keys)
+}
 
 pub fn generate_keypair<P: AsRef<Path>>(path: P, algorithm: Algorithm, file_name: &str) -> io::Result<()> {
     let path = path.as_ref();

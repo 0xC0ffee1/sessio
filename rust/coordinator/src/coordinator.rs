@@ -1,30 +1,28 @@
 use std::path::PathBuf;
-use std::time::Duration;
-use std::{collections::HashMap, default};
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::str;
-use log::{error, info};
-use rustls::crypto::CryptoProvider;
+
+use common::utils::events::EventBus;
+
+use log::{error, info, warn};
+
+use russh_keys::key::{PublicKey, Signature};
+
 use tokio::fs;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::{io, sync::Mutex};
+use tokio::sync::broadcast::{Receiver, Sender};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
-use std::net::{Ipv4Addr, SocketAddr};
-use clap::Parser;
-use quinn::{crypto, Endpoint, ServerConfig, VarInt};
+use std::net::SocketAddr;
+
+use quinn::{crypto, Connection, Endpoint, ServerConfig, VarInt};
 
 use quinn_proto::crypto::rustls::QuicServerConfig;
 
-use anyhow::{Context, Error};
-use serde::Deserialize;
+use anyhow::{bail, Context, Result};
 
-use serde_json::{json, Value};
-use anyhow::{anyhow, Result};
-use common::utils::streams::BiStream;
+use crate::common::*;
 
-
-use uuid::{uuid, Uuid};
+use uuid::Uuid;
 
 use crate::Opt;
 
@@ -34,7 +32,7 @@ async fn configure_server(key_path: &PathBuf, cert_path: &PathBuf) -> Result<Ser
 
     let (certs, key) = get_certs(key_path, cert_path).await?;
 
-    let mut server_crypto = rustls::ServerConfig::builder()
+    let server_crypto = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)?;
 
@@ -44,7 +42,8 @@ async fn configure_server(key_path: &PathBuf, cert_path: &PathBuf) -> Result<Ser
     transport_config.max_concurrent_uni_streams(0_u8.into());
     transport_config.max_idle_timeout(Some(VarInt::from_u32(60_000).into()));
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(1)));
-    #[cfg(any(windows, os = "linux"))]
+
+    #[cfg(windows)]
     transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
 
     Ok(server_config)
@@ -71,8 +70,6 @@ async fn get_certs<'a>(key_path: &PathBuf, cert_path: &PathBuf) -> Result<(Vec<C
     Ok((cert_chain, key))
 }
 
-
-
 #[tokio::main]
 pub async fn run(options: Opt) {
     let mut builder = env_logger::Builder::from_default_env();
@@ -90,399 +87,444 @@ pub async fn run(options: Opt) {
     let mut sh = Server::default();
 
     println!("Started!");
-    sh.run_quic(&endpoint).await.unwrap();
+    sh.run(&endpoint).await.unwrap();
+}
+
+
+#[derive(Default)]
+struct Server {
+    sessions: HashMap<String, Session>,
+    clients: HashMap<String, Client>,
+    event_bus: EventBus<ServerPacket>,
 }
 
 struct Session {
     //Server initiates a new session
-    server: Arc<Client>,
-    client: Option<Arc<Client>>,
+    server_id: String,
+    client_id: String,
     using_ipv6: bool
 }
 
 struct Client {
-    stream: Arc<ClientStream>,
-
-    //Set once client has registered
-    id: Mutex<Option<String>>,
-
-    //Set once clients initiates or joins a session
-    session_id: Mutex<Option<String>>,
-
-    ipv6: Mutex<Option<SocketAddr>>
+    conn: Connection,
+    auth_token: String,
+    stream: Sender<Packet>,
+    id: String,
+    session_ids: Vec<String>,
+    ///Current ipv6
+    ipv6: Option<SocketAddr>,
+    ///Current ipv4
+    ipv4: SocketAddr
 }
 
-struct ClientStream {
-    addr: SocketAddr,
-    recv_stream: Mutex<quinn::RecvStream>,
-    send_stream: Mutex<quinn::SendStream>,
-}
+impl Server {
 
-impl ClientStream {
-
-    pub async fn send_packet<T>(&self, packet: &T) -> Result<(), anyhow::Error>
-    where
-        T: serde::Serialize,
-    {
-        let serialized_packet = serde_json::to_string(packet)
-            .map_err(|e| anyhow!("failed to serialize packet: {}", e))?;
-
-        let mut send_stream = self.send_stream.lock().await;
-
-        let message_length = serialized_packet.len() as u32;
-        let mut buffer = Vec::new();
-        buffer.extend(&message_length.to_be_bytes());
-        buffer.extend(serialized_packet.as_bytes());
-
-        send_stream.write_all(&buffer)
-            .await
-            .map_err(|e| anyhow!("failed to send request: {}", e))?;
-
-        Ok(())
-    }
-
-    pub async fn read_response<T>(&self) -> Result<T>
-    where
-        T: serde::de::DeserializeOwned,
-    {
-        let mut buf = Vec::new();
-        let mut read_buf = [0; 1024];
-
-        let mut recv_stream = self.recv_stream.lock().await;
-
-        loop {
-            let n = match recv_stream.read(&mut read_buf).await? {
-                Some(n) if n > 0 => n,
-                Some(_) | None => break, // EOF or stream closed
-            };
-            buf.extend_from_slice(&read_buf[..n]);
-
-            match serde_json::from_slice::<Value>(&buf) {
-                Ok(value) => {
-                    info!("Received {}", value.to_string());
-                    let result = serde_json::from_value::<T>(value)
-                        .map_err(|e| anyhow!("Failed to parse JSON: {}", e))?;
-                    return Ok(result);
-                }
-                Err(e) if e.is_eof() => {
-                    // Incomplete data, continue reading
-                    continue;
-                }
-                Err(e) => {
-                    return Err(anyhow!("Failed to parse JSON: {}", e));
+    //receiver = receive packets to be sent
+    //sender = forwards the received packets to the other parts of the server
+    //stream = bidirectional communication stream to transport packets
+    fn client_communication_task(mut stream: ClientStream, mut receiver: Receiver<Packet>, sender: Sender<ServerPacket>){
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    Ok(packet) = receiver.recv() => {
+                        if let Err(e) = stream.send_packet::<Packet>(&packet).await {
+                            log::error!("Can't send packet to stream! {}", e);
+                            break;
+                        };
+                    },
+                    //Server-bound packet
+                    Ok(packet) = stream.read_response::<ServerPacket>() => {
+                        if let Err(e) = sender.send(packet) {
+                            log::error!("Can't broadcast packet! {}", e);
+                            break;
+                        }
+                    }
                 }
             }
-        }
-
-        Err(anyhow!("No matching response received"))
+        });
     }
 
-}
-
-#[derive(Clone)]
-
-#[derive(Default)]
-struct Server {
-    sessions: Arc<Mutex<HashMap<String, Session>>>,
-    clients: Arc<Mutex<HashMap<String, Arc<Client>>>>,
-}
-
-fn read_packet_field<'a>(field: &str, packet: &'a HashMap<String, String>) -> Option<&'a String> {
-    let value = packet.get(field);
-    if value.is_none() {
-        error!("Field '{}' not found in packet", field);
-    }
-    value
-}
-
-
-async fn close_client_connection(connection: quinn::Connection, client: Arc<Client>, sessions: Arc<Mutex<HashMap<String, Session>>>){
-    if let Err(f_e) = client.stream.send_stream.lock().await.finish() {
-        error!("Failed to close stream {}! Closing connection.", f_e);
-        connection.close(0u32.into(), b"Closing connection");
-    }
-}
-
-
-async fn handle_connection(connection: quinn::Connection, 
-    clients: Arc<Mutex<HashMap<String, Arc<Client>>>>, 
-    sessions: Arc<Mutex<HashMap<String, Session>>>
-) {
-    let (mut quinn_send, mut quinn_recv) = match connection.accept_bi().await {
-        Ok(stream) => stream,
-        Err(e) => {
-            error!("[server] open quic stream error: {}", e);
-            return;
-        }
-    };
-
-    let mut conn = Arc::new(ClientStream {
-        addr: connection.remote_address(),
-        send_stream: Mutex::new(quinn_send),
-        recv_stream: Mutex::new(quinn_recv),
-    });
-
-    let mut client = Arc::new(Client {
-        stream: conn.clone(),
-        id: Mutex::new(None),
-        session_id: Mutex::new(None),
-        ipv6: Mutex::new(None)
-    });
-
-    loop {
-        let packet = match conn.read_response::<HashMap<String, String>>().await {
-            Ok(packet) => packet,
+    async fn accept_connections(endpoint: &Endpoint) -> Result<Connection>{
+        info!("Waiting for connections..");
+        let incoming_conn = match endpoint.accept().await {
+            Some(conn) => conn,
+            None => {
+                bail!("None received");
+            }
+        };
+        let conn = match incoming_conn.await {
+            Ok(conn) => conn,
             Err(e) => {
-                error!("Failed to read packet. Closing connection to {}. {}", client.id.lock().await.clone().unwrap_or("Unconnected".to_string()), e);
-                close_client_connection(connection, client, sessions).await;
-                break;
+                bail!("Failed to accept conn: {}", e);
             }
         };
 
-        let response = match packet.get("id").map(String::as_str) {
-            Some("REGISTER") => {
-                let client_addr = connection.remote_address();
-                
-                let Some(own_id) = read_packet_field("own_id", &packet) else {
-                    continue;
-                };
+        let sni = conn
+            .handshake_data()
+            .unwrap()
+            .downcast::<crypto::rustls::HandshakeData>()
+            .unwrap()
+            .server_name
+            .unwrap_or(conn.remote_address().ip().to_string());
 
-                let mut client_id_guard = client.session_id.lock().await;
+        info!(
+            "[Coordination Server] Connection accepted: ({}, {})",
+            conn.remote_address(),
+            sni);
 
-                *client_id_guard = Some(own_id.clone());
-                
-                //Checking if the client supports ipv6
-                if let Some(ipv6) = read_packet_field("ipv6", &packet) {
-                    if ipv6 != "None" {
-                        let mut client_ipv6_guard = client.ipv6.lock().await;
-       
-                        info!("Parsing {}", ipv6);
-                        *client_ipv6_guard = Some(ipv6.parse().unwrap());
-                    }
-                };
+        Ok(conn)
+    }
 
-                //let mut clients = clients.lock().await;
+    async fn authorize_take_client(&mut self, packet: &PacketBase) -> Result<Client> {
+        //Todo: implement token check
+        let client = self.clients.remove(&packet.own_id).context("Client not found")?;
 
-                //clients.insert(own_id.to_string(), client.clone());
-                json!({"status": "200"})                                                                                                            
-            }
-            Some("NEW_SESSION") => {
-                //Sent by server
-                let Some(own_id) = read_packet_field("own_id", &packet) else {
-                    continue;
-                };
+        if packet.token != client.auth_token {
+            bail!("Token mismatch!");
+        }
 
-                let mut sessions = sessions.lock().await;
+        Ok(client)
+    }
 
-                //Initially there's no client connected
-                sessions.insert(own_id.to_string(), Session {
-                    server: client.clone(), //self
-                    client: None,
-                    using_ipv6: false,
-                });
-                json!({"status": "200"})
-            }
-            Some("UPDATE_IP") => {
-                let Some(own_id) = read_packet_field("own_id", &packet) else {
-                    continue;
-                };
+    //QUIC by default prevents replay attacks so this should be fine
+    async fn check_publickey(&mut self, packet: &Auth) -> Result<bool> {
 
-                let Some(addr_ipv6_str) = read_packet_field("ipv6", &packet) else {
-                    continue;
-                };
+        let Ok(public_key) = russh_keys::parse_public_key_base64(&packet.public_key_base64) else {
+            bail!("Could not parse public key (base64)");
+        };
 
-                let addr_ipv6 = addr_ipv6_str.parse::<SocketAddr>().ok();
+        let keys: Vec<PublicKey> = common::utils::keygen::read_authorized_keys(None).await?;
 
-                let addr_ipv4 = connection.remote_address();
+        if !keys.contains(&public_key) {
+            warn!("Public key is not an authorized key! {}", packet.public_key_base64);
+            return Ok(false);
+        }
 
-                let mut clients = clients.lock().await;
-                //Damn
-                if let Some(client) = clients.get_mut(own_id) {
-                    if let Some(session_id) = client.session_id.lock().await.as_ref() {
-                        let mut sessions = sessions.lock().await;
-                        if let Some(session) = sessions.get_mut(session_id) {
-                            let change_packet;
-                            if session.using_ipv6 && addr_ipv6.is_none() {
-                                //Protocol change
-                                change_packet = json!({"id" : "PEER_IP_CHANGED", "peer_id": own_id, "new_ip" : addr_ipv4});
-                                session.using_ipv6 = false;
-                            }
-                            else if (!session.using_ipv6 && client.stream.addr != addr_ipv4) || 
-                                (session.using_ipv6 && addr_ipv6.is_some() && client.ipv6.lock().await.unwrap() != addr_ipv6.unwrap()) 
-                                {
-                                let addr = if session.using_ipv6 {
-                                    addr_ipv6.unwrap()
-                                } else {addr_ipv4};
+        let sig = Signature::from_base64(packet.signature.as_bytes())?;
 
-                                change_packet = json!({"id" : "PEER_IP_CHANGED", "peer_id": own_id, "new_ip" : addr});
-                            }
-                            else {
-                                continue;
-                            }
+        if public_key.verify_detached(packet.signed_data.as_bytes(), sig.as_ref()) {
+            info!("Signature is valid.");
+            Ok(true)
+        } else {
+            warn!("Signature verification failed.");
+            Ok(false)
+        }
+    }
 
-                            if session.client.as_ref().unwrap().id.lock().await.clone().unwrap() == own_id.to_string() {
-                                //Client
-                                let _ = session.server.stream.send_packet::<Value>(&change_packet).await;
-                            }
-                            else {
-                                //Server
-                                let _ = session.client.as_ref().unwrap().stream.send_packet::<Value>(&change_packet).await;
-                            }
+    async fn handle_packet(&mut self, mut client_self: Client, packet: ServerPacket) -> Result<(Packet, Client)> {
+        let packet = packet.packet;
+
+        let response = match packet {
+
+            Packet::UpdateIp(data) => {
+                let addr_ipv4_current = client_self.conn.remote_address();
+
+                let addr_ipv4_old = client_self.ipv4;
+                let addr_ipv6_old = client_self.ipv6;
+
+                let sessions = &mut self.sessions;
+                for session_id in client_self.session_ids.iter() {
+                    if let Some(session) = sessions.get_mut(session_id) {
+
+                        let is_client = client_self.id.clone() == session.client_id;
+
+                        let other_peer = if is_client {
+                            let server_id = session.server_id.clone();
+                            self.clients.get_mut(&server_id).context("UPDATE_IP: Server not present")?
+                        } else {
+                            let client_id = session.client_id.clone();
+                            self.clients.get_mut(&client_id).context("UPDATE_IP: Client not present")?
+                        };
+                        let other_ipv6_old = other_peer.ipv6;
+                        let other_ipv4_old = other_peer.ipv4;
+
+                        if session.using_ipv6 && data.ipv6.is_none() {
+                            //Protocol change: ipv6 -> ipv4
+                            _ = client_self.stream.send(Packet::PeerIpChanged(PeerIpChanged {
+                                peer_id: client_self.id.clone(),
+                                new_ip: other_ipv4_old.clone(),
+                                old_ip: addr_ipv6_old.unwrap()
+                            }));
+
+                            _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
+                                peer_id: client_self.id.clone(),
+                                new_ip: addr_ipv4_current,
+                                old_ip: data.ipv6.unwrap()
+                            }));
+
+                            session.using_ipv6 = false;
+                            client_self.ipv6 = None;
                         }
-                    }
-                }
+                        else if !session.using_ipv6 && data.ipv6.is_some() {
+                            //Protocol change: ipv4 -> ipv6
+                            if let Some(other_ipv6) = other_ipv6_old.as_ref() {
+                                _ = client_self.stream.send(Packet::PeerIpChanged(PeerIpChanged {
+                                    peer_id: client_self.id.clone(),
+                                    new_ip: other_ipv6.clone(),
+                                    old_ip: other_ipv4_old.clone()
+                                }));
 
-                json!({"status": "200"})
-            }
-            Some("CLIENT_CONNECTED") => {
-                //Sent by ssh client
-                let mut client_addr = connection.remote_address();
-                let Some(target_id) = read_packet_field("target_client_id", &packet) else {
-                    continue;
-                };
-                
-                let mut sessions = sessions.lock().await;
-                if let Some(session) = sessions.get_mut(target_id) {
-                    session.client = Some(client.clone());
+                                _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
+                                    peer_id: client_self.id.clone(),
+                                    new_ip: data.ipv6.unwrap(),
+                                    old_ip: addr_ipv4_old.clone()
+                                }));
 
-                    let mut session_id_guard = client.session_id.lock().await;
+                                session.using_ipv6 = true;
+                            }
+                            
+                        }
+                        else if session.using_ipv6 && addr_ipv6_old.unwrap() != data.ipv6.unwrap() {
+                            //This will just make the peer ping this new destination, creating the mappings
+                        
+                            _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
+                                peer_id: client_self.id.clone(),
+                                new_ip: data.ipv6.unwrap(),
+                                old_ip: addr_ipv6_old.unwrap().clone()
+                            }));
 
-                    *session_id_guard = Some(target_id.clone());
-                    
-                    //Check if both support ipv6
-                    if session.server.ipv6.lock().await.is_some() {
-                        // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
-                        if let Some(client_ipv6) = client.ipv6.lock().await.as_ref() {
-                            client_addr = client_ipv6.clone();
                             session.using_ipv6 = true;
                         }
+                        else if !session.using_ipv6 && addr_ipv4_old != addr_ipv4_current {
+                            _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
+                                peer_id: client_self.id.clone(),
+                                new_ip: addr_ipv4_current,
+                                old_ip: addr_ipv4_old
+                            }));
+                        }
+                        else {
+                            continue;
+                        }
+                    }
+                }
+                {
+                    //Updating the ips
+                    client_self.ipv4 = addr_ipv4_current;
+       
+                    client_self.ipv6 = data.ipv6;
+                }
+                
+                Packet::Status(Status {
+                    code: 200,
+                    msg: "Success".into()
+                })
+            }
+            Packet::NewSession(data) => {
+                //Sent by client
+
+                let target_id = &data.target_id;
+
+                let sessions = &mut self.sessions;
+                let mut client_addr = client_self.conn.remote_address();
+                if let Some(server) = self.clients.get_mut(target_id) {
+                    //Initially there's no client connected
+                    
+                    let mut using_ipv6 = false;
+                    if server.ipv6.is_some() {
+                        // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
+                        if let Some(client_ipv6) = client_self.ipv6.as_ref() {
+                            client_addr = client_ipv6.clone();
+                            using_ipv6 = true;
+                        }
                     }
 
-                    //Telling the server to send the first packet in the UDP hole punch process
-                    info!("Sending connect packet to server!");
-                    let _ = session.server.stream.send_packet::<Value>(&json!({"id" : "CONNECT_TO", "target" : client_addr})).await;
+                    sessions.insert(client_self.id.clone(), Session {
+                        server_id: server.id.clone(), //self
+                        client_id: client_self.id.clone(),
+                        using_ipv6: using_ipv6,
+                    });
 
-                    json!({"status": "200", "server" : session.server.stream.addr})
+                    client_self.session_ids.push(client_self.id.clone());
+                    server.session_ids.push(client_self.id.clone());
+
+                    info!("Sending connect packet to server!");
+                    let _ = server.stream.send(Packet::ConnectTo(ConnectTo {
+                        target: client_addr,
+                        target_id: client_self.id.clone()
+                    }));
+
+                    Packet::Status(Status {
+                        code: 200,
+                        msg: "Success".into()
+                    })
                 }
                 else {
-                    json!({"status": "404"})
+                    Packet::Status(Status {
+                        code: 404,
+                        msg: "Not found".into()
+                    })
                 }
             }
-            Some("SERVER_SENT_CONNECTION_REQUEST") => {
+            Packet::ServerConnectionRequest(data) => {
                 //Sent as a response from the server
-                let Some(own_id) = read_packet_field("own_id", &packet) else {
-                    continue;
-                };
-
-                let mut sessions = sessions.lock().await;
-                if let Some(session) = sessions.get_mut(own_id) {
+                let client_id = &data.client_id;
+     
+                let sessions = &mut self.sessions;
+                if let Some(session) = sessions.get_mut(client_id) {
                     //Telling the client to connect to the server as a "response" to complete the UDP hole punch
-                    let Some(client) = session.client.as_mut() else {
-                        error!("At SERVER_SENT_CONNECTION_REQUEST: Session has no associated client!");
-                        continue;
-                    };
+                    let client = self.clients.get_mut(&session.client_id)
+                    .context("SERVER_SENT_CONNECTION_REQUEST: Session client not present")?;
 
-                    let mut server_addr = connection.remote_address();
+                    let mut server_addr = client_self.ipv4;
 
                     //Check if both support ipv6
-                    if client.ipv6.lock().await.is_some() {
+                    if client.ipv6.is_some() {
                         // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
-                        server_addr = session.server.ipv6.lock().await.clone().unwrap_or(server_addr);
+                        server_addr = client_self.ipv6.clone().unwrap_or(server_addr);
                     }
-                    
-                    let _ = client.stream.send_packet::<Value>(&json!({"id" : "CONNECT_TO", "target" : server_addr, "target_id": own_id})).await;
-                    json!({"status": "200"})
+
+                    let _ = client.stream.send(Packet::ConnectTo(ConnectTo {
+                        target: server_addr,
+                        target_id: client.id.clone()
+                    }));
+
+                    Packet::Status(Status {
+                        code: 200,
+                        msg: "Success".into()
+                    })
                 }
                 else {
-                    json!({"status": "404"})
-                }
-            }
-            Some("CONNECT_OK") => {
-                let Some(target_id) = read_packet_field("target_id", &packet) else {
-                    continue;
-                };
-
-                let mut sessions = sessions.lock().await;
-                if let Some(session) = sessions.get_mut(target_id) {
-                    let _ = session.server.stream.send_packet::<Value>(&json!({"id" : "SESSION_FINISHED"})).await;
-
-                    let _ = session.server.stream.send_stream.lock().await.finish();
-                    sessions.remove(target_id);
-                    
-
-                    json!({"status": "200"})
-                }
-                else {
-                    json!({"status": "404"})
+                    Packet::Status(Status {
+                        code: 404,
+                        msg: "Session not found".into()
+                    })
                 }
             }
             _ => {
-                json!({"error": "Unknown command"})
+                Packet::Status(Status {
+                    code: 400,
+                    msg: "Bad packet".into()
+                })
             }
         };
-        info!("Writing {}", response.to_string());
-        {
-            if let Err(e) = client.stream.send_packet(&response).await{
-                error!("Failed to send packet to client {}! Closing stream.", e);
-                close_client_connection(connection, client, sessions).await;
-                break;
-            }
-        }
+        Ok((response, client_self))
     }
-    info!("[server] exit client");
-}
 
-trait QuicServer{
-    async fn run_quic(
-        &mut self,
-        connection: &Endpoint
-    ) -> Result<()>;
-}
+    async fn handle_auth(&mut self, mut stream: ClientStream, conn: &Connection) -> Result<Client>{
+        let auth_packet =  stream.read_response::<ServerPacket>().await?;
+        let packet_type = auth_packet.packet;
 
-pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
+        let mut response = AuthResponse {
+            success: false,
+            token: None,
+            status_msg: None
+        };
 
-impl QuicServer for Server {
-    
-    async fn run_quic(
+        let Packet::Auth(auth_data) = packet_type else {
+            response.status_msg = Some("Packet is not of type auth".into());
+            let _ = stream.send_packet::<Packet>(&Packet::AuthResponse(response)).await;
+            bail!("Packet is not of type auth!");
+        };
+        
+        let found = self.check_publickey(&auth_data).await?;
+
+        if !found {
+            response.status_msg = Some("Publickey check failed".into());
+            let _ = stream.send_packet::<Packet>(&Packet::AuthResponse(response)).await;
+            bail!("Publickey check failed for {}", auth_data.id);
+        }
+        response.success = true;
+
+        let token = Uuid::new_v4().to_string();
+        response.token = Some(token.clone());
+
+        if let Err(e) = stream.send_packet::<Packet>(&Packet::AuthResponse(response)).await {
+            bail!("Failed to send auth response back to {}: {}", auth_data.id, e);
+        }
+
+        let client_events = EventBus::<Packet>::default();
+
+        let msg_sender = client_events.new_sender().await;
+        let receiver = client_events.subscribe().await;
+
+        let client = Client {
+            id: auth_data.id,
+            conn: conn.clone(),
+            auth_token: token,
+            stream: msg_sender,
+            session_ids: Vec::new(),
+            ipv6: auth_data.ipv6,
+            ipv4: conn.remote_address()
+        };
+
+        let global_sender = self.event_bus.new_sender().await;
+
+        Server::client_communication_task(stream, receiver, global_sender.clone());
+
+        let conn_cloned = conn.clone();
+
+        //Creating a new task for handling bi-stream packets
+        tokio::spawn(async move {
+            loop {
+                let Ok(stream) = get_stream_from_conn(&conn_cloned).await else {
+                    info!("Connection closed. Terminating bi-stream handler for {}", conn_cloned.remote_address());
+                    break;
+                };
+                Server::client_communication_task(stream, client_events.subscribe().await, global_sender.clone());
+            }
+        });
+
+        Ok(client)
+    }
+
+    async fn run(
         &mut self,
         endpoint: &Endpoint
         ) -> Result<()> {
        
+        let mut global_receiver = self.event_bus.subscribe().await;
         loop{
-            info!("Waiting for connections..");
-            let incoming_conn = match endpoint.accept().await {
-                Some(conn) => conn,
-                None => {
-                    continue;
+            tokio::select! {
+                Ok(conn) = Server::accept_connections(endpoint) => {
+                    //Wait for client to initiate a bi-directional stream
+                    let comm_stream = match get_stream_from_conn(&conn).await {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            log::error!("Failed to accept bi-stream for {}: {}", conn.remote_address(), e);
+                            continue;
+                        }
+                    };
+
+                    let client = match self.handle_auth(comm_stream, &conn).await {
+                        Ok(client) => client,
+                        Err(e) => {
+                            error!("{} Failed auth: {}", conn.remote_address(), e);
+                            continue;
+                        }
+                    };
+
+                    self.clients.insert(client.id.clone(), client);
+                },
+                Ok(server_packet) = global_receiver.recv() => {
+                    let Some(base) = &server_packet.base.as_ref() else {
+                        warn!("Received malformed packet without base!");
+                        continue;
+                    };
+
+                    let client = match self.authorize_take_client(base).await {
+                        Ok(client) => client,
+                        Err(e) => {
+                            error!("Client failed auth: {}", e);
+                            continue;
+                        }
+                    };
+
+                    let (packet, client) = match self.handle_packet(client, server_packet).await {
+                        Ok(packet) => packet,
+                        Err(e) => {
+                            error!("Error processing packet {}", e);
+                            continue;
+                        }
+                    };
+
+                    if let Err(e) = client.stream.send(packet) {
+                        error!("Error sending packet {}", e);
+                        continue;
+                    }
+                    //Reinserting it
+                    self.clients.insert(client.id.clone(), client);
                 }
-            };
-            let conn = match incoming_conn.await {
-                Ok(conn) => conn,
-                Err(e) => {
-                    error!("[server] accept connection error: {}", e);
-                    continue;
-                }
-            };
-
-            let sni = conn
-                .handshake_data()
-                .unwrap()
-                .downcast::<crypto::rustls::HandshakeData>()
-                .unwrap()
-                .server_name
-                .unwrap_or(conn.remote_address().ip().to_string());
-
-            info!(
-                "[server] connection accepted: ({}, {})",
-                conn.remote_address(),
-                sni);
-
-            let clients = self.clients.clone();
-
-            let sessions = self.sessions.clone();
-            tokio::spawn(async move {
-                handle_connection(conn, clients, sessions).await;
-            });
+            }
         }
     }
 }

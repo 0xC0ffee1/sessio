@@ -5,8 +5,9 @@ use clap::{Parser, Subcommand};
 
 mod client;
 use client::Opt;
-
 pub mod ipc;
+use homedir::my_home;
+
 
 #[tokio::main]
 async fn main() {
@@ -22,5 +23,5 @@ async fn main() {
     #[cfg(windows)]
     ipc::start_grpc_server("127.0.0.1:53051").await;
     #[cfg(unix)]
-    ipc::start_grpc_server("/tmp/sessio.socket").await;
+    ipc::start_grpc_server(&format!("{}/.sessio", my_home().unwrap().unwrap().to_str().unwrap())).await;
 }

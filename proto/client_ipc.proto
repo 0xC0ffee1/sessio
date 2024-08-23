@@ -7,7 +7,6 @@ option java_outer_classname = "SessioClientIPC";
 package clientipc;
 
 service ClientIPC {
-    rpc InitClient(InitData) returns (InitResponse);
     rpc NewConnection(NewConnectionRequest) returns (NewConnectionResponse);
     rpc NewSession(NewSessionRequest) returns (NewSessionResponse);
 
@@ -17,7 +16,12 @@ service ClientIPC {
     //Open a generic SSH channel and a bi-directional stream
     rpc OpenChannel(stream Msg) returns (stream Msg);
 
+    rpc CheckSettingsValidity(SettingCheckRequest) returns (SettingCheckResponse);
+    rpc StartCoordinator(CoordinatorStartRequest) returns (CoordinatorStartResponse);
+
     rpc LocalPortForward(SessionData) returns (LocalPortForwardResponse);
+
+    rpc GetNatFilterType(NatFilterRequest) returns (NatFilterResponse);
 
     //SFTP RPCs
     rpc OpenSftpChannel(SessionData) returns (SftpRequestResponse);
@@ -32,6 +36,65 @@ service ClientIPC {
     rpc SaveUserData(UserData) returns (UserData);
 
     rpc GetActiveSessions(SessionRequest) returns (SessionMap);
+}
+
+message CoordinatorStartRequest {
+
+}
+
+message CoordinatorStartResponse {
+    bool started = 1;
+}
+
+message SettingCheckRequest {
+
+}
+
+message SettingCheckResponse {
+    bool valid = 1;
+}
+
+service ClientEventService{
+    //Will unsubscribe as soon as this stream is closed
+    rpc Subscribe(SubscribeRequest) returns (stream ClientEvent);
+}
+
+message SubscribeRequest{
+
+}
+
+message ClientEvent{
+    oneof kind {
+        CloseEvent close = 1;
+    }
+    enum StreamType{
+        TRANSPORT = 0;
+        SESSION = 1;
+        CHANNEL = 2;
+    }
+    message CloseEvent{
+        StreamType stream_type = 1;
+        string close_reason = 2;
+        string id = 3;
+    }
+    message ServerMigrateEvent{
+        string conn_id = 1;
+        string new_ip = 2;
+    }
+}
+
+message NatFilterRequest{
+
+}
+enum NatFilterType{
+    ENDPOINT_INDEPENDENT = 0;
+    ADDRESS_DEPENDENT = 1;
+    ADDRESS_AND_PORT_DEPENDENT = 2;
+    UNKNOWN =3;
+}
+
+message NatFilterResponse{
+    NatFilterType type = 1;
 }
 
 message SessionMap {
@@ -98,13 +161,6 @@ message PublicKey{
     string key = 1;
 }
 
-message InitData {
-    string data_folder_path = 1;
-}
-
-message InitResponse {
-
-}
 
 message GetSaveDataRequest{
     

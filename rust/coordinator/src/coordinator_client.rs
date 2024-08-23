@@ -1,27 +1,34 @@
 
-use log::info;
-use log4rs::encode::json;
-use quinn::{AsyncUdpSocket, ClientConfig, Endpoint, VarInt};
+use common::utils::events::EventBus;
+use log::{error, info};
+use quinn::{ConnectionClose, ConnectionError, Endpoint, VarInt};
+
+use russh_keys::key::KeyPair;
+use russh_keys::PublicKeyBase64;
 use rustls::RootCertStore;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
 use stunclient::StunClient;
 use tokio::net::UdpSocket;
+
+use tokio::sync::broadcast::Receiver;
 use tokio::sync::mpsc;
-use tokio::time::{timeout, Duration};
+
 use quinn::Connection;
 use url::Url;
-use std::collections::HashMap;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use std::path::PathBuf;
-use std::str::FromStr;
+use uuid::Uuid;
+
+use std::net::SocketAddr;
+
 use std::sync::Arc;
+use stun_client::*;
+use stun_client::nat_behavior_discovery::*;
 
 use quinn_proto::crypto::rustls::QuicClientConfig;
 
+use anyhow::{anyhow, Context, Error, Result};
 
-use anyhow::{anyhow, Context, Result};
-
+use crate::common::{Auth, ClientStream, Packet, PacketBase, ServerPacket};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Address {
@@ -36,28 +43,24 @@ pub enum ClientType {
 
 pub struct CoordinatorClient {
     conn: Connection,
-    id_own: String,
-    send_stream: quinn::SendStream,
-    response_rx: tokio::sync::mpsc::Receiver<Value>,
+    pub id_own: String,
+    pub token: String,
+    //Server-bound tx
+    server_packet_sender: mpsc::Sender<ServerPacket>,
+    //Client-bound rx
+    client_packet_bus: EventBus<Packet>,
     endpoint: Endpoint
 }
 
-struct SkipServerVerification;
-
-impl SkipServerVerification {
-    fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
-}
 
 /// Enables MTUD if supported by the operating system
-#[cfg(not(any(windows, os = "linux")))]
+#[cfg(unix)]
 pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
     quinn::TransportConfig::default()
 }
 
 /// Enables MTUD if supported by the operating system
-#[cfg(any(windows, os = "linux"))]
+#[cfg(windows)]
 pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
@@ -65,6 +68,17 @@ pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
 }
 
 impl CoordinatorClient {
+    pub fn is_closed(&self) -> Option<ConnectionError> {
+        return self.conn.close_reason()
+    }
+
+    pub async fn get_nat_type() -> Result<NATFilteringType> {
+        let mut client = Client::new("[::]:0", None).await?;
+
+        let mapping_result = check_nat_filtering_behavior(&mut client, "stun.l.google.com:19302").await?;
+
+        Ok(mapping_result.filtering_type)
+    }
 
     pub async fn get_external_ips(sock_v4: &UdpSocket, sock_v6: &UdpSocket) -> (Option<SocketAddr>, Option<SocketAddr>) {
 
@@ -79,6 +93,14 @@ impl CoordinatorClient {
         let external_v6 = client_v6.query_external_address_async(sock_v6).await.ok();
 
         (external_v4, external_v6)
+    }
+
+    pub async fn get_external_ipv6(sock_v6: &UdpSocket) -> Option<SocketAddr> {
+   
+        let client_v6 = StunClient::new("[2001:4860:4864:5:8000::1]:19302".parse().unwrap());
+        let external_v6 = client_v6.query_external_address_async(sock_v6).await.ok();
+
+        external_v6
     }
 
     //The ipv6 might be different if using a vpn
@@ -101,64 +123,92 @@ impl CoordinatorClient {
         }
     }
 
-    pub async fn connect(coordinator_url: Url, id_own: String, mut endpoint: Endpoint) -> Result<Self> {
+    async fn handle_auth(id_own: String, stream: &mut ClientStream, key_pair: KeyPair, ipv6: Option<SocketAddr>) -> Result<String>{
+        let random_data = Uuid::new_v4().to_string();
+
+        let signature = key_pair.sign_detached(&random_data.as_bytes())?;
+        let signature_b64 = signature.to_base64();
+
+        let auth_packet = Auth {
+            id: id_own,
+            ipv6,
+            public_key_base64: key_pair.public_key_base64(),
+            signed_data: random_data.to_string(),
+            signature: signature_b64
+        };
+
+        let packet = ServerPacket {
+            base: None,
+            packet: Packet::Auth(auth_packet)
+        };
+
+        stream.send_packet::<ServerPacket>(&packet).await?;
+
+        let auth_res = stream.read_response::<Packet>().await?;
+        info!("Read packet {:?}", auth_res);
+
+        let Packet::AuthResponse(data) = auth_res else {
+            anyhow::bail!("Got wrong packet type in auth");
+        };
+
+       
+
+        if !data.success {
+            anyhow::bail!(data.status_msg.unwrap());
+        }
+
+        Ok(data.token.unwrap())
+    }
+
+    pub async fn connect(coordinator_url: Url, id_own: String, endpoint: Endpoint, 
+        key_pair: KeyPair, ipv6: Option<SocketAddr>) -> Result<Self> {
 
         let sock_list = coordinator_url
             .socket_addrs(|| Some(2222))
-            .map_err(|_| "Couldn't resolve to any address").unwrap();
-        
-        info!("Connecting to name {}", &coordinator_url.host().unwrap().to_string());
-        let connection = endpoint.connect(sock_list[0], &coordinator_url.host().unwrap().to_string()).unwrap().await?;
+            .map_err(|_| "Couldn't resolve to any address").map_err(|e| anyhow!(e.to_string()))?;
+
+        let connection = endpoint.connect(sock_list[0], &coordinator_url.host().context("Host parse error")?.to_string()).unwrap().await?;
         info!(
             "[Coordinator client] Connected to: {}",
             connection.remote_address(),
         );
         
-        let (mut send_stream, mut recv_stream) = connection
+        let (send_stream, recv_stream) = connection
             .open_bi()
             .await?;
 
-        let (response_tx, mut response_rx) = mpsc::channel::<serde_json::Value>(100);
+        let client_packet_bus = EventBus::<Packet>::default();
 
         let conn = connection.clone();
 
+        let mut stream = ClientStream {
+            recv_stream,
+            send_stream: Some(send_stream)
+        };
+        
+        let token = CoordinatorClient::handle_auth(id_own.clone(), &mut stream, key_pair, ipv6).await?;
+
+
+        let (server_packet_sender, mut server_packet_receiver) = mpsc::channel::<ServerPacket>(16);
+       
+        let client_packet_sender = client_packet_bus.new_sender().await;
+
         tokio::spawn(async move {
             loop {
-                let mut buffer = vec![0; 4]; // Buffer to read the message length
-                // Read the length of the next JSON message
-                match recv_stream.read_exact(&mut buffer).await {
-                    Ok(_) => {
-                        let message_length = u32::from_be_bytes(buffer.try_into().unwrap()) as usize;
-                        let mut json_buffer = vec![0; message_length];
-
-                        // Read the actual JSON message
-                        match recv_stream.read_exact(&mut json_buffer).await {
-                            Ok(_) => {
-                                let json_string = String::from_utf8_lossy(&json_buffer);
-                                match serde_json::from_str::<serde_json::Value>(&json_string) {
-                                    Ok(json_resp) => {
-                                        if response_tx.send(json_resp).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("failed to parse JSON: {}:{}", json_string, e);
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("failed to read JSON message: {}", e);
-                                //connection.close(0u32.into(), b"err");
-                                //send_stream.finish().await;
-                                break;
-                            }
+                tokio::select! {
+                    //Server-bound
+                    Some(send_packet) = server_packet_receiver.recv() => {
+                        if let Err(e) = stream.send_packet::<ServerPacket>(&send_packet).await {
+                            error!("Failed to send packet to stream {}", e);
+                            break;
                         }
-                    }
-                    Err(e) => {
-                        eprintln!("failed to read message length: {}", e);
-                        //send_stream.finish().await;
-                        //connection.close(0u32.into(), b"err");
-                        break;
+                    },
+                    //Client-bound
+                    Ok(recv_packet) = stream.read_response::<Packet>() => {
+                        if let Err(e) = client_packet_sender.send(recv_packet) {
+                            error!("Failed to broadcast received packet {}", e);
+                            break;
+                        }
                     }
                 }
             }
@@ -168,10 +218,15 @@ impl CoordinatorClient {
         CoordinatorClient {
             conn,
             id_own,
-            send_stream,
-            response_rx,
-            endpoint
+            client_packet_bus,
+            endpoint,
+            token,
+            server_packet_sender
         })
+    }
+
+    pub async fn subscribe_to_packets(&self) -> Receiver<Packet> {
+        self.client_packet_bus.subscribe().await
     }
 
     pub fn borrow_endpoint(&mut self) -> &mut Endpoint {
@@ -183,7 +238,7 @@ impl CoordinatorClient {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
 
-        let mut client_crypto = rustls::ClientConfig::builder()
+        let client_crypto = rustls::ClientConfig::builder()
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
@@ -198,83 +253,25 @@ impl CoordinatorClient {
         endpoint.set_default_client_config(client_config);
     }
 
-
     pub async fn close_connection(&mut self){
         self.conn.close(0u32.into(), b"done");
     }
 
-    
-    pub async fn read_response<T>(&mut self) -> Result<T, anyhow::Error>
-    where
-        T: serde::de::DeserializeOwned,
-    {
-        while let Some(response) = self.response_rx.recv().await {
-            info!("Received {}", response.to_string());
-
-            let result = serde_json::from_value::<T>(response.clone())
-                .map_err(|e| anyhow!("failed to parse JSON: {}:{}", response.to_string(), e))?;
-            return Ok(result);
-        }
-
-        Err(anyhow!("No matching response received"))
+    pub fn new_packet_sender(&self) -> mpsc::Sender<ServerPacket>{
+        self.server_packet_sender.clone()
     }
 
-    pub async fn send_packet<T>(&mut self, packet: &T) -> Result<(), anyhow::Error>
-    where
-        T: serde::Serialize,
-    {
-        let serialized_packet = serde_json::to_string(packet)
-            .map_err(|e| anyhow!("failed to serialize packet: {}", e))?;
+    ///Wraps the input Packet into a ServerPacket by using information from this struct
+    pub async fn send_server_packet(&self, packet: Packet) -> Result<(), anyhow::Error>{
 
-        self.send_stream.write_all(serialized_packet.as_bytes())
-            .await
-            .map_err(|e| anyhow!("failed to send request: {}", e))?;
-
-        info!("Sent {}", serialized_packet);
+        self.server_packet_sender.send(ServerPacket {
+            base: Some(PacketBase {
+                own_id: self.id_own.clone(),
+                token: self.token.clone()
+            }),
+            packet
+        }).await?;
 
         Ok(())
     }
-    
-    pub async fn update_external_ip(&mut self, ext_ipv6: Option<SocketAddr>) -> Result<(), Box<dyn std::error::Error>> {
-
-        let register_msg = serde_json::json!({"id": "UPDATE_IP", "own_id": self.id_own, "ipv6": ext_ipv6});
-
-        self.send_packet(&register_msg).await;
-        let res = self.read_response::<HashMap<String, String>>().await;
-
-        Ok(())
-    }
-
-    pub async fn register_endpoint(&mut self, ext_ipv6: Option<SocketAddr>) -> Result<(), Box<dyn std::error::Error>> {
-
-        let register_msg = serde_json::json!({"id": "REGISTER", "own_id": self.id_own, "ipv6": ext_ipv6});
-
-        self.send_packet(&register_msg).await;
-        let res = self.read_response::<HashMap<String, String>>().await;
-        info!("{}", res.unwrap().get("status").unwrap());
-
-        Ok(())
-    }
-
-    pub async fn connect_to(&mut self, target: String) -> Result<(), Box<dyn std::error::Error>> {
-
-        let register_msg = serde_json::json!({"id": "CLIENT_CONNECTED", "target_client_id": target});
-
-        self.send_packet(&register_msg).await;
-        let _ = self.read_response::<HashMap<String, String>>().await;
-
-        Ok(())
-    }
-
-    pub async fn new_session(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let register_msg = serde_json::json!({"id": "NEW_SESSION", "own_id": self.id_own});
-
-        self.send_packet(&register_msg).await;
-        let res = self.read_response::<HashMap<String, String>>().await;
-        info!("{}", res.unwrap().get("status").unwrap());
-
-        Ok(())
-    }
-
-
 }

@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 tokio = { version = "1.0", features = ["full"] }
-quinn = { version = "0.11.3", features = ["rustls"]}
+quinn = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn" }
 tokio-util = { version = "0.6", features = ["io"] }
-russh = "0.44.0-beta.2"
-russh-keys = "0.44.0-beta.2"
+russh = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh" }
+russh-keys = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh-keys" }
 async-trait = "0.1.80"
 env_logger = "0.10"
 anyhow = "1.0.86"
@@ -18,7 +18,7 @@ rand = { version = "0.8", features = ["std"] }
 
 clap = { version = "4.5.6", features = ["derive"] }
 url = "2.5.0"
-rustls = { version = "0.23.5", features = ["std"]}
+rustls = { version = "0.23.5", features = ["std"], default-features = false}
 rustls-pemfile = "2.1.2"
 rcgen = "0.12.1"
 
@@ -28,11 +28,11 @@ toml = "0.8.14"
 bytes = "1.6.0"
 serde_json = "1.0.118"
 rustls-pki-types = "1.8.0"
-quinn-proto = "0.11.6"
+quinn-proto = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn-proto" }
 webpki-roots = "0.26.3"
 stunclient = { git = "https://github.com/vi/rust-stunclient" }
-
-
+stun-client = "0.1.4"
+futures = "0.3.30"
 
 [dependencies.uuid]
 version = "1.9.1"

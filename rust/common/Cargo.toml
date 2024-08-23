@@ -5,12 +5,13 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
-quinn = "0.11.3"
+quinn = { git = "https://github.com/0xC0ffee1/quinn.git", branch = "main", subdir = "quinn" }
 log = "0.4"
 rand = { version = "0.8", features = ["std"] }
 ssh-key = { version = "0.6.6", features = ["ed25519"] }
-russh = "0.44.0"
+russh = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh" }
+russh-keys = { git = "https://github.com/0xC0ffee1/russh.git", branch = "main", subdir = "russh-keys" }
 
 if-addrs = "0.13.1"
 anyhow = "1.0.86"
-
+homedir = "0.3.3"

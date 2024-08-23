@@ -1,5 +1,5 @@
 
-use std::net::{Ipv6Addr, SocketAddr};
+use std::net::Ipv6Addr;
 
 use if_addrs::get_if_addrs;
 

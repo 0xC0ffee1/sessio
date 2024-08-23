@@ -1,9 +1,9 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf};
 
-use log::error;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 mod coordinator;
+mod common;
 
 
 #[derive(Parser, Debug)]

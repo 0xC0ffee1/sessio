@@ -2,10 +2,14 @@
 pub mod ipc;
 pub mod client;
 
+
 use android_logger::Config;
-use std::os::raw::c_char;
+use client::Client;
+use ipc::clientipc::Settings;
+use std::{os::raw::c_char, path::Path};
 use std::ffi::CStr;
 use log::{info, Level};
+
 
 #[no_mangle]
 pub extern "C" fn start_grpc_server(path: *const std::os::raw::c_char) {
