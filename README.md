@@ -16,8 +16,9 @@ Currently only pub-key auth is supported.
 
 ## Features
 
-### QUIC
-By using QUIC as the transport protocol Sessio is able keep sessions uninterrupted even when switching between networks or in otherwise unreliable network conditions. 
+### Why QUIC?
+By using QUIC as the transport protocol, Sessio is able keep sessions uninterrupted even when switching between networks or in otherwise unreliable network conditions. 
+QUIC also uses UDP, which makes the p2p connection creation process much simpler and more reliable.
 
 ### Hole punching
 Peer-to-Peer SSH connections in Sessio are achieved using QUIC as the transport protocol. By employing the UDP hole punching technique, Sessio enables direct connections between devices behind firewalls and NATs. This allows seamless and secure SSH communication without the need for a middleman server to relay traffic or open ports.
@@ -30,11 +31,10 @@ You will however, require a publicly open coordination server. This server is on
 
 ### IPv6 Support
 
-Sessio is primarily intended to be used with IPv6, but IPv4 is also supported for some NAT Types. Strict NAT and any other type of NAT implementation that require relay servers for P2P are not supported.
+Sessio is primarily intended to be used with IPv6, but IPv4 is also supported for most NAT Types. Sessio does not work with Address and Port-Dependent Mapping (Symmetric NAT).
 
 ### Multiplexing
 All SSH connections to a host are multiplexed through the same QUIC connection by opening a new bi-directional stream for each ssh connection to ensure no Head-of-line blocking.
-
 
 ### SFTP
 A minimal SFTP implementation is also included.
@@ -45,9 +45,8 @@ Only local port forwarding is supported at the moment.
 ### GUI
 Sessio also exposes a gRPC interface for developers wanting to develop a GUI for the client in the language they prefer. I have made one cross-platform (Android, Linux, Windows) implementation here: https://github.com/0xc0ffee1/sessio-gui
 
-
 ## Installation & Usage
-> ! **Session is in alpha and thus not recommended for production use !**
+> ! **Sessio is in beta and not recommended for production use !**
 
 ### Server
 1. Download the `sessio-server` binary for your platform from releases.
@@ -56,10 +55,12 @@ Sessio also exposes a gRPC interface for developers wanting to develop a GUI for
 
 ### Coordination server
 1. Download the `sessio-coordinator` binary for your platform from releases.
-2. Run it
+2. Generate your certificate and key with certbot for example (certbot certonly --standalone -d yourdomain.com)
+3. You must allow each device to connect to the coordination server by adding authorized keys in /home/(your user)/.sessio/authorized_keys
+4. Run it
 
 ### Client (daemon)
-1. Download the `sessiod` binary for your platform from releases.
+1. Download the `sessio-clientd` binary for your platform from releases.
 2. Run it
 
 ### Client (CLI)
