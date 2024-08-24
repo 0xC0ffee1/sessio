@@ -357,7 +357,7 @@ impl ClientIpc for ClientIpcHandler {
             return Err(Status::new(tonic::Code::NotFound, "SFTP Session not found"));
         };
         for file_data in request.data {
-            if !file_data.is_dir {
+            if file_data.is_dir {
                 if let Err(e) = sftp.remove_dir(file_data.path).await {
                     return Err(Status::new(tonic::Code::Internal, e.to_string()));
                 }
