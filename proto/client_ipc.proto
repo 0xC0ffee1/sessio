@@ -28,6 +28,8 @@ service ClientIPC {
     rpc ListDirectory(Path) returns (FileList);
     rpc FileDownload(FileTransferRequest) returns (stream FileTransferStatus);
     rpc FileUpload(FileTransferRequest) returns (stream FileTransferStatus);
+    rpc FileDelete(FileDeleteRequest) returns (FileDeleteResponse);
+    rpc FileRename(FileRenameRequest) returns (FileRenameResponse);
 
     rpc GetSettings(SettingsRequest) returns (Settings);
     rpc GetSaveData(GetSaveDataRequest) returns (UserData);
@@ -36,6 +38,31 @@ service ClientIPC {
     rpc SaveUserData(UserData) returns (UserData);
 
     rpc GetActiveSessions(SessionRequest) returns (SessionMap);
+}
+
+message FileDelData{
+    string path = 1;
+    bool is_dir = 2;
+}
+
+message FileDeleteRequest{
+    string session_id = 1;
+    repeated FileDelData data = 2;
+}
+
+message FileDeleteResponse{
+    
+}
+
+
+message FileRenameRequest{
+    string session_id = 1;
+    string old_path = 2;
+    string new_path = 3;
+}
+
+message FileRenameResponse{
+    
 }
 
 message CoordinatorStartRequest {
@@ -149,9 +176,6 @@ message LocalPortForwardRequest{
     string session_id = 5;
 }
 
-message FileDeleteRequest{
-    repeated string files = 1;
-}
 
 message GetKeyRequest{
 

@@ -1,42 +1,58 @@
-
 use anyhow::Context;
 use async_trait::async_trait;
 use homedir::home;
-use russh_sftp::protocol::{Data, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version};
+use log::{debug, error, info};
+use russh_sftp::protocol::{
+    Data, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version,
+};
 use russh_sftp::server::Handler;
 use std::collections::HashMap;
 use std::hash::Hash;
-use tokio::fs::{self, File as TokioFile, OpenOptions, ReadDir};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::fs::metadata;
+use tokio::fs::{self, File as TokioFile, OpenOptions, ReadDir};
 use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Mutex;
-use std::path::PathBuf;
-use log::{error, info};
-use std::sync::Arc;
 
 pub struct SftpSession {
     version: Option<u32>,
     root_dir_read_done: bool,
-    open_directories: Arc<Mutex<HashMap<String, OpenDir>>>,
-    open_files: Arc<Mutex<HashMap<String, TokioFile>>>,
-    user: String
+    open_directories: HashMap<String, OpenDir>,
+    open_files: HashMap<String, TokioFile>,
+    user: String,
 }
 
-struct OpenDir{
+struct OpenDir {
     dir: ReadDir,
-    read: bool
+    read: bool,
 }
-
 
 impl SftpSession {
     pub fn new(user: String) -> Self {
         SftpSession {
             version: None,
             root_dir_read_done: false,
-            open_directories: Arc::new(Mutex::new(HashMap::new())),
-            open_files:  Arc::new(Mutex::new(HashMap::new())),
-            user
+            open_directories: HashMap::new(),
+            open_files: HashMap::new(),
+            user,
         }
+    }
+    fn success(id: u32) -> Status {
+        Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: "Ok".to_string(),
+            language_tag: "en-US".to_string(),
+        }
+    }
+
+    fn get_user_relative_path(&mut self, filename: &String) -> Result<PathBuf, StatusCode> {
+        let path = home(&self.user)
+            .map_err(|e| StatusCode::Failure)?
+            .ok_or(StatusCode::NoSuchFile)?
+            .join(filename);
+        Ok(path)
     }
 }
 
@@ -49,7 +65,7 @@ impl Handler for SftpSession {
     }
 
     async fn init(
-        &mut self,  
+        &mut self,
         version: u32,
         extensions: HashMap<String, String>,
     ) -> Result<Version, Self::Error> {
@@ -72,17 +88,24 @@ impl Handler for SftpSession {
     ) -> Result<Handle, Self::Error> {
         info!("OPENING FILE {}", filename);
 
-        let path = home(&self.user).map_err(|e| StatusCode::Failure)?
-        .ok_or(StatusCode::NoSuchFile)?
-        .join(filename.clone());
+        let path = self.get_user_relative_path(&filename)?;
 
-        let file = OpenOptions::new().read(true).create(true).write(true).open(path).await.unwrap();
-        let mut open_files = self.open_files.lock().await;
-        open_files.insert(filename.clone(), file);
+        let file = OpenOptions::new()
+            .read(true)
+            .create(true)
+            .write(true)
+            .open(path)
+            .await
+            .map_err(|_e| StatusCode::NoSuchFile)?;
 
-        Ok(Handle { id, handle: filename })
+        self.open_files.insert(filename.clone(), file);
+
+        Ok(Handle {
+            id,
+            handle: filename,
+        })
     }
-    
+
     async fn read(
         &mut self,
         id: u32,
@@ -90,11 +113,15 @@ impl Handler for SftpSession {
         offset: u64,
         len: u32,
     ) -> Result<Data, Self::Error> {
-        let mut open_files = self.open_files.lock().await;
-        if let Some(file) = open_files.get_mut(&handle) {
-            file.seek(std::io::SeekFrom::Start(offset)).await.map_err(|_| StatusCode::Failure)?;
+        if let Some(file) = self.open_files.get_mut(&handle) {
+            file.seek(std::io::SeekFrom::Start(offset))
+                .await
+                .map_err(|_| StatusCode::Failure)?;
             let mut buffer = vec![0; len as usize];
-            let n = file.read(&mut buffer).await.map_err(|_| StatusCode::Failure)?;
+            let n = file
+                .read(&mut buffer)
+                .await
+                .map_err(|_| StatusCode::Failure)?;
             buffer.truncate(n);
 
             return Ok(Data { id, data: buffer });
@@ -103,16 +130,10 @@ impl Handler for SftpSession {
     }
 
     async fn close(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
-        // Lock and remove directory handles if any
-        let mut open_directories = self.open_directories.lock().await;
-        open_directories.remove(&handle);
+        self.open_directories.remove(&handle);
 
-        // Lock and remove file handles if any
-        let mut open_files = self.open_files.lock().await;
-
-        if let Some(file) = open_files.remove(&handle) {
-            //Just making sure it is closed lol
-            drop(file); 
+        if let Some(file) = self.open_files.remove(&handle) {
+            drop(file);
         }
 
         Ok(Status {
@@ -123,6 +144,73 @@ impl Handler for SftpSession {
         })
     }
 
+    async fn remove(&mut self, id: u32, path: String) -> Result<Status, Self::Error> {
+        debug!("remove: {id} {path}");
+
+        let path = self.get_user_relative_path(&path)?;
+
+        // Try to remove as a file
+        if let Err(e) = fs::remove_file(&path).await {
+            if e.kind() == io::ErrorKind::NotFound {
+                error!("File not found: {}", path.display());
+                return Err(StatusCode::NoSuchFile);
+            }
+        }
+
+        Ok(SftpSession::success(id))
+    }
+
+    async fn rmdir(&mut self, id: u32, path: String) -> Result<Status, Self::Error> {
+        debug!("rmdir: {id} {path}");
+
+        let path = self.get_user_relative_path(&path)?;
+
+        match fs::remove_dir(&path).await {
+            Ok(_) => Ok(SftpSession::success(id)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                error!("Directory not found: {}", path.display());
+                Err(StatusCode::NoSuchFile)
+            }
+            Err(e) => {
+                error!("Failed to remove directory {}: {:?}", path.display(), e);
+                Err(StatusCode::Failure)
+            }
+        }
+    }
+
+    async fn rename(
+        &mut self,
+        id: u32,
+        oldpath: String,
+        newpath: String,
+    ) -> Result<Status, Self::Error> {
+        debug!("rename: {id} from {oldpath} to {newpath}");
+
+        let oldpath = self.get_user_relative_path(&oldpath)?;
+        let newpath = self.get_user_relative_path(&newpath)?;
+
+        match fs::rename(&oldpath, &newpath).await {
+            Ok(_) => Ok(SftpSession::success(id)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                error!("File or directory not found: {}", oldpath.display());
+                Err(StatusCode::NoSuchFile)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                error!("Destination already exists: {}", newpath.display());
+                Err(StatusCode::Failure)
+            }
+            Err(e) => {
+                error!(
+                    "Failed to rename from {} to {}: {:?}",
+                    oldpath.display(),
+                    newpath.display(),
+                    e
+                );
+                Err(StatusCode::Failure)
+            }
+        }
+    }
+
     async fn write(
         &mut self,
         id: u32,
@@ -130,10 +218,13 @@ impl Handler for SftpSession {
         offset: u64,
         data: Vec<u8>,
     ) -> Result<Status, Self::Error> {
-        let mut open_files = self.open_files.lock().await;
-        if let Some(file) = open_files.get_mut(&handle) {
-            file.seek(std::io::SeekFrom::Start(offset)).await.map_err(|_| StatusCode::Failure)?;
-            file.write_all(&data).await.map_err(|_| StatusCode::Failure)?;
+        if let Some(file) = self.open_files.get_mut(&handle) {
+            file.seek(std::io::SeekFrom::Start(offset))
+                .await
+                .map_err(|_| StatusCode::Failure)?;
+            file.write_all(&data)
+                .await
+                .map_err(|_| StatusCode::Failure)?;
 
             return Ok(Status {
                 id,
@@ -154,19 +245,24 @@ impl Handler for SftpSession {
             &path
         };
 
-        let path_full = home(&self.user).map_err(|e| StatusCode::Failure)?
-        .ok_or(StatusCode::NoSuchFile)?
-        .join(cleaned_path);
+        let path_full = home(&self.user)
+            .map_err(|e| StatusCode::Failure)?
+            .ok_or(StatusCode::NoSuchFile)?
+            .join(cleaned_path);
 
         info!("Opening dir {}", path_full.display());
 
-        let read_dir = fs::read_dir(&path_full).await.map_err(|_| StatusCode::Failure)?;
+        let read_dir = fs::read_dir(&path_full)
+            .await
+            .map_err(|_| StatusCode::Failure)?;
 
-        let mut open_directories = self.open_directories.lock().await;
-        open_directories.insert(path.clone(), OpenDir {
-            dir: read_dir,
-            read: false
-        });
+        self.open_directories.insert(
+            path.clone(),
+            OpenDir {
+                dir: read_dir,
+                read: false,
+            },
+        );
 
         Ok(Handle { id, handle: path })
     }
@@ -174,8 +270,7 @@ impl Handler for SftpSession {
     async fn readdir(&mut self, id: u32, handle: String) -> Result<Name, Self::Error> {
         info!("readdir handle: {}", handle);
 
-        let mut open_directories = self.open_directories.lock().await;
-        if let Some(mut read_dir) = open_directories.get_mut(&handle) {
+        if let Some(mut read_dir) = self.open_directories.get_mut(&handle) {
             let mut files = Vec::new();
             if !read_dir.read {
                 while let Some(entry) = read_dir.dir.next_entry().await.map_err(|e| {
@@ -187,10 +282,10 @@ impl Handler for SftpSession {
                     info!("path {}", file_path.display());
 
                     // Get file metadata
-                    let Ok(metadata) = metadata(&file_path).await else{
+                    let Ok(metadata) = metadata(&file_path).await else {
                         continue;
                     };
-                    
+
                     let mut file_attrs = FileAttributes {
                         size: Some(metadata.len()),
                         uid: None, // Setting these to None as placeholders
@@ -199,7 +294,7 @@ impl Handler for SftpSession {
                         group: None,
                         mtime: None,
                         atime: None,
-                        permissions: None
+                        permissions: None,
                     };
 
                     file_attrs.set_dir(metadata.is_dir());
@@ -215,8 +310,7 @@ impl Handler for SftpSession {
                 read_dir.read = true;
                 info!("Returned files: {}", files.len());
                 return Ok(Name { id, files });
-            }
-            else {
+            } else {
                 return Err(StatusCode::Eof);
             }
         }
@@ -226,12 +320,15 @@ impl Handler for SftpSession {
     async fn realpath(&mut self, id: u32, path: String) -> Result<Name, Self::Error> {
         info!("realpath: {}", path);
 
-        let path_full = home(&self.user).map_err(|e| StatusCode::Failure)?
-        .ok_or(StatusCode::NoSuchFile)?
-        .join(path.clone());
+        let path_full = self.get_user_relative_path(&path)?;
 
-        let canonical_path = fs::canonicalize(&path_full).await.map_err(|_| StatusCode::Failure)?;
-        let canonical_path_str = canonical_path.to_str().ok_or(StatusCode::Failure)?.to_string();
+        let canonical_path = fs::canonicalize(&path_full)
+            .await
+            .map_err(|_| StatusCode::Failure)?;
+        let canonical_path_str = canonical_path
+            .to_str()
+            .ok_or(StatusCode::Failure)?
+            .to_string();
 
         Ok(Name {
             id,
