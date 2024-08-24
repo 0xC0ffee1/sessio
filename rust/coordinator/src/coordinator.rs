@@ -243,13 +243,13 @@ impl Server {
                             _ = client_self.stream.send(Packet::PeerIpChanged(PeerIpChanged {
                                 peer_id: client_self.id.clone(),
                                 new_ip: other_ipv4_old.clone(),
-                                old_ip: addr_ipv6_old.unwrap()
+                                old_ip: other_ipv6_old.context("Other ipv6 is empty")?
                             }));
 
                             _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
                                 peer_id: client_self.id.clone(),
                                 new_ip: addr_ipv4_current,
-                                old_ip: data.ipv6.unwrap()
+                                old_ip: addr_ipv6_old.context("Own ipv6 is empty")?
                             }));
 
                             session.using_ipv6 = false;
@@ -266,7 +266,7 @@ impl Server {
 
                                 _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
                                     peer_id: client_self.id.clone(),
-                                    new_ip: data.ipv6.unwrap(),
+                                    new_ip: data.ipv6.context("Own ipv6 is empty")?,
                                     old_ip: addr_ipv4_old.clone()
                                 }));
 
@@ -274,7 +274,8 @@ impl Server {
                             }
                             
                         }
-                        else if session.using_ipv6 && addr_ipv6_old.unwrap() != data.ipv6.unwrap() {
+                        else if session.using_ipv6 && addr_ipv6_old.context("Own old ipv6 is empty")? 
+                        != data.ipv6.context("Own ipv6 is empty")? {
                             //This will just make the peer ping this new destination, creating the mappings
                         
                             _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
