@@ -138,10 +138,7 @@ impl ClientStream {
 
         // Now buf contains the full packet data
         match serde_json::from_slice::<T>(&buf) {
-            Ok(value) => {
-                info!("Received {:?}", value);
-                Ok(value)
-            }
+            Ok(value) => Ok(value),
             Err(e) => Err(anyhow!("Failed to parse JSON: {}", e)),
         }
     }
