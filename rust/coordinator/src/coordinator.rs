@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use common::utils::events::EventBus;
@@ -8,9 +8,9 @@ use log::{error, info, warn};
 
 use russh_keys::key::{PublicKey, Signature};
 
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio::fs;
 use tokio::sync::broadcast::{Receiver, Sender};
-use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use std::net::SocketAddr;
 
@@ -28,7 +28,9 @@ use crate::Opt;
 
 /// Returns default server configuration along with its certificate.
 async fn configure_server(key_path: &PathBuf, cert_path: &PathBuf) -> Result<ServerConfig> {
-    rustls::crypto::ring::default_provider().install_default().expect("Failed to install rustls crypto provider");
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
 
     let (certs, key) = get_certs(key_path, cert_path).await?;
 
@@ -49,8 +51,13 @@ async fn configure_server(key_path: &PathBuf, cert_path: &PathBuf) -> Result<Ser
     Ok(server_config)
 }
 
-async fn get_certs<'a>(key_path: &PathBuf, cert_path: &PathBuf) -> Result<(Vec<CertificateDer<'a>>, PrivateKeyDer<'a>)> {
-    let key = fs::read(key_path).await.with_context(|| "failed to read private key")?;
+async fn get_certs<'a>(
+    key_path: &PathBuf,
+    cert_path: &PathBuf,
+) -> Result<(Vec<CertificateDer<'a>>, PrivateKeyDer<'a>)> {
+    let key = fs::read(key_path)
+        .await
+        .with_context(|| "failed to read private key")?;
     let key = if key_path.extension().map_or(false, |x| x == "der") {
         PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key))
     } else {
@@ -58,7 +65,9 @@ async fn get_certs<'a>(key_path: &PathBuf, cert_path: &PathBuf) -> Result<(Vec<C
             .context("malformed PKCS #1 private key")?
             .ok_or_else(|| anyhow::Error::msg("no private keys found"))?
     };
-    let cert_chain = fs::read(cert_path).await.context("failed to read certificate chain")?;
+    let cert_chain = fs::read(cert_path)
+        .await
+        .context("failed to read certificate chain")?;
     let cert_chain = if cert_path.extension().map_or(false, |x| x == "der") {
         vec![CertificateDer::from(cert_chain)]
     } else {
@@ -80,7 +89,7 @@ pub async fn run(options: Opt) {
         builder.filter_level(log::LevelFilter::Info);
     }
     builder.init();
-    
+
     let server_config = configure_server(&options.key, &options.cert).await.unwrap();
     let endpoint = Endpoint::server(server_config, options.listen).unwrap();
 
@@ -89,7 +98,6 @@ pub async fn run(options: Opt) {
     println!("Started!");
     sh.run(&endpoint).await.unwrap();
 }
-
 
 #[derive(Default)]
 struct Server {
@@ -102,7 +110,7 @@ struct Session {
     //Server initiates a new session
     server_id: String,
     client_id: String,
-    using_ipv6: bool
+    using_ipv6: bool,
 }
 
 struct Client {
@@ -114,15 +122,18 @@ struct Client {
     ///Current ipv6
     ipv6: Option<SocketAddr>,
     ///Current ipv4
-    ipv4: SocketAddr
+    ipv4: SocketAddr,
 }
 
 impl Server {
-
     //receiver = receive packets to be sent
     //sender = forwards the received packets to the other parts of the server
     //stream = bidirectional communication stream to transport packets
-    fn client_communication_task(mut stream: ClientStream, mut receiver: Receiver<Packet>, sender: Sender<ServerPacket>){
+    fn client_communication_task(
+        mut stream: ClientStream,
+        mut receiver: Receiver<Packet>,
+        sender: Sender<ServerPacket>,
+    ) {
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -144,7 +155,7 @@ impl Server {
         });
     }
 
-    async fn accept_connections(endpoint: &Endpoint) -> Result<Connection>{
+    async fn accept_connections(endpoint: &Endpoint) -> Result<Connection> {
         info!("Waiting for connections..");
         let incoming_conn = match endpoint.accept().await {
             Some(conn) => conn,
@@ -170,14 +181,18 @@ impl Server {
         info!(
             "[Coordination Server] Connection accepted: ({}, {})",
             conn.remote_address(),
-            sni);
+            sni
+        );
 
         Ok(conn)
     }
 
     async fn authorize_take_client(&mut self, packet: &PacketBase) -> Result<Client> {
         //Todo: implement token check
-        let client = self.clients.remove(&packet.own_id).context("Client not found")?;
+        let client = self
+            .clients
+            .remove(&packet.own_id)
+            .context("Client not found")?;
 
         if packet.token != client.auth_token {
             bail!("Token mismatch!");
@@ -188,7 +203,6 @@ impl Server {
 
     //QUIC by default prevents replay attacks so this should be fine
     async fn check_publickey(&mut self, packet: &Auth) -> Result<bool> {
-
         let Ok(public_key) = russh_keys::parse_public_key_base64(&packet.public_key_base64) else {
             bail!("Could not parse public key (base64)");
         };
@@ -196,7 +210,10 @@ impl Server {
         let keys: Vec<PublicKey> = common::utils::keygen::read_authorized_keys(None).await?;
 
         if !keys.contains(&public_key) {
-            warn!("Public key is not an authorized key! {}", packet.public_key_base64);
+            warn!(
+                "Public key is not an authorized key! {}",
+                packet.public_key_base64
+            );
             return Ok(false);
         }
 
@@ -211,11 +228,14 @@ impl Server {
         }
     }
 
-    async fn handle_packet(&mut self, mut client_self: Client, packet: ServerPacket) -> Result<(Packet, Client)> {
+    async fn handle_packet(
+        &mut self,
+        mut client_self: Client,
+        packet: ServerPacket,
+    ) -> Result<(Packet, Client)> {
         let packet = packet.packet;
 
         let response = match packet {
-
             Packet::UpdateIp(data) => {
                 let addr_ipv4_current = client_self.conn.remote_address();
 
@@ -225,75 +245,79 @@ impl Server {
                 let sessions = &mut self.sessions;
                 for session_id in client_self.session_ids.iter() {
                     if let Some(session) = sessions.get_mut(session_id) {
-
                         let is_client = client_self.id.clone() == session.client_id;
 
                         let other_peer = if is_client {
                             let server_id = session.server_id.clone();
-                            self.clients.get_mut(&server_id).context("UPDATE_IP: Server not present")?
+                            self.clients
+                                .get_mut(&server_id)
+                                .context("UPDATE_IP: Server not present")?
                         } else {
                             let client_id = session.client_id.clone();
-                            self.clients.get_mut(&client_id).context("UPDATE_IP: Client not present")?
+                            self.clients
+                                .get_mut(&client_id)
+                                .context("UPDATE_IP: Client not present")?
                         };
                         let other_ipv6_old = other_peer.ipv6;
                         let other_ipv4_old = other_peer.ipv4;
 
                         if session.using_ipv6 && data.ipv6.is_none() {
                             //Protocol change: ipv6 -> ipv4
-                            _ = client_self.stream.send(Packet::PeerIpChanged(PeerIpChanged {
-                                peer_id: client_self.id.clone(),
-                                new_ip: other_ipv4_old.clone(),
-                                old_ip: other_ipv6_old.context("Other ipv6 is empty")?
-                            }));
+                            _ = client_self
+                                .stream
+                                .send(Packet::PeerIpChanged(PeerIpChanged {
+                                    peer_id: client_self.id.clone(),
+                                    new_ip: other_ipv4_old.clone(),
+                                    old_ip: other_ipv6_old.context("Other ipv6 is empty")?,
+                                }));
 
                             _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
                                 peer_id: client_self.id.clone(),
                                 new_ip: addr_ipv4_current,
-                                old_ip: addr_ipv6_old.context("Own ipv6 is empty")?
+                                old_ip: addr_ipv6_old.context("Own ipv6 is empty")?,
                             }));
 
                             session.using_ipv6 = false;
                             client_self.ipv6 = None;
-                        }
-                        else if !session.using_ipv6 && data.ipv6.is_some() {
+                        } else if !session.using_ipv6 && data.ipv6.is_some() {
                             //Protocol change: ipv4 -> ipv6
                             if let Some(other_ipv6) = other_ipv6_old.as_ref() {
-                                _ = client_self.stream.send(Packet::PeerIpChanged(PeerIpChanged {
-                                    peer_id: client_self.id.clone(),
-                                    new_ip: other_ipv6.clone(),
-                                    old_ip: other_ipv4_old.clone()
-                                }));
+                                _ = client_self
+                                    .stream
+                                    .send(Packet::PeerIpChanged(PeerIpChanged {
+                                        peer_id: client_self.id.clone(),
+                                        new_ip: other_ipv6.clone(),
+                                        old_ip: other_ipv4_old.clone(),
+                                    }));
 
                                 _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
                                     peer_id: client_self.id.clone(),
                                     new_ip: data.ipv6.context("Own ipv6 is empty")?,
-                                    old_ip: addr_ipv4_old.clone()
+                                    old_ip: addr_ipv4_old.clone(),
                                 }));
 
                                 session.using_ipv6 = true;
                             }
-                            
-                        }
-                        else if session.using_ipv6 && addr_ipv6_old.context("Own old ipv6 is empty")? 
-                        != data.ipv6.context("Own ipv6 is empty")? {
+                        } else if session.using_ipv6
+                            && addr_ipv6_old.context("Own old ipv6 is empty")?
+                                != data.ipv6.context("Own ipv6 is empty")?
+                        {
                             //This will just make the peer ping this new destination, creating the mappings
-                        
+
                             _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
                                 peer_id: client_self.id.clone(),
                                 new_ip: data.ipv6.unwrap(),
-                                old_ip: addr_ipv6_old.unwrap().clone()
+                                old_ip: addr_ipv6_old.unwrap().clone(),
                             }));
 
                             session.using_ipv6 = true;
-                        }
-                        else if !session.using_ipv6 && addr_ipv4_old != addr_ipv4_current {
+                        } else if !session.using_ipv6 && addr_ipv4_old != addr_ipv4_current {
                             _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
                                 peer_id: client_self.id.clone(),
                                 new_ip: addr_ipv4_current,
-                                old_ip: addr_ipv4_old
+                                old_ip: addr_ipv4_old,
                             }));
-                        }
-                        else {
+                        } else {
                             continue;
                         }
                     }
@@ -301,13 +325,13 @@ impl Server {
                 {
                     //Updating the ips
                     client_self.ipv4 = addr_ipv4_current;
-       
+
                     client_self.ipv6 = data.ipv6;
                 }
-                
+
                 Packet::Status(Status {
                     code: 200,
-                    msg: "Success".into()
+                    msg: "Success".into(),
                 })
             }
             Packet::NewSession(data) => {
@@ -319,7 +343,7 @@ impl Server {
                 let mut client_addr = client_self.conn.remote_address();
                 if let Some(server) = self.clients.get_mut(target_id) {
                     //Initially there's no client connected
-                    
+
                     let mut using_ipv6 = false;
                     if server.ipv6.is_some() {
                         // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
@@ -329,11 +353,14 @@ impl Server {
                         }
                     }
 
-                    sessions.insert(client_self.id.clone(), Session {
-                        server_id: server.id.clone(), //self
-                        client_id: client_self.id.clone(),
-                        using_ipv6: using_ipv6,
-                    });
+                    sessions.insert(
+                        client_self.id.clone(),
+                        Session {
+                            server_id: server.id.clone(), //self
+                            client_id: client_self.id.clone(),
+                            using_ipv6: using_ipv6,
+                        },
+                    );
 
                     client_self.session_ids.push(client_self.id.clone());
                     server.session_ids.push(client_self.id.clone());
@@ -341,30 +368,31 @@ impl Server {
                     info!("Sending connect packet to server!");
                     let _ = server.stream.send(Packet::ConnectTo(ConnectTo {
                         target: client_addr,
-                        target_id: client_self.id.clone()
+                        target_id: client_self.id.clone(),
                     }));
 
                     Packet::Status(Status {
                         code: 200,
-                        msg: "Success".into()
+                        msg: "Success".into(),
                     })
-                }
-                else {
+                } else {
                     Packet::Status(Status {
                         code: 404,
-                        msg: "Not found".into()
+                        msg: "Not found".into(),
                     })
                 }
             }
             Packet::ServerConnectionRequest(data) => {
                 //Sent as a response from the server
                 let client_id = &data.client_id;
-     
+
                 let sessions = &mut self.sessions;
                 if let Some(session) = sessions.get_mut(client_id) {
                     //Telling the client to connect to the server as a "response" to complete the UDP hole punch
-                    let client = self.clients.get_mut(&session.client_id)
-                    .context("SERVER_SENT_CONNECTION_REQUEST: Session client not present")?;
+                    let client = self
+                        .clients
+                        .get_mut(&session.client_id)
+                        .context("SERVER_SENT_CONNECTION_REQUEST: Session client not present")?;
 
                     let mut server_addr = client_self.ipv4;
 
@@ -376,52 +404,53 @@ impl Server {
 
                     let _ = client.stream.send(Packet::ConnectTo(ConnectTo {
                         target: server_addr,
-                        target_id: client.id.clone()
+                        target_id: client.id.clone(),
                     }));
 
                     Packet::Status(Status {
                         code: 200,
-                        msg: "Success".into()
+                        msg: "Success".into(),
                     })
-                }
-                else {
+                } else {
                     Packet::Status(Status {
                         code: 404,
-                        msg: "Session not found".into()
+                        msg: "Session not found".into(),
                     })
                 }
             }
-            _ => {
-                Packet::Status(Status {
-                    code: 400,
-                    msg: "Bad packet".into()
-                })
-            }
+            _ => Packet::Status(Status {
+                code: 400,
+                msg: "Bad packet".into(),
+            }),
         };
         Ok((response, client_self))
     }
 
-    async fn handle_auth(&mut self, mut stream: ClientStream, conn: &Connection) -> Result<Client>{
-        let auth_packet =  stream.read_response::<ServerPacket>().await?;
+    async fn handle_auth(&mut self, mut stream: ClientStream, conn: &Connection) -> Result<Client> {
+        let auth_packet = stream.read_response::<ServerPacket>().await?;
         let packet_type = auth_packet.packet;
 
         let mut response = AuthResponse {
             success: false,
             token: None,
-            status_msg: None
+            status_msg: None,
         };
 
         let Packet::Auth(auth_data) = packet_type else {
             response.status_msg = Some("Packet is not of type auth".into());
-            let _ = stream.send_packet::<Packet>(&Packet::AuthResponse(response)).await;
+            let _ = stream
+                .send_packet::<Packet>(&Packet::AuthResponse(response))
+                .await;
             bail!("Packet is not of type auth!");
         };
-        
+
         let found = self.check_publickey(&auth_data).await?;
 
         if !found {
             response.status_msg = Some("Publickey check failed".into());
-            let _ = stream.send_packet::<Packet>(&Packet::AuthResponse(response)).await;
+            let _ = stream
+                .send_packet::<Packet>(&Packet::AuthResponse(response))
+                .await;
             bail!("Publickey check failed for {}", auth_data.id);
         }
         response.success = true;
@@ -429,8 +458,15 @@ impl Server {
         let token = Uuid::new_v4().to_string();
         response.token = Some(token.clone());
 
-        if let Err(e) = stream.send_packet::<Packet>(&Packet::AuthResponse(response)).await {
-            bail!("Failed to send auth response back to {}: {}", auth_data.id, e);
+        if let Err(e) = stream
+            .send_packet::<Packet>(&Packet::AuthResponse(response))
+            .await
+        {
+            bail!(
+                "Failed to send auth response back to {}: {}",
+                auth_data.id,
+                e
+            );
         }
 
         let client_events = EventBus::<Packet>::default();
@@ -445,7 +481,7 @@ impl Server {
             stream: msg_sender,
             session_ids: Vec::new(),
             ipv6: auth_data.ipv6,
-            ipv4: conn.remote_address()
+            ipv4: conn.remote_address(),
         };
 
         let global_sender = self.event_bus.new_sender().await;
@@ -458,23 +494,26 @@ impl Server {
         tokio::spawn(async move {
             loop {
                 let Ok(stream) = get_stream_from_conn(&conn_cloned).await else {
-                    info!("Connection closed. Terminating bi-stream handler for {}", conn_cloned.remote_address());
+                    info!(
+                        "Connection closed. Terminating bi-stream handler for {}",
+                        conn_cloned.remote_address()
+                    );
                     break;
                 };
-                Server::client_communication_task(stream, client_events.subscribe().await, global_sender.clone());
+                Server::client_communication_task(
+                    stream,
+                    client_events.subscribe().await,
+                    global_sender.clone(),
+                );
             }
         });
 
         Ok(client)
     }
 
-    async fn run(
-        &mut self,
-        endpoint: &Endpoint
-        ) -> Result<()> {
-       
+    async fn run(&mut self, endpoint: &Endpoint) -> Result<()> {
         let mut global_receiver = self.event_bus.subscribe().await;
-        loop{
+        loop {
             tokio::select! {
                 Ok(conn) = Server::accept_connections(endpoint) => {
                     //Wait for client to initiate a bi-directional stream
@@ -519,7 +558,6 @@ impl Server {
                     };
 
                     if let Err(e) = client.stream.send(packet) {
-                        error!("Error sending packet {}", e);
                         continue;
                     }
                     //Reinserting it
@@ -529,4 +567,3 @@ impl Server {
         }
     }
 }
-
