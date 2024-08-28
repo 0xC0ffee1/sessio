@@ -6,38 +6,42 @@ use client::Msg;
 use common::utils::events::EventBus;
 use common::utils::map_ipv4_to_ipv6;
 use coordinator::holepuncher::HolepunchService;
-use russh::client::Handle;
 use key::KeyPair;
 use quinn::{ClientConfig, Connection, Endpoint, EndpointConfig, VarInt};
+use russh::client::Handle;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use serde_json::{json, Value};
 use ssh_key::known_hosts;
 use tokio::fs::File;
 
+use ring::digest::{Context as DigestContext, Digest, SHA256};
+
 use tokio::net::unix::pipe::Receiver;
 use tokio::sync::broadcast::Sender;
 
-use tokio::sync::oneshot::channel;
-use uuid::Uuid;
 use std::collections::HashMap;
 use std::f64::consts::E;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV6};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{error::Error, net::SocketAddr, sync::Arc};
-use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout};
+use tokio::io::{
+    self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout,
+};
+use tokio::sync::oneshot::channel;
+use uuid::Uuid;
 
 use quinn_proto::crypto::rustls::QuicClientConfig;
 
 use crate::ipc::clientipc::client_event::{self, CloseEvent, StreamType};
-use crate::ipc::{self, clientipc};
+use crate::ipc::clientipc::msg::{Data, PtyRequest, Type};
 use crate::ipc::clientipc::session_data::{Kind as SessionKind, PtySession};
-use crate::ipc::clientipc::{Settings};
-use crate::ipc::clientipc::{ClientEvent, SessionData, client_event::ServerMigrateEvent};
+use crate::ipc::clientipc::Settings;
+use crate::ipc::clientipc::{client_event::ServerMigrateEvent, ClientEvent, SessionData};
+use crate::ipc::{self, clientipc};
 #[cfg(not(windows))]
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(windows)]
 use tokio::signal::windows::ctrl_c;
-use crate::ipc::clientipc::msg::{Data, PtyRequest, Type};
 
 use url::Url;
 
@@ -48,42 +52,45 @@ use russh_keys::*;
 
 use async_trait::async_trait;
 
+use anyhow::{bail, Context, Result};
+use bytes::Bytes;
+use crossterm::{
+    event::{read, Event, KeyCode},
+    execute, queue,
+    terminal::{
+        disable_raw_mode, enable_raw_mode, size as terminal_size, Clear, ClearType,
+        EnterAlternateScreen, LeaveAlternateScreen,
+    },
+};
+use futures::{select, stream};
+use russh::*;
+use russh_keys::*;
+use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
-use bytes::Bytes;
-use anyhow::{bail, Context, Result};
-use russh::*;
-use russh_keys::*;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::{task, time};
-use russh_sftp::{client::SftpSession, protocol::OpenFlags};
-use futures::{select, stream};
-use crossterm::{
-    execute, queue,
-    terminal::{disable_raw_mode, enable_raw_mode, size as terminal_size, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
-    event::{read, Event, KeyCode},
-};
 
-use coordinator::coordinator_client::CoordinatorClient;
 use common::utils::streams::BiStream;
+use coordinator::coordinator_client::CoordinatorClient;
 
 //Reusable channel where the listening end always takes the receiver
 
 pub struct ChannelBiStream {
     //The client-bound message listener
     pub client_messages: EventBus<clientipc::Msg>,
-    pub server_messages: EventBus<clientipc::Msg>
+    pub server_messages: EventBus<clientipc::Msg>,
 }
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn, Level};
 
 #[derive(Clone)]
-struct PeerChangeMsg{
+struct PeerChangeMsg {
     pub new_ip: SocketAddr,
-    pub old_ip: SocketAddr
+    pub old_ip: SocketAddr,
 }
 
 #[derive(Parser, Debug)]
@@ -105,14 +112,14 @@ pub struct Opt {
     known_hosts_path: PathBuf,
 
     //The identifier of the target machine
-    target_id: String
+    target_id: String,
 }
 
 #[tokio::main]
-pub async fn run(cli: Opt) -> anyhow::Result<()>{
+pub async fn run(cli: Opt) -> anyhow::Result<()> {
     env_logger::builder()
-    .filter_level(log::LevelFilter::Info)
-    .init();
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
     /* info!("Key path: {:?}", cli.private_key);
 
@@ -134,7 +141,7 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
     let session_guard = client.sessions.get_mut("asd").unwrap();
     let mut session = session_guard.lock().await;
 
-    let stdout: Stdout = tokio::io::stdout();   
+    let stdout: Stdout = tokio::io::stdout();
     let stdin: Stdin = tokio::io::stdin();
 
     let code = {
@@ -156,7 +163,6 @@ pub async fn run(cli: Opt) -> anyhow::Result<()>{
     let _ = session.close().await; */
     Ok(())
 }
-
 
 /// Enables MTUD if supported by the operating system
 #[cfg(unix)]
@@ -191,6 +197,18 @@ impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
         _ocsp: &[u8],
         _now: UnixTime,
     ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        let der_bytes = _end_entity.as_ref();
+        let mut hasher = DigestContext::new(&SHA256);
+
+        hasher.update(der_bytes);
+
+        let fingerprint: Digest = hasher.finish();
+
+        // Convert the fingerprint to a hexadecimal string if needed
+        let fingerprint_hex = hex::encode(fingerprint.as_ref());
+
+        info!("Certificate fingerprint (SHA-256): {}", fingerprint_hex);
+
         Ok(rustls::client::danger::ServerCertVerified::assertion())
     }
 
@@ -227,7 +245,6 @@ impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
     }
 }
 
-
 fn configure_client() -> Result<ClientConfig> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let mut client_config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(
@@ -250,14 +267,15 @@ pub fn make_client_endpoint(socket: UdpSocket) -> Result<Endpoint> {
     let client_cfg = configure_client()?;
 
     let runtime = quinn::default_runtime()
-    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
 
     let mut endpoint = Endpoint::new_with_abstract_socket(
-    EndpointConfig::default(), 
-    None,
-    runtime.wrap_udp_socket(socket.into_std()?)?,
-    runtime)?;
-    
+        EndpointConfig::default(),
+        None,
+        runtime.wrap_udp_socket(socket.into_std()?)?,
+        runtime,
+    )?;
+
     endpoint.set_default_client_config(client_cfg);
     Ok(endpoint)
 }
@@ -270,7 +288,7 @@ pub struct Client {
     pub event_bus: EventBus<ClientEvent>,
     //This is optional for the initial setting configuration
     pub coordinator: Option<HolepunchService>,
-    pub endpoint: Endpoint
+    pub endpoint: Endpoint,
 }
 
 //The name "Session" is confusing, it's actually a SSH connection
@@ -288,7 +306,7 @@ pub struct Session {
 
     pub channel_stream: ChannelBiStream,
     pub sftp_session: Option<SftpSession>,
-    pub event_sender: Sender<ClientEvent>
+    pub event_sender: Sender<ClientEvent>,
 }
 
 pub struct ClientHandler {
@@ -297,7 +315,7 @@ pub struct ClientHandler {
     server_id: String,
     session_id: String,
     event_tx: Sender<ClientEvent>,
-    known_hosts_path: PathBuf
+    known_hosts_path: PathBuf,
 }
 
 impl Client {
@@ -307,22 +325,32 @@ impl Client {
 
     pub async fn init_coordinator(&mut self) -> Result<()> {
         let data_folder_path = self.data_folder_path.clone();
-        let settings = Client::get_json_as::<Settings>(Client::get_settings_file(&data_folder_path).await?)
-        .await?;
+        let settings =
+            Client::get_json_as::<Settings>(Client::get_settings_file(&data_folder_path).await?)
+                .await?;
 
         let coord_url = Url::parse(&settings.coordinator_url)?;
 
-        let ipv6 = CoordinatorClient::get_new_external_ipv6(self.endpoint.local_addr().unwrap().port()).await;
+        let ipv6 =
+            CoordinatorClient::get_new_external_ipv6(self.endpoint.local_addr().unwrap().port())
+                .await;
 
         let key_pair = Client::get_keypair(&data_folder_path)?;
-        
-        self.coordinator = HolepunchService::new(coord_url, self.endpoint.clone(), key_pair, ipv6,
-    settings.device_id).await.ok();
+
+        self.coordinator = HolepunchService::new(
+            coord_url,
+            self.endpoint.clone(),
+            key_pair,
+            ipv6,
+            settings.device_id,
+        )
+        .await
+        .ok();
 
         Ok(())
     }
 
-    pub async fn handle_event(&mut self, event: &ClientEvent) -> Result<()>{
+    pub async fn handle_event(&mut self, event: &ClientEvent) -> Result<()> {
         match &event.kind {
             Some(client_event::Kind::Close(close_event)) => {
                 match close_event.stream_type() {
@@ -355,7 +383,7 @@ impl Client {
             endpoint: endpoint,
             sessions: HashMap::default(),
             event_bus: EventBus::default(),
-            coordinator: None
+            coordinator: None,
         };
 
         client.init_coordinator();
@@ -365,28 +393,28 @@ impl Client {
 
     pub async fn get_settings_file(path: &Path) -> Result<File> {
         let mut f = File::options()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(path
-            .join("settings.json")).await?;
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path.join("settings.json"))
+            .await?;
         Ok(f)
     }
 
     pub async fn get_save_file(path: &Path) -> Result<File> {
         let mut f = File::options()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(path
-            .join("save.json")).await?;
-        
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path.join("save.json"))
+            .await?;
+
         Ok(f)
     }
 
-    pub async fn get_json_as<T>(file: File) -> Result<T> 
+    pub async fn get_json_as<T>(file: File) -> Result<T>
     where
-    T: serde::de::DeserializeOwned + Default
+        T: serde::de::DeserializeOwned + Default,
     {
         let mut reader = BufReader::new(file);
         let mut contents = String::new();
@@ -399,9 +427,9 @@ impl Client {
         Ok(data)
     }
 
-    pub async fn save_json_as<T>(file: File, data: T) -> Result<T> 
+    pub async fn save_json_as<T>(file: File, data: T) -> Result<T>
     where
-    T: serde::Serialize
+        T: serde::Serialize,
     {
         //Truncate
         file.set_len(0).await?;
@@ -412,9 +440,9 @@ impl Client {
         Ok(data)
     }
 
-    pub async fn get_json_value<T>(key: &str, file: File) -> Result<Option<T>> 
+    pub async fn get_json_value<T>(key: &str, file: File) -> Result<Option<T>>
     where
-    T: serde::de::DeserializeOwned
+        T: serde::de::DeserializeOwned,
     {
         let mut reader = BufReader::new(file);
         let mut contents = String::new();
@@ -429,9 +457,9 @@ impl Client {
     }
 
     ///Returns the old value
-    pub async fn set_json_value<T>(key: &str, value: &T, file: File) -> Result<Option<Value>> 
+    pub async fn set_json_value<T>(key: &str, value: &T, file: File) -> Result<Option<Value>>
     where
-    T: serde::Serialize
+        T: serde::Serialize,
     {
         let (mut reader, mut writer) = tokio::io::split(file);
         let mut reader = BufReader::new(reader);
@@ -442,7 +470,7 @@ impl Client {
         } else {
             serde_json::from_str(&contents)?
         };
-        
+
         let new_value = serde_json::to_value(value)?;
 
         let old_value = data.insert(key.to_string(), new_value);
@@ -450,7 +478,7 @@ impl Client {
         let mut writer = BufWriter::new(writer);
 
         let updated_contents = serde_json::to_string(&data)?;
-    
+
         // Write the updated JSON string back to the file
         writer.write_all(updated_contents.as_bytes()).await?;
         writer.flush().await?;
@@ -491,7 +519,7 @@ impl Client {
     }
 
     pub fn session_exists(&self, session_id: &str) -> bool {
-        self.sessions.contains_key(session_id) 
+        self.sessions.contains_key(session_id)
     }
 
     pub async fn new_session<T>(
@@ -501,9 +529,11 @@ impl Client {
         username: String,
         session_id: Option<String>,
         private_key_path: T,
-        known_hosts_path: T
-    )  -> anyhow::Result<String> where T: AsRef<Path> {
-
+        known_hosts_path: T,
+    ) -> anyhow::Result<String>
+    where
+        T: AsRef<Path>,
+    {
         let known_hosts_path = self.data_folder_path.join("keys/known_hosts");
 
         let key_pair = Client::get_keypair(&self.data_folder_path)?;
@@ -528,18 +558,19 @@ impl Client {
         let Some(connection) = self.connections.get(&target_id) else {
             bail!("No connection made for {}", target_id);
         };
-        
-        info!(
-            "[client] Connected to: {}",
-            connection.remote_address(),
-        );
-        
+
+        info!("[client] Connected to: {}", connection.remote_address(),);
+
         let (mut send, mut recv) = connection
             .open_bi()
             .await
-            .map_err(|e| format!("failed to open stream: {}", e)).unwrap();
-        
-        let bi_stream = BiStream {recv_stream: recv, send_stream: send};
+            .map_err(|e| format!("failed to open stream: {}", e))
+            .unwrap();
+
+        let bi_stream = BiStream {
+            recv_stream: recv,
+            send_stream: send,
+        };
 
         let id = if session_id.is_none() {
             Uuid::new_v4().to_string()
@@ -553,10 +584,11 @@ impl Client {
             connection: connection.clone(),
             known_hosts_path: known_hosts_path.to_path_buf(),
             event_tx: self.event_bus.new_sender().await,
-            session_id: id.clone()
+            session_id: id.clone(),
         };
 
-        let mut handle = russh::client::connect_stream(config, Box::new(bi_stream), session_handler).await?;
+        let mut handle =
+            russh::client::connect_stream(config, Box::new(bi_stream), session_handler).await?;
 
         //let signal_thread = create_signal_thread();
 
@@ -579,14 +611,15 @@ impl Client {
             handle,
             channel_stream: ChannelBiStream {
                 client_messages: EventBus::default(),
-                server_messages: EventBus::default()
+                server_messages: EventBus::default(),
             },
             sftp_session: None,
             active: false,
-            event_sender: self.event_bus.new_sender().await
+            event_sender: self.event_bus.new_sender().await,
         };
-      
-        self.sessions.insert(id.clone(), Arc::new(Mutex::new(session)));
+
+        self.sessions
+            .insert(id.clone(), Arc::new(Mutex::new(session)));
 
         Ok((id))
     }
@@ -606,17 +639,26 @@ impl russh::client::Handler for ClientHandler {
         let host = &self.server_id;
         let port = 0;
 
-        let is_known_res = russh_keys::check_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path);
+        let is_known_res = russh_keys::check_known_hosts_path(
+            host,
+            port,
+            _server_public_key,
+            &self.known_hosts_path,
+        );
 
         if let Ok(known) = is_known_res {
             if !known {
                 info!("Learned new host {}:{}", host, port);
-                russh_keys::learn_known_hosts_path(host, port, _server_public_key, &self.known_hosts_path)?;
+                russh_keys::learn_known_hosts_path(
+                    host,
+                    port,
+                    _server_public_key,
+                    &self.known_hosts_path,
+                )?;
             }
-        } 
-        else if let Err(e) = is_known_res {
+        } else if let Err(e) = is_known_res {
             match e {
-                russh_keys::Error::KeyChanged {line} => {
+                russh_keys::Error::KeyChanged { line } => {
                     error!("Key changed at line: {}", line);
                     return Ok(false);
                 }
@@ -639,7 +681,7 @@ impl russh::client::Handler for ClientHandler {
         Ok(())
     }
 
-/*     async fn channel_accept_stream(&mut self, 
+    /*     async fn channel_accept_stream(&mut self,
         id: ChannelId) -> Result<Option<Box<dyn SubStream>>, Self::Error> {
 
         info!("Waiting on new channel stream!");
@@ -654,8 +696,13 @@ impl russh::client::Handler for ClientHandler {
 }
 
 impl Session {
-
-    pub async fn direct_tcpip_forward(&mut self, local_host: &str, local_port: u32, remote_host: &str, remote_port: u32) -> Result<()>{
+    pub async fn direct_tcpip_forward(
+        &mut self,
+        local_host: &str,
+        local_port: u32,
+        remote_host: &str,
+        remote_port: u32,
+    ) -> Result<()> {
         let listener = TcpListener::bind((local_host, local_port as u16)).await?;
 
         let remote_host = remote_host.to_string();
@@ -664,13 +711,20 @@ impl Session {
         loop {
             let (mut stream, addr) = listener.accept().await?;
 
-            let mut channel = self.handle.channel_open_direct_tcpip(remote_host.clone(), remote_port, 
-            addr.ip().to_string(), addr.port() as u32).await?;
+            let mut channel = self
+                .handle
+                .channel_open_direct_tcpip(
+                    remote_host.clone(),
+                    remote_port,
+                    addr.ip().to_string(),
+                    addr.port() as u32,
+                )
+                .await?;
 
             tokio::spawn(async move {
                 let mut cin = channel.make_writer();
                 let mut cout = channel.make_reader();
-    
+
                 let (mut s_read, mut s_write) = stream.split();
                 tokio::try_join! {
                     tokio::io::copy(&mut s_read, &mut cin),
@@ -697,18 +751,18 @@ impl Session {
 
         Ok(channel_id)
     }
-    
+
     pub async fn new_session_channel(&mut self) -> Result<()> {
         let mut channel = self.handle.channel_open_session().await?;
 
         let mut server_receiver = self.channel_stream.server_messages.subscribe().await;
 
         let client_sender = self.channel_stream.client_messages.new_sender().await;
-        
+
         self.active = true;
         let event_sender = self.event_sender.clone();
         let channel_id = self.id.clone();
-        
+
         let server_id = self.server_id.clone();
         tokio::spawn(async move {
             loop {
@@ -741,7 +795,7 @@ impl Session {
                                     req.row_height,
                                     0,
                                     0,
-                                    &[], 
+                                    &[],
                                 )
                                 .await;
                             }
@@ -801,7 +855,6 @@ impl Session {
         Ok(())
     }
 }
-
 
 #[cfg(windows)]
 fn create_signal_thread() -> impl core::future::Future<Output = ()> {

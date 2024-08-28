@@ -22,40 +22,41 @@ use homedir::home;
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::broadcast::Receiver;
 
-use tokio::{select, time};
-use toml::ser;
-use std::process::{Command, Stdio};
-use std::str;
 use async_trait::async_trait;
+use clap::Parser;
+use log::{debug, error, info};
+use quinn::{crypto, Connection, Endpoint, EndpointConfig, ServerConfig, VarInt};
+use rand::rngs::OsRng;
+use rand::{seq, CryptoRng};
 use russh::server::{Msg, Server as _, Session};
 use russh::*;
-use russh_keys::*;
-use tokio::sync::{mpsc, Mutex, mpsc::Sender};
-use rand::rngs::OsRng;
-use ssh_key::{Algorithm, HashAlg, LineEnding, PrivateKey, PublicKey};
 use russh_keys::key::KeyPair;
-use rand::{seq, CryptoRng};
-use log::{debug, error, info};
-use tokio::fs::read_to_string;
+use russh_keys::*;
+use ssh_key::{Algorithm, HashAlg, LineEnding, PrivateKey, PublicKey};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener};
-use clap::Parser;
-use quinn::{crypto, Connection, Endpoint, EndpointConfig, ServerConfig, VarInt};
+use std::process::{Command, Stdio};
+use std::str;
+use tokio::fs::read_to_string;
+use tokio::sync::{mpsc, mpsc::Sender, Mutex};
+use tokio::{select, time};
+use toml::ser;
 
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtyPair, PtySize, PtySystem, SlavePty};
 use anyhow::{bail, Context, Error};
+use portable_pty::{
+    native_pty_system, CommandBuilder, MasterPty, PtyPair, PtySize, PtySystem, SlavePty,
+};
+use russh::Channel;
+use serde::Deserialize;
 use std::pin::Pin;
 use std::task::Poll;
-use serde::Deserialize;
-use russh::Channel;
 use std::time::{Duration, Instant};
 
+use crate::sftp::*;
 use common::utils::keygen::generate_keypair;
 use coordinator::coordinator_client::*;
 use url::Url;
-use crate::sftp::*;
 
 use common::utils::streams::BiStream;
-
 
 #[derive(Parser, Debug)]
 #[clap(name = "client")]
@@ -65,10 +66,10 @@ pub struct Opt {
 
     //The identifier of this machine
     id: String,
-    
+
     //The path to your private key
     #[clap(long, short = 'p', default_value = "keys/ssh_host_ed25519_key")]
-    private_key: PathBuf
+    private_key: PathBuf,
 }
 
 /// Returns default server configuration along with its certificate.
@@ -99,15 +100,15 @@ pub fn make_server_endpoint(socket: UdpSocket) -> anyhow::Result<Endpoint> {
     //todo set IPV6_V6ONLY false on windows
 
     let runtime = quinn::default_runtime()
-    .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
-
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no async runtime found"))?;
 
     let mut endpoint = Endpoint::new_with_abstract_socket(
-    EndpointConfig::default(), 
-    Some(server_config),
-    runtime.wrap_udp_socket(socket.into_std()?)?,
-    runtime)?;
-    
+        EndpointConfig::default(),
+        Some(server_config),
+        runtime.wrap_udp_socket(socket.into_std()?)?,
+        runtime,
+    )?;
+
     Ok(endpoint)
 }
 
@@ -125,14 +126,13 @@ impl ServerConf {
 }
 
 #[derive(Clone)]
-struct PeerChangeMsg{
+struct PeerChangeMsg {
     pub id: String,
     pub new_ip: SocketAddr,
-    pub old_ip: SocketAddr
+    pub old_ip: SocketAddr,
 }
 
 async fn listen_to_coordinator(endpoint: Endpoint, holepuncher: &HolepunchService) {
-
     let mut receiver: Receiver<Packet> = holepuncher.c_client.subscribe_to_packets().await;
     let sender = holepuncher.c_client.new_packet_sender();
 
@@ -158,15 +158,17 @@ async fn listen_to_coordinator(endpoint: Endpoint, holepuncher: &HolepunchServic
                             info!("Connection failed: {}", e);
                         }
                     }
-                    let _ = sender.send(ServerPacket {
-                        base: Some(PacketBase {
-                            own_id: id.clone(),
-                            token: token.clone()
-                        }),
-                        packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
-                            client_id: data.target_id
+                    let _ = sender
+                        .send(ServerPacket {
+                            base: Some(PacketBase {
+                                own_id: id.clone(),
+                                token: token.clone(),
+                            }),
+                            packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
+                                client_id: data.target_id,
+                            }),
                         })
-                    }).await;
+                        .await;
                 }
                 Packet::PeerIpChanged(data) => {
                     //Creating NAT mappings
@@ -175,9 +177,8 @@ async fn listen_to_coordinator(endpoint: Endpoint, holepuncher: &HolepunchServic
                 _ => {}
             }
         }
-    });   
+    });
 }
-
 
 #[tokio::main]
 pub async fn run(opt: Opt) {
@@ -201,37 +202,41 @@ pub async fn run(opt: Opt) {
     };
 
     //Dual stack
-    let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap()).await.unwrap();
+    let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap())
+        .await
+        .unwrap();
 
     let ipv6 = CoordinatorClient::get_external_ipv6(&sock_v6).await;
     //let endpoint_v4 = make_server_endpoint(sock_v4).unwrap();
     let mut endpoint_v6 = make_server_endpoint(sock_v6).unwrap();
 
     CoordinatorClient::configure_crypto(&mut endpoint_v6);
-    let holepuncher = HolepunchService::new(opt.coordinator, endpoint_v6.clone(),
-     host_key, ipv6, opt.id).await.unwrap();
+    let holepuncher =
+        HolepunchService::new(opt.coordinator, endpoint_v6.clone(), host_key, ipv6, opt.id)
+            .await
+            .unwrap();
     listen_to_coordinator(endpoint_v6.clone(), &holepuncher).await;
 
     let config = Arc::new(config);
-    
+
     println!("Started!");
 
     let config_v6 = config.clone();
     let v6_handle = tokio::spawn(async move {
-        let mut sh = Server {
-            holepuncher
-        };
+        let mut sh = Server { holepuncher };
         sh.run_quic(config_v6, &endpoint_v6).await.unwrap();
     });
     let v6 = tokio::join!(v6_handle);
-
 }
 
 fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error::Error>> {
     let path = path.as_ref();
     if !path.exists() {
         if path != Path::new("keys/ssh_host_ed25519_key") {
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "Specified private key file doesn't exist.")));
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Specified private key file doesn't exist.",
+            )));
         }
         generate_keypair("keys/", Algorithm::Ed25519, "ssh_host_ed25519_key");
     }
@@ -245,25 +250,25 @@ struct ServerSession {
     clients: Arc<Mutex<HashMap<ChannelId, Channel<Msg>>>>,
     ptys: Arc<Mutex<HashMap<ChannelId, Arc<PtyStream>>>>,
     id: Arc<AtomicUsize>,
-    user: Option<String>
+    user: Option<String>,
 }
 
 struct Server {
-    holepuncher: HolepunchService
+    holepuncher: HolepunchService,
 }
 
-struct PtyStream{
+struct PtyStream {
     reader: Mutex<Box<dyn Read + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
     slave: Mutex<Box<dyn SlavePty + Send>>,
-    master: Mutex<Box<dyn MasterPty + Send>>
+    master: Mutex<Box<dyn MasterPty + Send>>,
 }
 
-trait QuicServer{
+trait QuicServer {
     async fn run_quic(
         &mut self,
         config: Arc<russh::server::Config>,
-        connection: &Endpoint
+        connection: &Endpoint,
     ) -> Result<(), std::io::Error>;
 }
 
@@ -271,22 +276,19 @@ trait QuicServer{
 impl server::Server for Server {
     type Handler = ServerSession;
     fn new_client(&mut self, _: Option<std::net::SocketAddr>) -> ServerSession {
-        
         ServerSession::default()
     }
 }
 
-
 impl QuicServer for Server {
-
     async fn run_quic(
         &mut self,
         config: Arc<server::Config>,
-        endpoint: &Endpoint
+        endpoint: &Endpoint,
     ) -> Result<(), io::Error> {
         let config_cloned = config.clone();
-        
-        loop{
+
+        loop {
             let conf = config_cloned.clone();
             info!("Waiting for connections..");
             let incoming_conn = match endpoint.accept().await {
@@ -314,7 +316,8 @@ impl QuicServer for Server {
             info!(
                 "[server] connection accepted: ({}, {})",
                 conn.remote_address(),
-                sni);
+                sni
+            );
 
             //A single connection can spawn multiple streams
 
@@ -329,8 +332,11 @@ impl QuicServer for Server {
                             break;
                         }
                     };
-                    
-                    let mut bi_stream = BiStream {recv_stream: quinn_recv, send_stream: quinn_send};
+
+                    let mut bi_stream = BiStream {
+                        recv_stream: quinn_recv,
+                        send_stream: quinn_send,
+                    };
 
                     let handler = ServerSession {
                         ..Default::default()
@@ -339,18 +345,21 @@ impl QuicServer for Server {
                     info!("New client connected!");
 
                     tokio::spawn(async move {
-                        let session = match russh::server::run_stream(conf, Box::new(bi_stream), handler).await {
-                            Ok(s) => s,
-                            Err(e) => {
-                                error!("Connection setup failed");
-                                return
-                            }
-                        };
+                        let session =
+                            match russh::server::run_stream(conf, Box::new(bi_stream), handler)
+                                .await
+                            {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    error!("Connection setup failed");
+                                    return;
+                                }
+                            };
 
                         match session.await {
                             Ok(_) => {
                                 debug!("Connection closed")
-                            },
+                            }
                             Err(e) => {
                                 error!("Connection closed with error {}", e);
                                 //TODO handle errors
@@ -363,10 +372,6 @@ impl QuicServer for Server {
     }
 }
 
-
-
-
-
 impl ServerSession {
     pub async fn take_channel(&mut self, channel_id: ChannelId) -> Channel<Msg> {
         let mut clients = self.clients.lock().await;
@@ -377,7 +382,6 @@ impl ServerSession {
 #[async_trait]
 impl server::Handler for ServerSession {
     type Error = anyhow::Error;
-
 
     /// Basic local forwarding
     #[allow(unused_variables)]
@@ -390,8 +394,10 @@ impl server::Handler for ServerSession {
         originator_port: u32,
         session: &mut Session,
     ) -> Result<bool, Self::Error> {
-        
-        info!("Forwarding {}:{} for {}:{}", host_to_connect, port_to_connect, originator_address, originator_port);
+        info!(
+            "Forwarding {}:{} for {}:{}",
+            host_to_connect, port_to_connect, originator_address, originator_port
+        );
         let host = host_to_connect.to_string();
         let mut stream = TcpStream::connect((host, port_to_connect as u16)).await?;
 
@@ -405,7 +411,7 @@ impl server::Handler for ServerSession {
                 tokio::io::copy(&mut cout, &mut s_write)
             }
         });
-        
+
         Ok(true)
     }
 
@@ -438,14 +444,18 @@ impl server::Handler for ServerSession {
         {
             let new_id = self.id.fetch_add(1, Ordering::SeqCst); // Atomic increment
             let mut clients = self.clients.lock().await;
-            info!("Channel session opened! Client ID: {}, Channel ID: {:?}", new_id, channel.id());
+            info!(
+                "Channel session opened! Client ID: {}, Channel ID: {:?}",
+                new_id,
+                channel.id()
+            );
             clients.insert(channel.id(), channel);
         }
         Ok(true)
     }
 
-/*     async fn open_channel_stream(&mut self, 
-        channel: ChannelId) 
+    /*     async fn open_channel_stream(&mut self,
+        channel: ChannelId)
         -> Result<Option<Box<dyn SubStream>>, Self::Error> {
 
         if let Some(conn) = self.connection.as_ref() {
@@ -455,7 +465,7 @@ impl server::Handler for ServerSession {
             info!("Opened a new channel stream!");
             return Ok(option.map(|b| b as Box<dyn russh::SubStream>))
         }
-        
+
         Ok(None)
     } */
 
@@ -464,10 +474,8 @@ impl server::Handler for ServerSession {
         channel_id: ChannelId,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-
         let handle_reader = session.handle();
         let handle_waiter = session.handle();
-
 
         let ptys = self.ptys.clone();
 
@@ -475,9 +483,18 @@ impl server::Handler for ServerSession {
             bail!("Authentication has not finished yet(?)");
         };
         let shell = if cfg!(windows) {
-            vec![OsString::from("cmd.exe"), OsString::from("/C"), OsString::from(format!("runas /user:{}", user))]
+            vec![
+                OsString::from("cmd.exe"),
+                OsString::from("/C"),
+                OsString::from(format!("runas /user:{}", user)),
+            ]
         } else {
-            vec![OsString::from("/usr/bin/sudo"), OsString::from("-u"), OsString::from(user), OsString::from("/bin/bash")]
+            vec![
+                OsString::from("/usr/bin/sudo"),
+                OsString::from("-u"),
+                OsString::from(user),
+                OsString::from("/bin/bash"),
+            ]
         };
 
         tokio::spawn(async move {
@@ -490,16 +507,20 @@ impl server::Handler for ServerSession {
                         let stream = pty_cloned.blocking_lock().get(&channel_id).unwrap().clone();
                         let mut reader = stream.reader.blocking_lock();
                         reader.read(&mut buffer).map(|n| (n, buffer))
-
-                    }).await {
+                    })
+                    .await
+                    {
                         Ok(Ok((n, _))) if n == 0 => {
                             debug!("PTY: No more data to read.");
                             break;
                         }
-                        Ok(Ok((n,buffer))) => {
-                            if let Err(e) = handle_reader.data(channel_id, CryptoVec::from_slice(&buffer[0..n])).await {
+                        Ok(Ok((n, buffer))) => {
+                            if let Err(e) = handle_reader
+                                .data(channel_id, CryptoVec::from_slice(&buffer[0..n]))
+                                .await
+                            {
                                 error!("Error sending PTY data to client: {:?}", e);
-                                continue;
+                                break;
                             }
                         }
                         Ok(Err(e)) => {
@@ -519,21 +540,30 @@ impl server::Handler for ServerSession {
 
                 let command_builder = CommandBuilder::from_argv(shell);
 
-                let mut child = stream.slave.blocking_lock().spawn_command(command_builder).expect("Failed to spawn child process");
+                let mut child = stream
+                    .slave
+                    .blocking_lock()
+                    .spawn_command(command_builder)
+                    .expect("Failed to spawn child process");
                 child.wait().expect("Failed to wait on child process")
-            }).await;
+            })
+            .await;
 
             match child_status {
                 Ok(status) => {
                     if status.success() {
                         info!("Child process exited successfully.");
                         //reader_handle.abort();
-                        let _ = handle_waiter.exit_status_request(channel_id, status.exit_code()).await;
+                        let _ = handle_waiter
+                            .exit_status_request(channel_id, status.exit_code())
+                            .await;
                         let _ = handle_waiter.close(channel_id).await;
                     } else {
                         error!("Child process exited with status: {:?}", status);
                         //reader_handle.abort();
-                        let _ = handle_waiter.exit_status_request(channel_id, status.exit_code()).await;
+                        let _ = handle_waiter
+                            .exit_status_request(channel_id, status.exit_code())
+                            .await;
                         let _ = handle_waiter.close(channel_id).await;
                     }
                 }
@@ -545,7 +575,6 @@ impl server::Handler for ServerSession {
         Ok(())
     }
 
-
     async fn window_change_request(
         &mut self,
         channel_id: ChannelId,
@@ -555,7 +584,6 @@ impl server::Handler for ServerSession {
         pix_height: u32,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
- 
         let clone = self.ptys.clone();
         let ptys_guard = clone.lock().await;
         let pty = ptys_guard.get(&channel_id).unwrap();
@@ -570,7 +598,6 @@ impl server::Handler for ServerSession {
         Ok(())
     }
 
-
     async fn pty_request(
         &mut self,
         channel_id: ChannelId,
@@ -584,7 +611,10 @@ impl server::Handler for ServerSession {
     ) -> Result<(), Self::Error> {
         info!("Requesting PTY!");
 
-        info!("PTY request received: term={}, col_width={}, row_height={}", term, col_width, row_height);
+        info!(
+            "PTY request received: term={}, col_width={}, row_height={}",
+            term, col_width, row_height
+        );
 
         let pty_system = native_pty_system();
         let pty_pair = pty_system.openpty(PtySize {
@@ -602,25 +632,29 @@ impl server::Handler for ServerSession {
         let mut master_writer = Mutex::new(master.take_writer().unwrap());
 
         let master_lock = Mutex::new(master);
-        
 
-        self.ptys
-        .lock()
-        .await
-            .insert(channel_id, Arc::new(PtyStream {
+        self.ptys.lock().await.insert(
+            channel_id,
+            Arc::new(PtyStream {
                 reader: master_reader,
                 writer: master_writer,
                 master: master_lock,
-                slave: Mutex::new(slave)
-            }));
-        
+                slave: Mutex::new(slave),
+            }),
+        );
+
         session.request_success();
         Ok(())
     }
 
-
-    async fn auth_password(&mut self, user: &str, password: &str) -> Result<server::Auth, Self::Error> {
-        Ok(server::Auth::Reject { proceed_with_methods: (Some(MethodSet::PUBLICKEY)) })
+    async fn auth_password(
+        &mut self,
+        user: &str,
+        password: &str,
+    ) -> Result<server::Auth, Self::Error> {
+        Ok(server::Auth::Reject {
+            proceed_with_methods: (Some(MethodSet::PUBLICKEY)),
+        })
     }
 
     async fn auth_publickey_offered(
@@ -633,11 +667,19 @@ impl server::Handler for ServerSession {
         log::debug!("Attempting to authenticate user: {}", user);
         log::debug!("Public key: {:?}", public_key);
 
-        let authorized_keys = common::utils::keygen::read_authorized_keys(Some(user)).await.map_err(|e| {
-            error!("{}", e);
-            russh::Error::CouldNotReadKey 
-        })?;
-        let res = if authorized_keys.contains(&public_key) {server::Auth::Accept} else {server::Auth::Reject { proceed_with_methods: (None) }};
+        let authorized_keys = common::utils::keygen::read_authorized_keys(Some(user))
+            .await
+            .map_err(|e| {
+                error!("{}", e);
+                russh::Error::CouldNotReadKey
+            })?;
+        let res = if authorized_keys.contains(&public_key) {
+            server::Auth::Accept
+        } else {
+            server::Auth::Reject {
+                proceed_with_methods: (None),
+            }
+        };
 
         Ok(res)
     }
@@ -647,7 +689,6 @@ impl server::Handler for ServerSession {
         user: &str,
         public_key: &key::PublicKey,
     ) -> Result<server::Auth, Self::Error> {
-
         self.user = Some(user.into());
         //Accept after auth_publickey_offered has succeeded
         Ok(server::Auth::Accept)
@@ -659,17 +700,14 @@ impl server::Handler for ServerSession {
         data: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-
         if let Some(pty_stream) = self.ptys.lock().await.get_mut(&channel_id) {
             log::info!("pty_writer: data = {data:02x?}");
 
             let mut pty_writer = pty_stream.writer.lock().await;
 
-            pty_writer
-                .write_all(data)
-                .map_err(anyhow::Error::new)?;
+            pty_writer.write_all(data).map_err(anyhow::Error::new)?;
 
-            pty_writer.flush().map_err(anyhow::Error::new)?;    
+            pty_writer.flush().map_err(anyhow::Error::new)?;
         }
         Ok(())
     }
@@ -718,7 +756,6 @@ impl server::Handler for ServerSession {
         info!("Receiving signal!");
         Ok(())
     }
-
 
     #[allow(unused_variables)]
     async fn channel_close(
