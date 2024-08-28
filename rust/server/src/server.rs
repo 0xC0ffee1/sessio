@@ -141,51 +141,58 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
 
     tokio::spawn(async move {
         loop {
-            if let Some(close_reason) = holepuncher.c_client.is_closed() {
-                log::warn!(
-                    "Coordinator connection closed. {}. Reconnecting..",
-                    close_reason
-                );
-                if let Err(e) = holepuncher.reconnect().await {
-                    log::error!("{}", e);
-                    continue;
-                }
-            }
-
-            let packet = match receiver.recv().await {
-                Ok(packet) => packet,
-                Err(e) => {
-                    log::error!("Failed to recv packet from coordinator. {}", e);
-                    continue;
-                }
-            };
-            match packet {
-                Packet::ConnectTo(data) => {
-                    match endpoint.connect(data.target, "client") {
-                        Ok(_) => {
-                            info!("Connection attempt made!");
-                        }
-                        Err(e) => {
-                            info!("Connection failed: {}", e);
-                        }
+            tokio::select! {
+                // Check if the holepuncher connection is closed
+                close_reason = holepuncher.c_client.conn.closed() => {
+                    log::warn!(
+                        "Coordinator connection closed. {}. Reconnecting..",
+                        close_reason
+                    );
+                    if let Err(e) = holepuncher.reconnect().await {
+                        log::error!("{}", e);
+                        continue;
                     }
-                    let _ = sender
-                        .send(ServerPacket {
-                            base: Some(PacketBase {
-                                own_id: id.clone(),
-                                token: token.clone(),
-                            }),
-                            packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
-                                client_id: data.target_id,
-                            }),
-                        })
-                        .await;
+                },
+
+                // Await the next packet from the receiver
+                result = receiver.recv() => {
+                    let packet = match result {
+                        Ok(packet) => packet,
+                        Err(e) => {
+                            log::error!("Failed to recv packet from coordinator. {}", e);
+                            break;
+                        }
+                    };
+
+                    match packet {
+                        Packet::ConnectTo(data) => {
+                            match endpoint.connect(data.target, "client") {
+                                Ok(_) => {
+                                    info!("Connection attempt made!");
+                                }
+                                Err(e) => {
+                                    info!("Connection failed: {}", e);
+                                }
+                            }
+                            let _ = sender
+                                .send(ServerPacket {
+                                    base: Some(PacketBase {
+                                        own_id: id.clone(),
+                                        token: token.clone(),
+                                    }),
+                                    packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
+                                        client_id: data.target_id,
+                                    }),
+                                })
+                                .await;
+                        }
+                        Packet::PeerIpChanged(data) => {
+                            //Creating NAT mappings
+                            _ = endpoint.connect(data.new_ip, "client");
+                        }
+                        _ => {}
+                    }
                 }
-                Packet::PeerIpChanged(data) => {
-                    //Creating NAT mappings
-                    _ = endpoint.connect(data.new_ip, "client");
-                }
-                _ => {}
             }
         }
     });

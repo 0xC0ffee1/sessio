@@ -41,7 +41,7 @@ pub enum ClientType {
 }
 
 pub struct CoordinatorClient {
-    conn: Connection,
+    pub conn: Connection,
     pub id_own: String,
     pub token: String,
     //Server-bound tx
@@ -68,10 +68,6 @@ pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
 impl CoordinatorClient {
     pub fn is_closed(&self) -> Option<ConnectionError> {
         return self.conn.close_reason();
-    }
-
-    pub fn clone_conn(&self) -> Connection {
-        self.conn.clone()
     }
 
     pub async fn get_nat_type() -> Result<NATFilteringType> {
