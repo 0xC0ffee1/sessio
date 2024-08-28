@@ -134,7 +134,7 @@ struct PeerChangeMsg {
 
 async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchService) {
     let mut receiver: Receiver<Packet> = holepuncher.c_client.subscribe_to_packets().await;
-    let sender = holepuncher.c_client.new_packet_sender();
+    let mut sender = holepuncher.c_client.new_packet_sender();
 
     let token = holepuncher.c_client.token.clone();
     let id = holepuncher.c_client.id_own.clone();
@@ -152,6 +152,8 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                         log::error!("{}", e);
                         continue;
                     }
+                    receiver = holepuncher.c_client.subscribe_to_packets().await;
+                    sender = holepuncher.c_client.new_packet_sender();
                 },
 
                 // Await the next packet from the receiver
