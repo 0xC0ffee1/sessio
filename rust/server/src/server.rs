@@ -136,7 +136,6 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
     let mut receiver: Receiver<Packet> = holepuncher.c_client.subscribe_to_packets().await;
     let mut sender = holepuncher.c_client.new_packet_sender();
 
-    let token = holepuncher.c_client.token.clone();
     let id = holepuncher.c_client.id_own.clone();
 
     tokio::spawn(async move {
@@ -180,7 +179,7 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                                 .send(ServerPacket {
                                     base: Some(PacketBase {
                                         own_id: id.clone(),
-                                        token: token.clone(),
+                                        token: holepuncher.c_client.token.clone(),
                                     }),
                                     packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
                                         client_id: data.target_id,
