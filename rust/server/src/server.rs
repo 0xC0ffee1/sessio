@@ -132,7 +132,7 @@ struct PeerChangeMsg {
     pub old_ip: SocketAddr,
 }
 
-async fn listen_to_coordinator(endpoint: Endpoint, holepuncher: &HolepunchService) {
+async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchService) {
     let mut receiver: Receiver<Packet> = holepuncher.c_client.subscribe_to_packets().await;
     let sender = holepuncher.c_client.new_packet_sender();
 
@@ -141,6 +141,17 @@ async fn listen_to_coordinator(endpoint: Endpoint, holepuncher: &HolepunchServic
 
     tokio::spawn(async move {
         loop {
+            if let Some(close_reason) = holepuncher.c_client.is_closed() {
+                log::warn!(
+                    "Coordinator connection closed. {}. Reconnecting..",
+                    close_reason
+                );
+                if let Err(e) = holepuncher.reconnect().await {
+                    log::error!("{}", e);
+                    continue;
+                }
+            }
+
             let packet = match receiver.recv().await {
                 Ok(packet) => packet,
                 Err(e) => {
@@ -215,7 +226,7 @@ pub async fn run(opt: Opt) {
         HolepunchService::new(opt.coordinator, endpoint_v6.clone(), host_key, ipv6, opt.id)
             .await
             .unwrap();
-    listen_to_coordinator(endpoint_v6.clone(), &holepuncher).await;
+    listen_to_coordinator(endpoint_v6.clone(), holepuncher).await;
 
     let config = Arc::new(config);
 
@@ -223,7 +234,7 @@ pub async fn run(opt: Opt) {
 
     let config_v6 = config.clone();
     let v6_handle = tokio::spawn(async move {
-        let mut sh = Server { holepuncher };
+        let mut sh = Server {};
         sh.run_quic(config_v6, &endpoint_v6).await.unwrap();
     });
     let v6 = tokio::join!(v6_handle);
@@ -253,9 +264,7 @@ struct ServerSession {
     user: Option<String>,
 }
 
-struct Server {
-    holepuncher: HolepunchService,
-}
+struct Server {}
 
 struct PtyStream {
     reader: Mutex<Box<dyn Read + Send>>,

@@ -151,7 +151,7 @@ impl Server {
                         }
                     }
                     else => {
-                        log::info!("Client communication task closed");
+                        log::debug!("Client communication task closed");
                         break;
                     }
                 }

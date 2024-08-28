@@ -1,4 +1,3 @@
-
 use common::utils::events::EventBus;
 use log::{error, info};
 use quinn::{ConnectionClose, ConnectionError, Endpoint, VarInt};
@@ -21,8 +20,8 @@ use uuid::Uuid;
 use std::net::SocketAddr;
 
 use std::sync::Arc;
-use stun_client::*;
 use stun_client::nat_behavior_discovery::*;
+use stun_client::*;
 
 use quinn_proto::crypto::rustls::QuicClientConfig;
 
@@ -49,9 +48,8 @@ pub struct CoordinatorClient {
     server_packet_sender: mpsc::Sender<ServerPacket>,
     //Client-bound rx
     client_packet_bus: EventBus<Packet>,
-    endpoint: Endpoint
+    endpoint: Endpoint,
 }
-
 
 /// Enables MTUD if supported by the operating system
 #[cfg(unix)]
@@ -69,21 +67,28 @@ pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
 
 impl CoordinatorClient {
     pub fn is_closed(&self) -> Option<ConnectionError> {
-        return self.conn.close_reason()
+        return self.conn.close_reason();
+    }
+
+    pub fn clone_conn(&self) -> Connection {
+        self.conn.clone()
     }
 
     pub async fn get_nat_type() -> Result<NATFilteringType> {
         let mut client = Client::new("[::]:0", None).await?;
 
-        let mapping_result = check_nat_filtering_behavior(&mut client, "stun.l.google.com:19302").await?;
+        let mapping_result =
+            check_nat_filtering_behavior(&mut client, "stun.l.google.com:19302").await?;
 
         Ok(mapping_result.filtering_type)
     }
 
-    pub async fn get_external_ips(sock_v4: &UdpSocket, sock_v6: &UdpSocket) -> (Option<SocketAddr>, Option<SocketAddr>) {
-
+    pub async fn get_external_ips(
+        sock_v4: &UdpSocket,
+        sock_v6: &UdpSocket,
+    ) -> (Option<SocketAddr>, Option<SocketAddr>) {
         //@TODO maybe make a ip discovery service on coord server
-        
+
         //stun.l.google.com in ipv4, if ipv6 is enabled, that would resolve to ipv6
         let client_v4 = StunClient::new("74.125.250.129:19302".parse().unwrap());
         let external_v4 = client_v4.query_external_address_async(sock_v4).await.ok();
@@ -96,7 +101,6 @@ impl CoordinatorClient {
     }
 
     pub async fn get_external_ipv6(sock_v6: &UdpSocket) -> Option<SocketAddr> {
-   
         let client_v6 = StunClient::new("[2001:4860:4864:5:8000::1]:19302".parse().unwrap());
         let external_v6 = client_v6.query_external_address_async(sock_v6).await.ok();
 
@@ -108,7 +112,6 @@ impl CoordinatorClient {
     /// This is done because we can't reuse the same socket that quinn::Endpoint has taken ownership of (in a cross-platform way).
     /// The weakness of this approach is that this assumes the port stays the same, so systems using NAT64 for example won't work with this.
     pub async fn get_new_external_ipv6(port: u16) -> Option<SocketAddr> {
-
         let sock = UdpSocket::bind("[::]:0").await.unwrap();
 
         //Just making sure it is ipv6
@@ -116,14 +119,18 @@ impl CoordinatorClient {
         let external_v6 = client_v6.query_external_address_async(&sock).await.ok();
 
         if let Some(v6) = external_v6 {
-            Some(SocketAddr::new(v6.ip(), port)) 
-        }
-        else {
+            Some(SocketAddr::new(v6.ip(), port))
+        } else {
             None
         }
     }
 
-    async fn handle_auth(id_own: String, stream: &mut ClientStream, key_pair: KeyPair, ipv6: Option<SocketAddr>) -> Result<String>{
+    async fn handle_auth(
+        id_own: String,
+        stream: &mut ClientStream,
+        key_pair: KeyPair,
+        ipv6: Option<SocketAddr>,
+    ) -> Result<String> {
         let random_data = Uuid::new_v4().to_string();
 
         let signature = key_pair.sign_detached(&random_data.as_bytes())?;
@@ -134,12 +141,12 @@ impl CoordinatorClient {
             ipv6,
             public_key_base64: key_pair.public_key_base64(),
             signed_data: random_data.to_string(),
-            signature: signature_b64
+            signature: signature_b64,
         };
 
         let packet = ServerPacket {
             base: None,
-            packet: Packet::Auth(auth_packet)
+            packet: Packet::Auth(auth_packet),
         };
 
         stream.send_packet::<ServerPacket>(&packet).await?;
@@ -151,8 +158,6 @@ impl CoordinatorClient {
             anyhow::bail!("Got wrong packet type in auth");
         };
 
-       
-
         if !data.success {
             anyhow::bail!(data.status_msg.unwrap());
         }
@@ -160,22 +165,34 @@ impl CoordinatorClient {
         Ok(data.token.unwrap())
     }
 
-    pub async fn connect(coordinator_url: Url, id_own: String, endpoint: Endpoint, 
-        key_pair: KeyPair, ipv6: Option<SocketAddr>) -> Result<Self> {
-
+    pub async fn connect(
+        coordinator_url: Url,
+        id_own: String,
+        endpoint: Endpoint,
+        key_pair: KeyPair,
+        ipv6: Option<SocketAddr>,
+    ) -> Result<Self> {
         let sock_list = coordinator_url
             .socket_addrs(|| Some(2222))
-            .map_err(|_| "Couldn't resolve to any address").map_err(|e| anyhow!(e.to_string()))?;
+            .map_err(|_| "Couldn't resolve to any address")
+            .map_err(|e| anyhow!(e.to_string()))?;
 
-        let connection = endpoint.connect(sock_list[0], &coordinator_url.host().context("Host parse error")?.to_string()).unwrap().await?;
+        let connection = endpoint
+            .connect(
+                sock_list[0],
+                &coordinator_url
+                    .host()
+                    .context("Host parse error")?
+                    .to_string(),
+            )
+            .unwrap()
+            .await?;
         info!(
             "[Coordinator client] Connected to: {}",
             connection.remote_address(),
         );
-        
-        let (send_stream, recv_stream) = connection
-            .open_bi()
-            .await?;
+
+        let (send_stream, recv_stream) = connection.open_bi().await?;
 
         let client_packet_bus = EventBus::<Packet>::default();
 
@@ -183,14 +200,14 @@ impl CoordinatorClient {
 
         let mut stream = ClientStream {
             recv_stream,
-            send_stream: Some(send_stream)
+            send_stream: Some(send_stream),
         };
-        
-        let token = CoordinatorClient::handle_auth(id_own.clone(), &mut stream, key_pair, ipv6).await?;
 
+        let token =
+            CoordinatorClient::handle_auth(id_own.clone(), &mut stream, key_pair, ipv6).await?;
 
         let (server_packet_sender, mut server_packet_receiver) = mpsc::channel::<ServerPacket>(16);
-       
+
         let client_packet_sender = client_packet_bus.new_sender().await;
 
         tokio::spawn(async move {
@@ -214,14 +231,13 @@ impl CoordinatorClient {
             }
         });
 
-        Ok(
-        CoordinatorClient {
+        Ok(CoordinatorClient {
             conn,
             id_own,
             client_packet_bus,
             endpoint,
             token,
-            server_packet_sender
+            server_packet_sender,
         })
     }
 
@@ -239,11 +255,11 @@ impl CoordinatorClient {
         };
 
         let client_crypto = rustls::ClientConfig::builder()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
         let mut client_config =
-        quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto).unwrap()));
+            quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto).unwrap()));
 
         let mut transport_config = enable_mtud_if_supported();
         transport_config.max_idle_timeout(Some(VarInt::from_u32(60_000).into()));
@@ -253,24 +269,25 @@ impl CoordinatorClient {
         endpoint.set_default_client_config(client_config);
     }
 
-    pub async fn close_connection(&mut self){
+    pub async fn close_connection(&mut self) {
         self.conn.close(0u32.into(), b"done");
     }
 
-    pub fn new_packet_sender(&self) -> mpsc::Sender<ServerPacket>{
+    pub fn new_packet_sender(&self) -> mpsc::Sender<ServerPacket> {
         self.server_packet_sender.clone()
     }
 
     ///Wraps the input Packet into a ServerPacket by using information from this struct
-    pub async fn send_server_packet(&self, packet: Packet) -> Result<(), anyhow::Error>{
-
-        self.server_packet_sender.send(ServerPacket {
-            base: Some(PacketBase {
-                own_id: self.id_own.clone(),
-                token: self.token.clone()
-            }),
-            packet
-        }).await?;
+    pub async fn send_server_packet(&self, packet: Packet) -> Result<(), anyhow::Error> {
+        self.server_packet_sender
+            .send(ServerPacket {
+                base: Some(PacketBase {
+                    own_id: self.id_own.clone(),
+                    token: self.token.clone(),
+                }),
+                packet,
+            })
+            .await?;
 
         Ok(())
     }
