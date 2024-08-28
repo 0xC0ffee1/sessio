@@ -155,8 +155,8 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
             let packet = match receiver.recv().await {
                 Ok(packet) => packet,
                 Err(e) => {
-                    log::error!("Coordinator listener closed. {}", e);
-                    break;
+                    log::error!("Failed to recv packet from coordinator. {}", e);
+                    continue;
                 }
             };
             match packet {
