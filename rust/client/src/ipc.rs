@@ -670,21 +670,19 @@ impl ClientIpc for ClientIpcHandler {
         info!("IPC: Session requested!");
         match res {
             Ok(id) => {
-                if session_data_cloned.session_id.is_none() {
-                    //This is kinda messy
-                    let mut save_file = Client::get_save_file(&client.data_folder_path)
-                        .await
-                        .unwrap();
-                    let mut user_data = Client::get_json_as::<UserData>(save_file).await.unwrap();
-                    session_data_cloned.session_id = Some(id.clone());
-                    user_data
-                        .saved_sessions
-                        .insert(id.clone(), session_data_cloned);
-                    save_file = Client::get_save_file(&client.data_folder_path)
-                        .await
-                        .unwrap();
-                    let _ = Client::save_json_as(save_file, user_data).await;
-                }
+                //This is kinda messy
+                let mut save_file = Client::get_save_file(&client.data_folder_path)
+                    .await
+                    .unwrap();
+                let mut user_data = Client::get_json_as::<UserData>(save_file).await.unwrap();
+                session_data_cloned.session_id = Some(id.clone());
+                user_data
+                    .saved_sessions
+                    .insert(id.clone(), session_data_cloned);
+                save_file = Client::get_save_file(&client.data_folder_path)
+                    .await
+                    .unwrap();
+                let _ = Client::save_json_as(save_file, user_data).await;
 
                 Ok(Response::new(NewSessionResponse { session_id: id }))
             }

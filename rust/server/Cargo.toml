@@ -20,8 +20,8 @@ ssh-key = { version = "0.6.6", features = ["ed25519"] }
 portable-pty = "0.8.1"
 
 clap = { version = "4.5.6", features = ["derive"] }
-url = "2.5.0"
-rustls = { version = "0.23.5", features = ["std"]}
+url = { version = "2.5.0", features = ["serde"] }
+rustls = { version = "0.23.5", features = ["std"] }
 rustls-pemfile = "2.1.2"
 rcgen = "0.13"
 

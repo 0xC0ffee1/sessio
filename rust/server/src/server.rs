@@ -51,26 +51,12 @@ use std::pin::Pin;
 use std::task::Poll;
 use std::time::{Duration, Instant};
 
-use crate::sftp::*;
+use crate::{sftp::*, Opt};
 use common::utils::keygen::generate_keypair;
 use coordinator::coordinator_client::*;
 use url::Url;
 
 use common::utils::streams::BiStream;
-
-#[derive(Parser, Debug)]
-#[clap(name = "client")]
-pub struct Opt {
-    #[clap(long, short = 'c')]
-    coordinator: Url,
-
-    //The identifier of this machine
-    id: String,
-
-    //The path to your private key
-    #[clap(long, short = 'p', default_value = "keys/ssh_host_ed25519_key")]
-    private_key: PathBuf,
-}
 
 /// Returns default server configuration along with its certificate.
 fn configure_server() -> anyhow::Result<ServerConfig> {
@@ -153,6 +139,8 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                     }
                     receiver = holepuncher.c_client.subscribe_to_packets().await;
                     sender = holepuncher.c_client.new_packet_sender();
+                    //Restart ip updater
+                    holepuncher.start_connection_update_task();
                 },
 
                 // Await the next packet from the receiver
