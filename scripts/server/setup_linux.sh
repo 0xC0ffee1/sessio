@@ -55,10 +55,10 @@ fi
 chmod +x "$BINARY_PATH"
 
 # Prompt the user for the id and coordinator url
-read -p "Enter the device id: " DEVICE_ID
-read -p "Enter the coordinator URL: " COORDINATOR_URL
+read -p "Enter the device id: " DEVICE_ID < /dev/tty
+read -p "Enter the coordinator URL: " COORDINATOR_URL < /dev/tty
 
-# Create the default config file
+# Create the default config filea
 cat > "$CONFIG_FILE" <<EOF
 # Configuration for $SERVICE_NAME
 
