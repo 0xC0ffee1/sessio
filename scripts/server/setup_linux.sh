@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# Check if the script is running in an interactive terminal
-if [[ ! -t 0 ]]; then
-    echo "Relaunching script in an interactive shell..."
-    exec bash -i "$0" "$@"
-fi
-
 # Variables
 SERVICE_NAME="sessio-server"
 BINARY_BASE_URL="https://github.com/0xC0ffee1/sessio/releases/download/v0.3.1-beta/sessio-server-"
