@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Check if the script is running in an interactive terminal
+if [[ ! -t 0 ]]; then
+    echo "Relaunching script in an interactive shell..."
+    exec bash -i "$0" "$@"
+fi
+
 # Variables
 SERVICE_NAME="sessio-server"
 BINARY_BASE_URL="https://github.com/0xC0ffee1/sessio/releases/download/v0.3.1-beta/sessio-server-"
@@ -55,10 +61,10 @@ fi
 chmod +x "$BINARY_PATH"
 
 # Prompt the user for the id and coordinator url
-read -p "Enter the device id: " DEVICE_ID < /dev/tty
-read -p "Enter the coordinator URL: " COORDINATOR_URL < /dev/tty
+read -p "Enter the device id: " DEVICE_ID
+read -p "Enter the coordinator URL: " COORDINATOR_URL
 
-# Create the default config filea
+# Create the default config file
 cat > "$CONFIG_FILE" <<EOF
 # Configuration for $SERVICE_NAME
 
