@@ -239,13 +239,11 @@ pub async fn run(opt: Opt) {
 fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error::Error>> {
     let path = path.as_ref();
     if !path.exists() {
-        if path != Path::new("keys/ssh_host_ed25519_key") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Specified private key file doesn't exist.",
-            )));
-        }
-        generate_keypair("keys/", Algorithm::Ed25519, "ssh_host_ed25519_key");
+        generate_keypair(
+            path.parent().unwrap_or_else(|| Path::new("keys/")),
+            Algorithm::Ed25519,
+            path.file_name().unwrap().to_str().unwrap(),
+        )?;
     }
     let private_key = russh_keys::load_secret_key(path.to_str().unwrap(), None)?;
     Ok(private_key)
