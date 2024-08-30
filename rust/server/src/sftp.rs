@@ -90,6 +90,8 @@ impl Handler for SftpSession {
 
         let path = self.get_user_relative_path(&filename)?;
 
+        info!("FINAL PATH {}", path.display());
+
         let file = OpenOptions::new()
             .read(true)
             .create(true)

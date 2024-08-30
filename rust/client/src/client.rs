@@ -362,6 +362,7 @@ impl Client {
                     }
                     StreamType::Transport => {
                         //QUIC connection closed
+                        self.sessions.clear();
                         bail!("Quic connection closed!");
                     }
                 }

@@ -140,19 +140,16 @@ impl ClientIpc for ClientIpcHandler {
             let mut session = v.lock().await;
             session.data.session_id = Some(session.id.clone());
             new_map.insert(session.id.clone(), session.data.clone());
-            parent_map.insert(
-                session.server_id.clone(),
-                DeviceStatus {
-                    //Since we're loading these from memory
-                    //Todo check if connection has timed out
-                    connected: client
-                        .connections
-                        .get(&session.server_id.clone())
-                        .unwrap()
-                        .close_reason()
-                        .is_none(),
-                },
-            );
+
+            let connected: bool = {
+                if let Some(conn) = client.connections.get(&session.server_id.clone()) {
+                    conn.close_reason().is_none()
+                } else {
+                    false
+                }
+            };
+
+            parent_map.insert(session.server_id.clone(), DeviceStatus { connected });
         }
 
         if let Ok(user_data) = Client::get_json_as::<UserData>(
@@ -166,16 +163,19 @@ impl ClientIpc for ClientIpcHandler {
                 let mut final_data = data.clone();
                 final_data.session_id = Some(k.to_string());
                 new_map.insert(k.to_string(), final_data.clone());
+
+                let connected: bool = {
+                    if let Some(conn) = client.connections.get(&data.device_id.clone()) {
+                        conn.close_reason().is_none()
+                    } else {
+                        false
+                    }
+                };
+
                 parent_map.insert(
                     final_data.device_id,
                     DeviceStatus {
-                        connected: client.sessions.contains_key(k)
-                            && client
-                                .connections
-                                .get(&data.device_id)
-                                .unwrap()
-                                .close_reason()
-                                .is_none(),
+                        connected: client.sessions.contains_key(k) && connected,
                     },
                 );
             }
