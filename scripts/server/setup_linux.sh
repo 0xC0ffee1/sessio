@@ -78,6 +78,7 @@ Description=$SERVICE_NAME
 After=network.target
 
 [Service]
+Type=simple
 Environment="TERM=xterm-256color"
 ExecStart=$BINARY_PATH --config $CONFIG_FILE
 Restart=always
