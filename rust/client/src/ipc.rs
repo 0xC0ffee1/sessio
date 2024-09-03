@@ -24,6 +24,7 @@ use clientipc::{FileDeleteResponse, FileRenameRequest, FileRenameResponse};
 use coordinator::coordinator_client::CoordinatorClient;
 use futures::{stream, Stream, StreamExt};
 use log4rs::append::file;
+use quinn::Connection;
 use russh_sftp::{client::SftpSession, protocol::Stat};
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
 use std::{any::Any, collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
@@ -210,17 +211,15 @@ impl ClientIpc for ClientIpcHandler {
             session_guard.clone()
         };
 
-        session
-            .lock()
-            .await
-            .direct_tcpip_forward(
-                &lpf_data.local_host,
-                lpf_data.local_port,
-                &lpf_data.remote_host,
-                lpf_data.remote_port,
-            )
-            .await
-            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+        Session::direct_tcpip_forward(
+            session.clone(),
+            &lpf_data.local_host,
+            lpf_data.local_port,
+            &lpf_data.remote_host,
+            lpf_data.remote_port,
+        )
+        .await
+        .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
 
         Ok(Response::new(LocalPortForwardResponse {}))
     }
@@ -569,28 +568,50 @@ impl ClientIpc for ClientIpcHandler {
         Ok(Response::new(Box::pin(res) as Self::FileUploadStream))
     }
 
-    //Add eventbuses for connections, to monitor their states
-    //Also for sessions
     async fn new_connection(
         &self,
         request: Request<NewConnectionRequest>,
     ) -> Result<Response<NewConnectionResponse>, Status> {
         let request = request.into_inner();
 
-        let mut client = self.client.lock().await;
+        let (conn_tx, mut conn_rx) = mpsc::channel::<Connection>(1);
 
-        let res = client.new_connection(request.target_id.clone()).await;
-        match res {
-            Ok(id) => {
+        {
+            let mut client = self.client.lock().await;
+
+            match client
+                .new_connection(request.target_id.clone(), conn_tx)
+                .await
+            {
+                Ok(attempted_holepunch) => {
+                    //Existing conn
+                    if !attempted_holepunch {
+                        return Ok(Response::new(NewConnectionResponse {
+                            connection_id: request.target_id,
+                        }));
+                    }
+                }
+                Err(e) => {
+                    return Err(Status::new(tonic::Code::Internal, e.to_string()));
+                }
+            }
+        }
+
+        let conn = conn_rx.recv().await;
+
+        match conn {
+            Some(conn) => {
                 log::info!("CONN OK");
+                let mut client = self.client.lock().await;
+                client.init_connection(request.target_id.clone(), conn);
                 Ok(Response::new(NewConnectionResponse {
                     connection_id: request.target_id,
                 }))
             }
-            Err(e) => {
-                log::error!("Failed to connect {}", e);
-                Err(Status::new(tonic::Code::Internal, e.to_string()))
-            }
+            None => Err(Status::new(
+                tonic::Code::Internal,
+                "Failed to open quic connection.",
+            )),
         }
     }
 

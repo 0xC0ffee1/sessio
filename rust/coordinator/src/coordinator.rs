@@ -346,8 +346,6 @@ impl Server {
                 let sessions = &mut self.sessions;
                 let mut client_addr = client_self.conn.remote_address();
                 if let Some(server) = self.clients.get_mut(target_id) {
-                    //Initially there's no client connected
-
                     let mut using_ipv6 = false;
                     if server.ipv6.is_some() {
                         // Update client_addr if the client has an IPv6 address, otherwise keep the original client_addr
@@ -357,22 +355,25 @@ impl Server {
                         }
                     }
 
+                    let session_id = Uuid::new_v4().to_string();
+
                     sessions.insert(
-                        client_self.id.clone(),
+                        session_id.clone(),
                         Session {
-                            server_id: server.id.clone(), //self
+                            server_id: server.id.clone(),
                             client_id: client_self.id.clone(),
                             using_ipv6: using_ipv6,
                         },
                     );
 
-                    client_self.session_ids.push(client_self.id.clone());
-                    server.session_ids.push(client_self.id.clone());
+                    client_self.session_ids.push(session_id.clone());
+                    server.session_ids.push(session_id.clone());
 
                     info!("Sending connect packet to server!");
+
                     let _ = server.stream.send(Packet::ConnectTo(ConnectTo {
                         target: client_addr,
-                        target_id: client_self.id.clone(),
+                        session_id: session_id.clone(),
                     }));
 
                     Packet::Status(Status {
@@ -388,10 +389,10 @@ impl Server {
             }
             Packet::ServerConnectionRequest(data) => {
                 //Sent as a response from the server
-                let client_id = &data.client_id;
+                let session_id = &data.session_id;
 
                 let sessions = &mut self.sessions;
-                if let Some(session) = sessions.get_mut(client_id) {
+                if let Some(session) = sessions.get_mut(session_id) {
                     //Telling the client to connect to the server as a "response" to complete the UDP hole punch
                     let client = self
                         .clients
@@ -408,7 +409,7 @@ impl Server {
 
                     let _ = client.stream.send(Packet::ConnectTo(ConnectTo {
                         target: server_addr,
-                        target_id: client.id.clone(),
+                        session_id: client.id.clone(),
                     }));
 
                     Packet::Status(Status {

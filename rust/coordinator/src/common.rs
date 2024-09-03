@@ -47,7 +47,7 @@ pub struct NewSession {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct ServerConnectionRequest {
-    pub client_id: String,
+    pub session_id: String,
 }
 
 ///Client-bound
@@ -70,7 +70,7 @@ pub struct PeerIpChanged {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct ConnectTo {
     pub target: SocketAddr,
-    pub target_id: String,
+    pub session_id: String,
 }
 
 ///Client-bound

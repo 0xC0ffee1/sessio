@@ -16,7 +16,6 @@ use tokio::fs::File;
 
 use ring::digest::{Context as DigestContext, Digest, SHA256};
 
-use tokio::net::unix::pipe::Receiver;
 use tokio::sync::broadcast::Sender;
 
 use std::collections::HashMap;
@@ -487,30 +486,33 @@ impl Client {
         Ok(old_value)
     }
 
+    pub fn init_connection(&mut self, target_id: String, conn: Connection) {
+        self.connections.insert(target_id.clone(), conn);
+    }
+
     //Create a new connection and on success return the its ID
-    pub async fn new_connection(&mut self, target_id: String) -> anyhow::Result<()> {
+    pub async fn new_connection(
+        &mut self,
+        target_id: String,
+        conn_tx: mpsc::Sender<Connection>,
+    ) -> anyhow::Result<bool> {
         if let Some(conn) = self.connections.get_mut(&target_id) {
-            if let None = conn.close_reason() {
+            if conn.close_reason().is_none() {
                 //Connection is still open, reusing the old one
                 info!("Reusing connection for {}", target_id);
-                return Ok(());
+                return Ok(false);
             }
         }
-        let start_time = Utc::now();
 
-        let Some(coordinator) = self.coordinator.as_mut() else {
+        let Some(coordinator) = self.coordinator.as_ref() else {
             bail!("Coordinator not initialized!");
         };
 
-        let conn = coordinator.attempt_holepunch(target_id.clone()).await?;
+        coordinator
+            .attempt_holepunch(target_id.clone(), conn_tx)
+            .await;
 
-        let end_time = Utc::now();
-        let elapsed_time = end_time - start_time;
-        println!("Took to holepunch: {} ms", elapsed_time.num_milliseconds());
-
-        self.connections.insert(target_id.clone(), conn);
-
-        Ok(())
+        Ok(true)
     }
 
     pub fn get_keypair(path: &Path) -> Result<KeyPair> {
@@ -698,41 +700,55 @@ impl russh::client::Handler for ClientHandler {
 
 impl Session {
     pub async fn direct_tcpip_forward(
-        &mut self,
+        session: Arc<Mutex<Session>>,
         local_host: &str,
         local_port: u32,
         remote_host: &str,
         remote_port: u32,
     ) -> Result<()> {
+        tokio::spawn(async move {});
         let listener = TcpListener::bind((local_host, local_port as u16)).await?;
 
         let remote_host = remote_host.to_string();
 
-        self.active = true;
-        loop {
-            let (mut stream, addr) = listener.accept().await?;
-
-            let mut channel = self
-                .handle
-                .channel_open_direct_tcpip(
-                    remote_host.clone(),
-                    remote_port,
-                    addr.ip().to_string(),
-                    addr.port() as u32,
-                )
-                .await?;
-
-            tokio::spawn(async move {
-                let mut cin = channel.make_writer();
-                let mut cout = channel.make_reader();
-
-                let (mut s_read, mut s_write) = stream.split();
-                tokio::try_join! {
-                    tokio::io::copy(&mut s_read, &mut cin),
-                    tokio::io::copy(&mut cout, &mut s_write)
-                }
-            });
+        {
+            let mut session = session.lock().await;
+            session.active = true;
         }
+
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, addr)) = listener.accept().await else {
+                    continue;
+                };
+
+                let mut channel = {
+                    let session = session.lock().await;
+                    session
+                        .handle
+                        .channel_open_direct_tcpip(
+                            remote_host.clone(),
+                            remote_port,
+                            addr.ip().to_string(),
+                            addr.port() as u32,
+                        )
+                        .await
+                        .unwrap()
+                };
+
+                tokio::spawn(async move {
+                    let mut cin = channel.make_writer();
+                    let mut cout = channel.make_reader();
+
+                    let (mut s_read, mut s_write) = stream.split();
+                    tokio::try_join! {
+                        tokio::io::copy(&mut s_read, &mut cin),
+                        tokio::io::copy(&mut cout, &mut s_write)
+                    }
+                });
+            }
+        });
+        Ok(())
     }
 
     //We will have to do this separetely here because Channel::into_stream() consumes the channel
@@ -854,34 +870,5 @@ impl Session {
             .await?;
         info!("Disconnected!");
         Ok(())
-    }
-}
-
-#[cfg(windows)]
-fn create_signal_thread() -> impl core::future::Future<Output = ()> {
-    async move {
-        let mut stream = match ctrl_c() {
-            Ok(s) => s,
-            Err(e) => {
-                error!("[client] create signal stream error: {}", e);
-                return;
-            }
-        };
-        stream.recv().await;
-        info!("[client] got signal Ctrl-C");
-    }
-}
-#[cfg(not(windows))]
-fn create_signal_thread() -> impl core::future::Future<Output = ()> {
-    async move {
-        let mut stream = match signal(SignalKind::hangup()) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("[client] create signal stream error: {}", e);
-                return;
-            }
-        };
-        stream.recv().await;
-        info!("[client] got signal HUP");
     }
 }
