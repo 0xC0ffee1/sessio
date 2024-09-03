@@ -170,7 +170,7 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                                         token: holepuncher.c_client.token.clone(),
                                     }),
                                     packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
-                                        client_id: data.target_id,
+                                        session_id: data.session_id,
                                     }),
                                 })
                                 .await;
