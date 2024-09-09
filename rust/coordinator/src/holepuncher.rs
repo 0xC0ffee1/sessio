@@ -111,7 +111,6 @@ impl HolepunchService {
             .await;
 
         while let Ok(res) = receiver.recv().await {
-            // Check if the received packet is a Status packet
             if let Packet::Status(status) = res {
                 if status.session_id != session_id {
                     continue;
@@ -120,22 +119,9 @@ impl HolepunchService {
                 if status.code == 404 {
                     anyhow::bail!("Target device not found!");
                 }
-            } else {
-                anyhow::bail!("Incorrect packet received during holepunch process");
+                break;
             }
         }
-
-        let res = receiver.recv().await?;
-
-        let Packet::Status(status) = res else {
-            anyhow::bail!("Incorrect packet received at holepunch process");
-        };
-
-        if status.code == 404 {
-            anyhow::bail!("Target device not found!");
-        }
-
-        let session_id = status.session_id;
 
         let timeout_duration = Duration::from_secs(10);
 
