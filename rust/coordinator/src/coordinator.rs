@@ -408,7 +408,7 @@ impl Server {
 
                     let _ = client.stream.send(Packet::ConnectTo(ConnectTo {
                         target: server_addr,
-                        session_id: client.id.clone(),
+                        session_id: session_id.clone(),
                     }));
 
                     Packet::Status(Status {
