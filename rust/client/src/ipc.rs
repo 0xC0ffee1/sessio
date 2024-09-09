@@ -16,9 +16,9 @@ use clientipc::{
     FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest,
     LocalPortForwardRequest, LocalPortForwardResponse, Msg, NatFilterRequest, NatFilterResponse,
     NewConnectionRequest, NewConnectionResponse, NewSessionRequest, NewSessionResponse, PublicKey,
-    SessionData, SessionMap, SessionRequest, SettingCheckRequest, SettingCheckResponse, Settings,
-    SettingsRequest, SftpRequest, SftpRequestResponse, StreamResponse, SubscribeRequest, UserData,
-    Value,
+    SessionCloseRequest, SessionCloseResponse, SessionData, SessionMap, SessionRequest,
+    SettingCheckRequest, SettingCheckResponse, Settings, SettingsRequest, SftpRequest,
+    SftpRequestResponse, StreamResponse, SubscribeRequest, UserData, Value,
 };
 use clientipc::{FileDeleteResponse, FileRenameRequest, FileRenameResponse};
 use coordinator::coordinator_client::CoordinatorClient;
@@ -100,6 +100,22 @@ impl ClientIpc for ClientIpcHandler {
         Pin<Box<dyn Stream<Item = Result<FileTransferStatus, Status>> + Send + 'static>>;
 
     type FileUploadStream = Self::FileDownloadStream;
+
+    async fn close_session(
+        &self,
+        request: Request<SessionCloseRequest>,
+    ) -> Result<Response<SessionCloseResponse>, Status> {
+        let request = request.into_inner();
+        let mut client = self.client.lock().await;
+        if let Some(session_lock) = client.sessions.remove(&request.session_id) {
+            let mut session = session_lock.lock().await;
+            if let Err(e) = session.close().await {
+                log::error!("Failed to close session {e}");
+            }
+            return Ok(Response::new(SessionCloseResponse { closed: true }));
+        }
+        return Ok(Response::new(SessionCloseResponse { closed: false }));
+    }
 
     async fn start_coordinator(
         &self,
@@ -750,8 +766,8 @@ impl ClientIpc for ClientIpcHandler {
             };
 
             let mut session = session_guard.lock().await;
-            let was_active = session.active;
-            if !session.active {
+            let was_active = session.is_active();
+            if !session.is_active() {
                 session.new_session_channel().await.unwrap();
             }
 

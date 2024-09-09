@@ -21,7 +21,7 @@ use tokio::sync::broadcast::Sender;
 use std::collections::HashMap;
 use std::f64::consts::E;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV6};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use tokio::io::{
     self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout,
@@ -300,8 +300,11 @@ pub struct Session {
     pub server_id: String,
     pub username: String,
     pub data: SessionData,
-    ///Whether this session has a channel open
-    pub active: bool,
+
+    pub closed: Arc<AtomicBool>,
+
+    //If a channel is opened for this session
+    pub active: Arc<AtomicBool>,
 
     pub channel_stream: ChannelBiStream,
     pub sftp_session: Option<SftpSession>,
@@ -355,8 +358,8 @@ impl Client {
                 match close_event.stream_type() {
                     StreamType::Channel | StreamType::Session => {
                         if let Some(session) = self.sessions.remove(&close_event.id) {
-                            let mut session = session.lock().await;
-                            session.active = false;
+                            let session = session.lock().await;
+                            session.closed.store(true, Ordering::SeqCst);
                         }
                     }
                     StreamType::Transport => {
@@ -544,7 +547,7 @@ impl Client {
         if let Some(session_id) = &session_id {
             if let Some(session) = self.sessions.get(session_id) {
                 let session = session.lock().await;
-                if session.active {
+                if session.is_active() && !session.is_closed() {
                     log::info!("Reusing session {}", session_id);
                     return Ok(session_id.clone());
                 }
@@ -617,7 +620,8 @@ impl Client {
                 server_messages: EventBus::default(),
             },
             sftp_session: None,
-            active: false,
+            closed: Arc::new(AtomicBool::new(false)),
+            active: Arc::new(AtomicBool::new(false)),
             event_sender: self.event_bus.new_sender().await,
         };
 
@@ -699,6 +703,18 @@ impl russh::client::Handler for ClientHandler {
 }
 
 impl Session {
+    pub fn is_closed(&self) -> bool {
+        return self.closed.load(Ordering::SeqCst);
+    }
+
+    pub fn is_active(&self) -> bool {
+        return self.active.load(Ordering::SeqCst);
+    }
+
+    pub fn set_active(&self) {
+        return self.active.store(false, Ordering::SeqCst);
+    }
+
     pub async fn direct_tcpip_forward(
         session: Arc<Mutex<Session>>,
         local_host: &str,
@@ -711,13 +727,13 @@ impl Session {
 
         let remote_host = remote_host.to_string();
 
-        {
-            let mut session = session.lock().await;
-            session.active = true;
-        }
+        let (closed, active) = {
+            let session = session.lock().await;
+            (session.closed.clone(), session.active.clone())
+        };
 
         tokio::spawn(async move {
-            loop {
+            while !closed.load(Ordering::SeqCst) {
                 let Ok((mut stream, addr)) = listener.accept().await else {
                     continue;
                 };
@@ -735,6 +751,7 @@ impl Session {
                         .await
                         .unwrap()
                 };
+                active.store(true, Ordering::SeqCst);
 
                 tokio::spawn(async move {
                     let mut cin = channel.make_writer();
@@ -760,9 +777,9 @@ impl Session {
         channel.request_subsystem(true, "sftp").await?;
         info!("Subsystem requested!");
 
-        self.active = true;
         let sftp = SftpSession::new(channel.into_stream()).await?;
         info!("session created!");
+        self.set_active();
 
         self.sftp_session = Option::from(sftp);
 
@@ -771,18 +788,19 @@ impl Session {
 
     pub async fn new_session_channel(&mut self) -> Result<()> {
         let mut channel = self.handle.channel_open_session().await?;
+        self.set_active();
 
         let mut server_receiver = self.channel_stream.server_messages.subscribe().await;
 
         let client_sender = self.channel_stream.client_messages.new_sender().await;
 
-        self.active = true;
         let event_sender = self.event_sender.clone();
         let channel_id = self.id.clone();
 
-        let server_id = self.server_id.clone();
+        let closed = { self.closed.clone() };
+
         tokio::spawn(async move {
-            loop {
+            while !closed.load(Ordering::SeqCst) {
                 tokio::select! {
                     Ok(msg) = server_receiver.recv() => {
                         match msg.r#type {
@@ -863,8 +881,9 @@ impl Session {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<()> {
+    pub async fn close(&mut self) -> Result<()> {
         info!("Disconnecting!");
+        self.closed.store(false, Ordering::SeqCst);
         self.handle
             .disconnect(Disconnect::ByApplication, "", "English")
             .await?;

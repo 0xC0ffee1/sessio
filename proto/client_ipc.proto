@@ -15,6 +15,7 @@ service ClientIPC {
 
     //Open a generic SSH channel and a bi-directional stream
     rpc OpenChannel(stream Msg) returns (stream Msg);
+    rpc CloseSession(SessionCloseRequest) returns (SessionCloseResponse);
 
     rpc CheckSettingsValidity(SettingCheckRequest) returns (SettingCheckResponse);
     rpc StartCoordinator(CoordinatorStartRequest) returns (CoordinatorStartResponse);
@@ -40,6 +41,14 @@ service ClientIPC {
     rpc GetActiveSessions(SessionRequest) returns (SessionMap);
 }
 
+message SessionCloseRequest{
+    string session_id = 1;
+}
+message SessionCloseResponse {
+    //If it existed in the first place
+    bool closed = 1;
+}
+
 message FileDelData{
     string path = 1;
     bool is_dir = 2;
@@ -53,7 +62,6 @@ message FileDeleteRequest{
 message FileDeleteResponse{
     
 }
-
 
 message FileRenameRequest{
     string session_id = 1;

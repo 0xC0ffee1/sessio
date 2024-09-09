@@ -735,6 +735,7 @@ impl server::Handler for ServerSession {
         // to send more data in this session, the channel can be closed.
         info!("Receiving channel eof!");
         session.close(channel);
+
         Ok(())
     }
 
