@@ -75,6 +75,12 @@ pub struct ConnectTo {
 
 ///Client-bound
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct SessionData {
+    pub session_id: String,
+}
+
+///Client-bound
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Status {
     pub code: i32,
     pub msg: String,

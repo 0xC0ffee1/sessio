@@ -92,7 +92,11 @@ impl HolepunchService {
         Ok(())
     }
 
-    pub async fn attempt_holepunch(&self, target: String, connection_sender: Sender<Connection>) {
+    pub async fn attempt_holepunch(
+        &self,
+        target: String,
+        connection_sender: Sender<Connection>,
+    ) -> Result<()> {
         let c_client = &self.c_client;
 
         let mut receiver = c_client.subscribe_to_packets().await;
@@ -100,6 +104,16 @@ impl HolepunchService {
         let _ = c_client
             .send_server_packet(Packet::NewSession(NewSession { target_id: target }))
             .await;
+
+        let res = receiver.recv().await?;
+
+        let Packet::Status(status) = res else {
+            anyhow::bail!("Incorrect packet received at holepunch process");
+        };
+        if status.code == 404 {
+            anyhow::bail!("Target device not found!");
+        }
+        let session_id = status.msg;
 
         let timeout_duration = Duration::from_secs(10);
 
@@ -119,6 +133,7 @@ impl HolepunchService {
                         };
                         match packet {
                             Packet::ConnectTo(data) => {
+                                if data.session_id != session_id {continue;}
                                 match endpoint.connect(data.target, "server").unwrap().await {
                                     Ok(conn) => {
                                         let _ = connection_sender.send(conn).await;
@@ -140,6 +155,7 @@ impl HolepunchService {
             }
             drop(connection_sender);
         });
+        Ok(())
     }
 
     pub fn start_connection_update_task(&mut self) {

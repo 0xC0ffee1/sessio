@@ -378,7 +378,7 @@ impl Server {
 
                     Packet::Status(Status {
                         code: 200,
-                        msg: "Success".into(),
+                        msg: session_id,
                     })
                 } else {
                     Packet::Status(Status {
