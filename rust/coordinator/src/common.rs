@@ -43,6 +43,7 @@ pub struct UpdateIp {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct NewSession {
     pub target_id: String,
+    pub session_id: String,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -83,7 +84,7 @@ pub struct SessionData {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Status {
     pub code: i32,
-    pub msg: String,
+    pub session_id: String,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]

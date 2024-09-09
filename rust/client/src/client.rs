@@ -513,7 +513,7 @@ impl Client {
 
         coordinator
             .attempt_holepunch(target_id.clone(), conn_tx)
-            .await;
+            .await?;
 
         Ok(true)
     }

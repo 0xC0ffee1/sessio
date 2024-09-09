@@ -335,13 +335,14 @@ impl Server {
 
                 Packet::Status(Status {
                     code: 200,
-                    msg: "Success".into(),
+                    session_id: "".to_string(),
                 })
             }
             Packet::NewSession(data) => {
                 //Sent by client
 
                 let target_id = &data.target_id;
+                let session_id = data.session_id;
 
                 let sessions = &mut self.sessions;
                 let mut client_addr = client_self.conn.remote_address();
@@ -354,8 +355,6 @@ impl Server {
                             using_ipv6 = true;
                         }
                     }
-
-                    let session_id = Uuid::new_v4().to_string();
 
                     sessions.insert(
                         session_id.clone(),
@@ -378,21 +377,21 @@ impl Server {
 
                     Packet::Status(Status {
                         code: 200,
-                        msg: session_id,
+                        session_id: session_id,
                     })
                 } else {
                     Packet::Status(Status {
                         code: 404,
-                        msg: "Not found".into(),
+                        session_id: session_id,
                     })
                 }
             }
             Packet::ServerConnectionRequest(data) => {
                 //Sent as a response from the server
-                let session_id = &data.session_id;
+                let session_id = data.session_id;
 
                 let sessions = &mut self.sessions;
-                if let Some(session) = sessions.get_mut(session_id) {
+                if let Some(session) = sessions.get_mut(&session_id) {
                     //Telling the client to connect to the server as a "response" to complete the UDP hole punch
                     let client = self
                         .clients
@@ -414,18 +413,18 @@ impl Server {
 
                     Packet::Status(Status {
                         code: 200,
-                        msg: "Success".into(),
+                        session_id: session_id,
                     })
                 } else {
                     Packet::Status(Status {
                         code: 404,
-                        msg: "Session not found".into(),
+                        session_id: session_id,
                     })
                 }
             }
             _ => Packet::Status(Status {
                 code: 400,
-                msg: "Bad packet".into(),
+                session_id: "".to_string(),
             }),
         };
         Ok((response, client_self))
