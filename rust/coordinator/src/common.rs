@@ -53,6 +53,10 @@ pub struct NewChannelResponse {
     pub channel_id: String,
 }
 
+///Client-bound
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct NewChannelRequest {}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct ServerConnectionRequest {
     pub session_id: String,
@@ -106,6 +110,7 @@ pub enum Packet {
     ConnectTo(ConnectTo),
     Status(Status),
     NewChannelResponse(NewChannelResponse),
+    NewChannelRequest(NewChannelRequest),
 }
 
 ///Server-bound packet with extra data for authentication

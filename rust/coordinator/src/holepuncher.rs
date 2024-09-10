@@ -1,7 +1,10 @@
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 
 use crate::{
-    common::{NewChannelResponse, NewSession, Packet, PacketBase, ServerPacket, UpdateIp},
+    common::{
+        NewChannelRequest, NewChannelResponse, NewSession, Packet, PacketBase, ServerPacket,
+        UpdateIp,
+    },
     coordinator_client::CoordinatorClient,
 };
 
@@ -99,18 +102,33 @@ impl HolepunchService {
     ) -> Result<()> {
         let c_client = &self.c_client;
 
+        info!("Opening new stream!");
         let mut stream = c_client.new_stream().await?;
+        info!("stream opened!");
 
-        let response = stream.read_response::<NewChannelResponse>().await?;
-
-        let session_id = response.channel_id;
-
-        let base = PacketBase {
+        let mut base = PacketBase {
             token: self.c_client.token.clone(),
             own_id: self.c_client.id_own.clone(),
-            session_id: Some(session_id.clone()),
+            session_id: None,
         };
 
+        _ = stream.send_packet(&ServerPacket {
+            base: Some(base.clone()),
+            packet: Packet::NewChannelRequest(NewChannelRequest {}),
+        });
+
+        let response = stream.read_response::<Packet>().await?;
+        let Packet::NewChannelResponse(channel_res) = response else {
+            anyhow::bail!("Protocol error: wrong packet received!");
+        };
+
+        info!("channel response received!");
+
+        let session_id = channel_res.channel_id;
+
+        base.session_id = Some(session_id.clone());
+
+        info!("sending new session req!");
         stream
             .send_packet(&ServerPacket {
                 base: Some(base),

@@ -516,6 +516,8 @@ impl Server {
                     );
                     break;
                 };
+                //Just the initial packet to open the bi-stream
+                _ = stream.read_response::<ServerPacket>().await;
                 let channel_id = Uuid::new_v4().to_string();
                 let response = Packet::NewChannelResponse(NewChannelResponse {
                     channel_id: channel_id.clone(),
