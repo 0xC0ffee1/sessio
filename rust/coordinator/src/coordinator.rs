@@ -149,7 +149,9 @@ impl Server {
                             log::error!("Can't send packet to stream! {}", e);
                             break;
                         };
-                        info!("sent packet!");
+                        if let Packet::ConnectTo(connect_to) = packet {
+                            info!("sent connect to {}!", connect_to.target.to_string());
+                        }
                     },
                     //Server-bound packet
                     Ok(packet) = stream.read_response::<ServerPacket>() => {
