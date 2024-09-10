@@ -168,6 +168,7 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                                     base: Some(PacketBase {
                                         own_id: id.clone(),
                                         token: holepuncher.c_client.token.clone(),
+                                        session_id: None
                                     }),
                                     packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
                                         session_id: data.session_id,

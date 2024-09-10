@@ -1,7 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 
 use crate::{
-    common::{NewSession, Packet, PacketBase, ServerPacket, UpdateIp},
+    common::{NewChannelResponse, NewSession, Packet, PacketBase, ServerPacket, UpdateIp},
     coordinator_client::CoordinatorClient,
 };
 
@@ -99,28 +99,37 @@ impl HolepunchService {
     ) -> Result<()> {
         let c_client = &self.c_client;
 
-        let mut receiver = c_client.subscribe_to_packets().await;
+        let mut stream = c_client.new_stream().await?;
 
-        let session_id = Uuid::new_v4().to_string();
+        let response = stream.read_response::<NewChannelResponse>().await?;
 
-        let _ = c_client
-            .send_server_packet(Packet::NewSession(NewSession {
-                session_id: session_id.clone(),
-                target_id: target,
-            }))
-            .await;
+        let session_id = response.channel_id;
 
-        while let Ok(res) = receiver.recv().await {
-            if let Packet::Status(status) = res {
-                if status.session_id != session_id {
-                    continue;
-                }
-                // Check for a 404 error
-                if status.code == 404 {
-                    anyhow::bail!("Target device not found!");
-                }
-                break;
+        let base = PacketBase {
+            token: self.c_client.token.clone(),
+            own_id: self.c_client.id_own.clone(),
+            session_id: Some(session_id.clone()),
+        };
+
+        stream
+            .send_packet(&ServerPacket {
+                base: Some(base),
+                packet: Packet::NewSession(NewSession {
+                    session_id: session_id.clone(),
+                    target_id: target,
+                }),
+            })
+            .await?;
+
+        let response = stream.read_response::<Packet>().await?;
+
+        if let Packet::Status(status) = response {
+            // Check for a 404 error
+            if status.code == 404 {
+                anyhow::bail!("Target device not found!");
             }
+        } else {
+            anyhow::bail!("Protocol error: wrong packet received!");
         }
 
         let timeout_duration = Duration::from_secs(10);
@@ -131,7 +140,7 @@ impl HolepunchService {
             tokio::pin!(timeout_future);
             loop {
                 tokio::select! {
-                    packet = receiver.recv() => {
+                    packet = stream.read_response::<Packet>() => {
                         let packet = match packet {
                             Ok(packet) => packet,
                             Err(e) => {
@@ -184,7 +193,8 @@ impl HolepunchService {
                         let packet = ServerPacket {
                             base: Some(PacketBase {
                                 own_id: id.clone(),
-                                token: token.clone()
+                                token: token.clone(),
+                                session_id: None
                             }),
                             packet: Packet::UpdateIp(UpdateIp {
                                 ipv6

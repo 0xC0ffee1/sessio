@@ -8,6 +8,7 @@ use log::{error, info, warn};
 
 use russh_keys::key::{PublicKey, Signature};
 
+use rustls::crypto::hash::Hash;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio::fs;
 use tokio::sync::broadcast::{Receiver, Sender};
@@ -22,6 +23,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::common::*;
 
+use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
 use crate::Opt;
@@ -103,6 +105,7 @@ pub async fn run(options: Opt) {
 struct Server {
     sessions: HashMap<String, Session>,
     clients: HashMap<String, Client>,
+
     event_bus: EventBus<ServerPacket>,
 }
 
@@ -116,13 +119,17 @@ struct Session {
 struct Client {
     conn: Connection,
     auth_token: String,
-    stream: Sender<Packet>,
+    //Main channel
+    stream: mpsc::Sender<Packet>,
     id: String,
     session_ids: Vec<String>,
     ///Current ipv6
     ipv6: Option<SocketAddr>,
     ///Current ipv4
     ipv4: SocketAddr,
+
+    //per session channel
+    channels: Arc<Mutex<HashMap<String, mpsc::Sender<Packet>>>>,
 }
 
 impl Server {
@@ -131,13 +138,13 @@ impl Server {
     //stream = bidirectional communication stream to transport packets
     fn client_communication_task(
         mut stream: ClientStream,
-        mut receiver: Receiver<Packet>,
+        mut receiver: mpsc::Receiver<Packet>,
         sender: Sender<ServerPacket>,
     ) {
         tokio::spawn(async move {
             loop {
                 tokio::select! {
-                    Ok(packet) = receiver.recv() => {
+                    Some(packet) = receiver.recv() => {
                         if let Err(e) = stream.send_packet::<Packet>(&packet).await {
                             log::error!("Can't send packet to stream! {}", e);
                             break;
@@ -478,37 +485,47 @@ impl Server {
         let msg_sender = client_events.new_sender().await;
         let receiver = client_events.subscribe().await;
 
-        let client = Client {
+        let (channel_tx, channel_rx) = mpsc::channel::<Packet>(16);
+
+        let mut client = Client {
             id: auth_data.id,
             conn: conn.clone(),
             auth_token: token,
-            stream: msg_sender,
+            stream: channel_tx,
             session_ids: Vec::new(),
             ipv6: auth_data.ipv6,
             ipv4: conn.remote_address(),
+            channels: Arc::new(Mutex::new(HashMap::new())),
         };
 
         let global_sender = self.event_bus.new_sender().await;
 
-        Server::client_communication_task(stream, receiver, global_sender.clone());
+        Server::client_communication_task(stream, channel_rx, global_sender.clone());
 
         let conn_cloned = conn.clone();
 
-        //Creating a new task for handling bi-stream packets
+        let channels = client.channels.clone();
+
+        //Creating a new task for handling new channels
         tokio::spawn(async move {
             loop {
-                let Ok(stream) = get_stream_from_conn(&conn_cloned).await else {
+                let Ok(mut stream) = get_stream_from_conn(&conn_cloned).await else {
                     info!(
                         "Connection closed. Terminating bi-stream handler for {}",
                         conn_cloned.remote_address()
                     );
                     break;
                 };
-                Server::client_communication_task(
-                    stream,
-                    client_events.subscribe().await,
-                    global_sender.clone(),
-                );
+                let channel_id = Uuid::new_v4().to_string();
+                let response = Packet::NewChannelResponse(NewChannelResponse {
+                    channel_id: channel_id.clone(),
+                });
+                let _ = stream.send_packet(&response).await;
+                let (channel_tx, channel_rx) = mpsc::channel::<Packet>(4);
+
+                channels.lock().await.insert(channel_id, channel_tx);
+
+                Server::client_communication_task(stream, channel_rx, global_sender.clone());
             }
         });
 
@@ -545,6 +562,8 @@ impl Server {
                         continue;
                     };
 
+                    let session_id = base.session_id.clone();
+
                     let client = match self.authorize_take_client(base).await {
                         Ok(client) => client,
                         Err(e) => {
@@ -561,9 +580,24 @@ impl Server {
                         }
                     };
 
-                    if let Err(e) = client.stream.send(packet) {
-                        continue;
+                    if let Some(session_id) = session_id {
+                        let channels = client.channels.lock().await;
+                        let Some(session_stream) = channels.get(&session_id) else {
+                            error!("Unknown session {}", session_id);
+                            continue;
+                        };
+                        if let Err(e) = session_stream.send(packet).await {
+                            error!("Error sending packet {}", e);
+                            continue;
+                        }
                     }
+                    else {
+                        if let Err(e) = client.stream.send(packet).await {
+                            error!("Error sending packet {}", e);
+                            continue;
+                        }
+                    }
+
                     //Reinserting it
                     self.clients.insert(client.id.clone(), client);
                 }

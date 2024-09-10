@@ -6,7 +6,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub(crate) struct ClientStream {
+pub struct ClientStream {
     pub(crate) recv_stream: quinn::RecvStream,
     pub(crate) send_stream: Option<quinn::SendStream>,
 }
@@ -16,6 +16,7 @@ pub(crate) struct ClientStream {
 pub struct PacketBase {
     pub own_id: String,
     pub token: String,
+    pub session_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -44,6 +45,12 @@ pub struct UpdateIp {
 pub struct NewSession {
     pub target_id: String,
     pub session_id: String,
+}
+
+///Client-bound
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct NewChannelResponse {
+    pub channel_id: String,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -98,6 +105,7 @@ pub enum Packet {
     PeerIpChanged(PeerIpChanged),
     ConnectTo(ConnectTo),
     Status(Status),
+    NewChannelResponse(NewChannelResponse),
 }
 
 ///Server-bound packet with extra data for authentication

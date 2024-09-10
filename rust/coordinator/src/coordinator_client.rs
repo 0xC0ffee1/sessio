@@ -161,6 +161,17 @@ impl CoordinatorClient {
         Ok(data.token.unwrap())
     }
 
+    pub async fn new_stream(&self) -> Result<ClientStream> {
+        let (send_stream, recv_stream) = self.conn.open_bi().await?;
+
+        let mut stream = ClientStream {
+            recv_stream,
+            send_stream: Some(send_stream),
+        };
+
+        Ok(stream)
+    }
+
     pub async fn connect(
         coordinator_url: Url,
         id_own: String,
@@ -280,6 +291,7 @@ impl CoordinatorClient {
                 base: Some(PacketBase {
                     own_id: self.id_own.clone(),
                     token: self.token.clone(),
+                    session_id: None,
                 }),
                 packet,
             })
