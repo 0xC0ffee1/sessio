@@ -149,6 +149,7 @@ impl Server {
                             log::error!("Can't send packet to stream! {}", e);
                             break;
                         };
+                        info!("sent packet!");
                     },
                     //Server-bound packet
                     Ok(packet) = stream.read_response::<ServerPacket>() => {
