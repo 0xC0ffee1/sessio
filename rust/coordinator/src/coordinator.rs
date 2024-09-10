@@ -431,8 +431,12 @@ impl Server {
                         server_addr = client_self.ipv6.clone().unwrap_or(server_addr);
                     }
 
-                    let _ = client
-                        .stream
+                    let channels = client.channels.lock().await;
+                    let Some(sender) = channels.get(&session_id) else {
+                        bail!("Client channel not present!");
+                    };
+
+                    let _ = sender
                         .send(Packet::ConnectTo(ConnectTo {
                             target: server_addr,
                             session_id: session_id.clone(),
