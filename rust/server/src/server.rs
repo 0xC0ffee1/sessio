@@ -155,6 +155,7 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
 
                     match packet {
                         Packet::ConnectTo(data) => {
+                            log::info!("connect to received");
                             match endpoint.connect(data.target, "client") {
                                 Ok(_) => {
                                     info!("Connection attempt made!");

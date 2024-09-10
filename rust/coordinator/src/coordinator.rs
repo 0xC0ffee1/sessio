@@ -149,6 +149,9 @@ impl Server {
                             log::error!("Can't send packet to stream! {}", e);
                             break;
                         };
+                        if let Packet::ConnectTo(connect_to) = packet {
+                            info!("sent connect to {}!", connect_to.target.to_string());
+                        }
                     },
                     //Server-bound packet
                     Ok(packet) = stream.read_response::<ServerPacket>() => {
@@ -282,11 +285,14 @@ impl Server {
                                     old_ip: other_ipv6_old.context("Other ipv6 is empty")?,
                                 }));
 
-                            _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
-                                peer_id: client_self.id.clone(),
-                                new_ip: addr_ipv4_current,
-                                old_ip: addr_ipv6_old.context("Own ipv6 is empty")?,
-                            }));
+                            _ = other_peer
+                                .stream
+                                .send(Packet::PeerIpChanged(PeerIpChanged {
+                                    peer_id: client_self.id.clone(),
+                                    new_ip: addr_ipv4_current,
+                                    old_ip: addr_ipv6_old.context("Own ipv6 is empty")?,
+                                }))
+                                .await;
 
                             session.using_ipv6 = false;
                             client_self.ipv6 = None;
@@ -301,11 +307,14 @@ impl Server {
                                         old_ip: other_ipv4_old.clone(),
                                     }));
 
-                                _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
-                                    peer_id: client_self.id.clone(),
-                                    new_ip: data.ipv6.context("Own ipv6 is empty")?,
-                                    old_ip: addr_ipv4_old.clone(),
-                                }));
+                                _ = other_peer
+                                    .stream
+                                    .send(Packet::PeerIpChanged(PeerIpChanged {
+                                        peer_id: client_self.id.clone(),
+                                        new_ip: data.ipv6.context("Own ipv6 is empty")?,
+                                        old_ip: addr_ipv4_old.clone(),
+                                    }))
+                                    .await;
 
                                 session.using_ipv6 = true;
                             }
@@ -315,19 +324,25 @@ impl Server {
                         {
                             //This will just make the peer ping this new destination, creating the mappings
 
-                            _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
-                                peer_id: client_self.id.clone(),
-                                new_ip: data.ipv6.unwrap(),
-                                old_ip: addr_ipv6_old.unwrap().clone(),
-                            }));
+                            _ = other_peer
+                                .stream
+                                .send(Packet::PeerIpChanged(PeerIpChanged {
+                                    peer_id: client_self.id.clone(),
+                                    new_ip: data.ipv6.unwrap(),
+                                    old_ip: addr_ipv6_old.unwrap().clone(),
+                                }))
+                                .await;
 
                             session.using_ipv6 = true;
                         } else if !session.using_ipv6 && addr_ipv4_old != addr_ipv4_current {
-                            _ = other_peer.stream.send(Packet::PeerIpChanged(PeerIpChanged {
-                                peer_id: client_self.id.clone(),
-                                new_ip: addr_ipv4_current,
-                                old_ip: addr_ipv4_old,
-                            }));
+                            _ = other_peer
+                                .stream
+                                .send(Packet::PeerIpChanged(PeerIpChanged {
+                                    peer_id: client_self.id.clone(),
+                                    new_ip: addr_ipv4_current,
+                                    old_ip: addr_ipv4_old,
+                                }))
+                                .await;
                         } else {
                             continue;
                         }
@@ -377,10 +392,13 @@ impl Server {
 
                     info!("Sending connect packet to server!");
 
-                    let _ = server.stream.send(Packet::ConnectTo(ConnectTo {
-                        target: client_addr,
-                        session_id: session_id.clone(),
-                    }));
+                    let _ = server
+                        .stream
+                        .send(Packet::ConnectTo(ConnectTo {
+                            target: client_addr,
+                            session_id: session_id.clone(),
+                        }))
+                        .await;
 
                     Packet::Status(Status {
                         code: 200,
@@ -413,10 +431,17 @@ impl Server {
                         server_addr = client_self.ipv6.clone().unwrap_or(server_addr);
                     }
 
-                    let _ = client.stream.send(Packet::ConnectTo(ConnectTo {
-                        target: server_addr,
-                        session_id: session_id.clone(),
-                    }));
+                    let channels = client.channels.lock().await;
+                    let Some(sender) = channels.get(&session_id) else {
+                        bail!("Client channel not present!");
+                    };
+
+                    let _ = sender
+                        .send(Packet::ConnectTo(ConnectTo {
+                            target: server_addr,
+                            session_id: session_id.clone(),
+                        }))
+                        .await;
 
                     Packet::Status(Status {
                         code: 200,
@@ -482,10 +507,7 @@ impl Server {
 
         let client_events = EventBus::<Packet>::default();
 
-        let msg_sender = client_events.new_sender().await;
-        let receiver = client_events.subscribe().await;
-
-        let (channel_tx, channel_rx) = mpsc::channel::<Packet>(16);
+        let (channel_tx, channel_rx) = mpsc::channel::<Packet>(32);
 
         let mut client = Client {
             id: auth_data.id,

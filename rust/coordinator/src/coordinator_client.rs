@@ -194,6 +194,7 @@ impl CoordinatorClient {
             )
             .unwrap()
             .await?;
+
         info!(
             "[Coordinator client] Connected to: {}",
             connection.remote_address(),
