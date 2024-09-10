@@ -485,10 +485,7 @@ impl Server {
 
         let client_events = EventBus::<Packet>::default();
 
-        let msg_sender = client_events.new_sender().await;
-        let receiver = client_events.subscribe().await;
-
-        let (channel_tx, channel_rx) = mpsc::channel::<Packet>(16);
+        let (channel_tx, channel_rx) = mpsc::channel::<Packet>(100);
 
         let mut client = Client {
             id: auth_data.id,
