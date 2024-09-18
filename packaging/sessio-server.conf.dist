@@ -1,0 +1,3 @@
+coordinator = "quic://example.com:2223"
+id = "device_id_here"
+private_key = "/etc/sessio/ssh_host_ed25519_key"

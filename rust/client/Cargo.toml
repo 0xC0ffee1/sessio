@@ -1,11 +1,46 @@
 [package]
-name = "client"
-version = "0.1.0"
+name = "sessio-clientd"
+version = "0.3.1"
 edition = "2021"
+authors = ["0xc0ffee1"]
+description = "Client daemon for sessio"
+license = "GPL-3.0-or-later"
+
+[package.metadata.generate-rpm]
+assets = [
+    # Install the binary
+    { source = "target/release/sessio-clientd", dest = "/usr/bin/sessio-clientd", mode = "755" },
+
+    # Install the systemd service file
+    { source = "../packaging/services/clientd/service", dest = "/usr/lib/systemd/system/sessio-clientd.service", mode = "644" },
+]
+
+requires = { systemd = "*" }
+
+post_install_script = """
+systemctl daemon-reload
+systemctl enable sessio-clientd.service
+systemctl start sessio-clientd.service
+"""
+
+pre_uninstall_script = """
+systemctl stop sessio-clientd.service
+systemctl disable sessio-clientd.service
+"""
+
+[package.metadata.deb]
+# Specify the assets to include in the Debian package
+assets = [
+    # Install the binary
+    ["target/release/sessio-clientd", "usr/bin/sessio-clientd", "755"],
+]
+
+systemd-units = { enable = true, start = true, restart-after-upgrade = true }
+maintainer-scripts = "../../packaging/services/clientd"
 
 [dependencies]
 common = { path = "../common" }
-coordinator = { path = "../coordinator" }
+sessio-coordinator = { path = "../coordinator" }
 tokio = { version = "1.0", features = ["full"] }
 quinn = "0.11.2"
 tokio-util = { version = "0.6", features = ["io"] }
@@ -22,7 +57,7 @@ homedir = "0.3.3"
 
 clap = { version = "4.5.6", features = ["derive"] }
 url = "2.5.0"
-rustls = { version = "0.23.12", default-features = false}
+rustls = { version = "0.23.12", default-features = false }
 rustls-pemfile = "2.1.2"
 rcgen = "0.12.1"
 
@@ -71,4 +106,4 @@ tonic-build = "0.11"
 
 [lib]
 name = "grpc_server"
-crate-type =  ["cdylib"]
+crate-type = ["cdylib"]

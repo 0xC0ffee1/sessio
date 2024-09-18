@@ -5,12 +5,12 @@ use clap::Parser;
 use client::Msg;
 use common::utils::events::EventBus;
 use common::utils::map_ipv4_to_ipv6;
-use coordinator::holepuncher::HolepunchService;
 use key::KeyPair;
 use quinn::{ClientConfig, Connection, Endpoint, EndpointConfig, VarInt};
 use russh::client::Handle;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use serde_json::{json, Value};
+use sessio_coordinator::holepuncher::HolepunchService;
 use ssh_key::known_hosts;
 use tokio::fs::File;
 
@@ -73,7 +73,7 @@ use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::{task, time};
 
 use common::utils::streams::BiStream;
-use coordinator::coordinator_client::CoordinatorClient;
+use sessio_coordinator::coordinator_client::CoordinatorClient;
 
 //Reusable channel where the listening end always takes the receiver
 
@@ -90,77 +90,6 @@ use log::{debug, error, info, trace, warn, Level};
 struct PeerChangeMsg {
     pub new_ip: SocketAddr,
     pub old_ip: SocketAddr,
-}
-
-#[derive(Parser, Debug)]
-#[clap(name = "client")]
-pub struct Opt {
-    //the url to the coordination server. E.g. quic://127.0.0.1:2223
-    #[clap(long, short = 'c')]
-    coordinator: Url,
-
-    //User to authenticate as
-    #[clap(long, short = 'u')]
-    username: Option<String>,
-
-    //The path to your private key
-    #[clap(long, short = 'k')]
-    private_key: PathBuf,
-
-    #[clap(long, short = 'k', default_value = "known_hosts")]
-    known_hosts_path: PathBuf,
-
-    //The identifier of the target machine
-    target_id: String,
-}
-
-#[tokio::main]
-pub async fn run(cli: Opt) -> anyhow::Result<()> {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .init();
-
-    /* info!("Key path: {:?}", cli.private_key);
-
-    let mut client = Client::default();
-
-    let connection_id = client.new_connection(cli.target_id.clone(), cli.coordinator, None).await?;
-
-    let session_id = client.new_session(
-        cli.target_id,
-        SessionDataSessionKind::Pty(PtySession{}),
-        "asd".to_string(),
-        cli.private_key.clone(),
-        cli.known_hosts_path.clone()
-    )
-    .await?;
-
-    info!("Connected");
-
-    let session_guard = client.sessions.get_mut("asd").unwrap();
-    let mut session = session_guard.lock().await;
-
-    let stdout: Stdout = tokio::io::stdout();
-    let stdin: Stdin = tokio::io::stdin();
-
-    let code = {
-        let mut stdout_std = std::io::stdout();
-        enable_raw_mode().unwrap();
-        execute!(stdout_std, EnterAlternateScreen, Clear(ClearType::All)).unwrap();
-        let (w, h) = terminal_size()?;
-
-        //let channel_id = session.request_pty(w as u32, h as u32).await?;
-        //let result = session.request_shell(&channel_id, stdin, stdout).await?;
-
-        disable_raw_mode().unwrap();
-        execute!(stdout_std, LeaveAlternateScreen).unwrap();
-
-        1
-    };
-
-    println!("Exitcode: {:?}", code);
-    let _ = session.close().await; */
-    Ok(())
 }
 
 /// Enables MTUD if supported by the operating system

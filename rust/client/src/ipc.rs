@@ -21,12 +21,12 @@ use clientipc::{
     SftpRequestResponse, StreamResponse, SubscribeRequest, UserData, Value,
 };
 use clientipc::{FileDeleteResponse, FileRenameRequest, FileRenameResponse};
-use coordinator::coordinator_client::CoordinatorClient;
 use futures::{stream, Stream, StreamExt};
 use log4rs::append::file;
 use quinn::Connection;
 use russh_sftp::{client::SftpSession, protocol::Stat};
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
+use sessio_coordinator::coordinator_client::CoordinatorClient;
 use std::{any::Any, collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
 use tokio::{
     fs::File,

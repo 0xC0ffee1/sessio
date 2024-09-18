@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use common::utils::map_ipv4_to_ipv6;
-use coordinator::common::{Packet, PacketBase, ServerConnectionRequest, ServerPacket};
-use coordinator::holepuncher::HolepunchService;
 use quinn::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use rustls::internal::msgs::base;
 use serde_json::json;
+use sessio_coordinator::common::{Packet, PacketBase, ServerConnectionRequest, ServerPacket};
+use sessio_coordinator::holepuncher::HolepunchService;
 
 use tokio::process::Command as TokioCommand;
 
@@ -53,7 +53,7 @@ use std::time::{Duration, Instant};
 
 use crate::{sftp::*, Opt};
 use common::utils::keygen::generate_keypair;
-use coordinator::coordinator_client::*;
+use sessio_coordinator::coordinator_client::*;
 use url::Url;
 
 use common::utils::streams::BiStream;

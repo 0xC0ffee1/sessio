@@ -739,57 +739,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
 
 [[package]]
-name = "client"
-version = "0.1.0"
-dependencies = [
- "android_logger",
- "anyhow",
- "async-stream",
- "async-trait",
- "bytes",
- "chrono",
- "clap",
- "common",
- "coordinator",
- "crossterm",
- "env_logger 0.10.2",
- "futures",
- "futures-util",
- "hex",
- "homedir",
- "if-addrs",
- "jni 0.5.3",
- "log 0.4.22",
- "log4rs",
- "pnet 0.35.0",
- "prost",
- "quinn",
- "quinn-proto",
- "rand",
- "rcgen 0.12.1",
- "ring",
- "russh",
- "russh-keys",
- "russh-sftp",
- "rustls",
- "rustls-pemfile",
- "serde",
- "serde_json",
- "shell-escape",
- "socket2 0.5.7",
- "ssh-key",
- "tokio",
- "tokio-stream",
- "tokio-util 0.6.10",
- "toml",
- "tonic",
- "tonic-build",
- "uds_windows",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -873,40 +822,6 @@ dependencies = [
  "getrandom",
  "once_cell",
  "tiny-keccak",
-]
-
-[[package]]
-name = "coordinator"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "clap",
- "common",
- "env_logger 0.10.2",
- "futures",
- "log 0.4.22",
- "log4rs",
- "quinn",
- "quinn-proto",
- "rand",
- "rcgen 0.12.1",
- "russh",
- "russh-keys",
- "rustls",
- "rustls-pemfile",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "stun-client",
- "stunclient",
- "tokio",
- "tokio-util 0.6.10",
- "toml",
- "url",
- "uuid",
- "webpki-roots",
 ]
 
 [[package]]
@@ -3615,15 +3530,99 @@ dependencies = [
 ]
 
 [[package]]
-name = "server"
-version = "0.1.0"
+name = "sessio-clientd"
+version = "0.3.1"
+dependencies = [
+ "android_logger",
+ "anyhow",
+ "async-stream",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "clap",
+ "common",
+ "crossterm",
+ "env_logger 0.10.2",
+ "futures",
+ "futures-util",
+ "hex",
+ "homedir",
+ "if-addrs",
+ "jni 0.5.3",
+ "log 0.4.22",
+ "log4rs",
+ "pnet 0.35.0",
+ "prost",
+ "quinn",
+ "quinn-proto",
+ "rand",
+ "rcgen 0.12.1",
+ "ring",
+ "russh",
+ "russh-keys",
+ "russh-sftp",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "serde_json",
+ "sessio-coordinator",
+ "shell-escape",
+ "socket2 0.5.7",
+ "ssh-key",
+ "tokio",
+ "tokio-stream",
+ "tokio-util 0.6.10",
+ "toml",
+ "tonic",
+ "tonic-build",
+ "uds_windows",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "sessio-coordinator"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
  "clap",
  "common",
- "coordinator",
+ "env_logger 0.10.2",
+ "futures",
+ "log 0.4.22",
+ "log4rs",
+ "quinn",
+ "quinn-proto",
+ "rand",
+ "rcgen 0.12.1",
+ "russh",
+ "russh-keys",
+ "rustls",
+ "rustls-pemfile",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "stun-client",
+ "stunclient",
+ "tokio",
+ "tokio-util 0.6.10",
+ "toml",
+ "url",
+ "uuid",
+ "webpki-roots",
+]
+
+[[package]]
+name = "sessio-server"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "clap",
+ "common",
  "env_logger 0.10.2",
  "futures-util",
  "homedir",
@@ -3642,6 +3641,7 @@ dependencies = [
  "rustls-pemfile",
  "serde",
  "serde_json",
+ "sessio-coordinator",
  "shared_memory",
  "shell-escape",
  "ssh-key",

@@ -1,7 +1,46 @@
 [package]
-name = "coordinator"
-version = "0.1.0"
+name = "sessio-coordinator"
+version = "0.3.1"
 edition = "2021"
+authors = ["0xc0ffee1"]
+description = "Coordinator for sessio"
+license = "GPL-3.0-or-later"
+
+
+[package.metadata.generate-rpm]
+assets = [
+    # Install the binary
+    { source = "target/release/sessio-coordinator", dest = "/usr/bin/sessio-coordinator", mode = "755" },
+
+    # Install the systemd service file
+    { source = "../packaging/services/coordinator/service", dest = "/usr/lib/systemd/system/sessio-coordinator.service", mode = "644" },
+
+
+    # Install the server config
+    { source = "../packaging/sessio-coordinator.conf.dist", dest = "/etc/sessio/coordinator.conf", mode = "644", config = "noreplace" },
+]
+
+requires = { systemd = "*" }
+
+post_install_script = """
+systemctl daemon-reload
+systemctl enable sessio-coordinator.service
+systemctl start sessio-coordinator.service
+"""
+
+pre_uninstall_script = """
+systemctl stop sessio-coordinator.service
+systemctl disable sessio-coordinator.service
+"""
+
+[package.metadata.deb]
+assets = [
+    # Install the binary
+    ["target/release/sessio-coordinator", "usr/bin/sessio-coordinator", "755"],
+]
+
+systemd-units = { enable = true, start = true, restart-after-upgrade = true }
+maintainer-scripts = "../../packaging/services/coordinator"
 
 [dependencies]
 common = { path = "../common" }
@@ -18,7 +57,7 @@ rand = { version = "0.8", features = ["std"] }
 
 clap = { version = "4.5.6", features = ["derive"] }
 url = "2.5.0"
-rustls = { version = "0.23.5", features = ["std"], default-features = false}
+rustls = { version = "0.23.5", features = ["std"], default-features = false }
 rustls-pemfile = "2.1.2"
 rcgen = "0.12.1"
 

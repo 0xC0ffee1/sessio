@@ -1,11 +1,64 @@
 [package]
-name = "server"
-version = "0.1.0"
+name = "sessio-server"
+version = "0.3.1"
 edition = "2021"
+authors = ["0xc0ffee1"]
+description = "Server for sessio"
+license = "GPL-3.0-or-later"
+
+[package.metadata.generate-rpm]
+assets = [
+    # Install the binary
+    { source = "target/release/sessio-server", dest = "/usr/bin/sessio-server", mode = "755" },
+
+    # Install the systemd service file
+    { source = "../packaging/services/server/service", dest = "/usr/lib/systemd/system/sessio-server.service", mode = "644" },
+
+    # Install the server config
+    { source = "../packaging/sessio-server.conf.dist", dest = "/etc/sessio/server.conf", mode = "644", config = "noreplace" },
+]
+
+requires = { systemd = "*" }
+
+post_install_script = """
+systemctl daemon-reload
+systemctl enable sessio-server.service
+systemctl start sessio-server.service
+"""
+
+pre_uninstall_script = """
+systemctl stop sessio-server.service
+systemctl disable sessio-server.service
+"""
+
+[package.metadata.deb]
+# Specify the assets to include in the Debian package
+assets = [
+    # Install the binary
+    [
+        "target/release/sessio-server",
+        "usr/bin/sessio-server",
+        "755",
+    ],
+
+    # Install the server config
+    [
+        "../../packaging/sessio-server.conf.dist",
+        "etc/sessio/server.conf",
+        "644",
+    ],
+]
+
+systemd-units = { enable = true, start = true, restart-after-upgrade = true }
+maintainer-scripts = "../../packaging/services/server"
+
+# Mark the configuration file as a conffile to prevent overwriting during upgrades
+conf-files = ["etc/sessio/server.conf"]
+
 
 [dependencies]
 common = { path = "../common" }
-coordinator = { path = "../coordinator" }
+sessio-coordinator = { path = "../coordinator" }
 tokio = { version = "1.0", features = ["full"] }
 quinn = "0.11.2"
 tokio-util = { version = "0.6", features = ["io"] }

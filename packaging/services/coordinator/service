@@ -1,0 +1,12 @@
+[Unit]
+Description="Sessio coordinator"
+After=network.target
+
+[Service]
+Type=simple
+Environment="TERM=xterm-256color"
+ExecStart=/usr/bin/sessio-coordinator --config /etc/sessio/coordinator.conf
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description="Sessio client daemon"
+After=network.target
+
+[Service]
+Type=simple
+Environment="TERM=xterm-256color"
+ExecStart=/usr/bin/sessio-clientd
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

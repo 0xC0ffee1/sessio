@@ -1,6 +1,2 @@
 [workspace]
-members = [
-    "client",
-    "server",
-    "common", 
-    "coordinator"]
+members = ["client", "server", "common", "coordinator"]
