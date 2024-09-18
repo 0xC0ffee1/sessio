@@ -59,8 +59,8 @@ Sessio also exposes a gRPC interface for developers wanting to develop a GUI for
 ## Configration & Setup
 
 ### Server
-1. Modify the configuration file in /etc/sessio/server.conf
-2. Check the public key from ssh_host_ed25519_key.pub and add it to the `authorized_keys` in your **coordinator** server
+1. Modify the configuration file in `/etc/sessio/server.conf`
+2. Check the public key from `ssh_host_ed25519_key.pub` and add it to the `authorized_keys` in your **coordinator** server
     - This is necessary to authenticate with the coordinator server!
 3. Add the public key of a client to your `authorized_keys` file for a user in `/user_home/.sessio/`
 
@@ -69,7 +69,7 @@ Sessio also exposes a gRPC interface for developers wanting to develop a GUI for
     - This is used to ensure authenticity of the QUIC connection to the coordination server
     - If you don't have a domain, generate a key and a cert with openssl: `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout key.pem -out cert.pem`
     - Copy both key.pem and cert.pem in `/etc/sessio/` as `coordinator_key.pem` and `coordinator_cert.pem`
-2. You must allow each device to connect to the coordination server by adding authorized keys in /home/(user running coordinator)/.sessio/authorized_keys
+2. You must allow each device to connect to the coordination server by adding authorized keys in `/home/(user running coordinator)/.sessio/authorized_keys`
 
 
 ### Client (daemon)
