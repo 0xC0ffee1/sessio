@@ -68,7 +68,7 @@ Sessio also exposes a gRPC interface for developers wanting to develop a GUI for
 1. Generate your certificate and key with certbot for example (certbot certonly --standalone -d yourdomain.com)
     - This is used to ensure authenticity of the QUIC connection to the coordination server
     - If you don't have a domain, generate a key and a cert with openssl: `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout key.pem -out cert.pem`
-    - Copy both key.pem and cert.pem in `/etc/sessio/` as `coordinator_key.pem` and `coordinator_cert.pem`
+    - Copy both key.pem and cert.pem to `/etc/sessio/` as `coordinator_key.pem` and `coordinator_cert.pem`
 2. You must allow each device to connect to the coordination server by adding authorized keys in `/home/(user running coordinator)/.sessio/authorized_keys`
 
 
