@@ -9,4 +9,4 @@ ExecStart=/usr/bin/sessio-clientd
 Restart=always
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

@@ -50,11 +50,11 @@ Sessio also exposes a gRPC interface for developers wanting to develop a GUI for
 
 - Use the commands below to automatically install the correct package on your host.
 ### Server:
-- `sudo bash < <(curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh) --package server`
+- `curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh | sudo bash -s -- --package server`
 ### Client daemon:
-- `sudo bash < <(curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh) --package clientd`
+- `curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh | bash -s -- --package clientd`
 ### Coordinator:
-- `sudo bash < <(curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh) --package coordinator`
+- `curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh | bash -s -- --package coordinator`
 
 ## Configration & Setup
 

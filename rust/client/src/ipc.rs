@@ -843,6 +843,7 @@ pub async fn start_grpc_server(path_str: &str) {
 
     let uds_res = UnixListener::bind(&sock_path);
     let Ok(uds) = uds_res else {
+        info!("Path {}", path);
         info!("Is err {}", uds_res.err().unwrap());
         return;
     };
