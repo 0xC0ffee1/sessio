@@ -63,4 +63,4 @@ systemctl --user daemon-reload
 systemctl --user enable sessio-clientd
 systemctl --user start sessio-clientd
 
-echo "Sessio clientd installed and user service started successfully.\nStop with: systemctl --user stop sessio-clientd"
+echo "Sessio clientd installed and user service started successfully. Stop with: systemctl --user stop sessio-clientd"
