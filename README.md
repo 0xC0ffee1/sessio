@@ -54,7 +54,7 @@ Sessio also exposes a gRPC interface for developers wanting to develop a GUI for
 ### Client daemon:
 - `curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh | bash -s -- --package clientd`
 ### Coordinator:
-- `curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh | bash -s -- --package coordinator`
+- `curl -s https://raw.githubusercontent.com/0xC0ffee1/sessio/main/scripts/install.sh | sudo bash -s -- --package coordinator`
 
 ## Configration & Setup
 
