@@ -24,7 +24,7 @@ case "$architecture" in
 esac
 
 # Define the URL for the raw binary based on the architecture
-BINARY_URL="https://github.com/0xC0ffee1/sessio/releases/download/v${VERSION}/sessio-${PACKAGE_NAME}-${VERSION}.${ARCH}"
+BINARY_URL="https://github.com/0xC0ffee1/sessio/releases/download/v${VERSION}/sessio-${PACKAGE_NAME}.${ARCH}"
 
 # Download the binary using curl or wget
 if command -v curl > /dev/null; then
