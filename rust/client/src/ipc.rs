@@ -145,6 +145,7 @@ impl ClientIpc for ClientIpcHandler {
         }))
     }
 
+    //Todo rename -> get_all_sessions
     async fn get_active_sessions(
         &self,
         request: Request<SessionRequest>,
@@ -156,7 +157,6 @@ impl ClientIpc for ClientIpcHandler {
         for (k, v) in client.sessions.iter() {
             let mut session = v.lock().await;
             session.data.session_id = Some(session.id.clone());
-            new_map.insert(session.id.clone(), session.data.clone());
 
             let connected: bool = {
                 if let Some(conn) = client.connections.get(&session.server_id.clone()) {
@@ -165,6 +165,9 @@ impl ClientIpc for ClientIpcHandler {
                     false
                 }
             };
+            
+            session.data.active = connected;
+            new_map.insert(session.id.clone(), session.data.clone());
 
             parent_map.insert(session.server_id.clone(), DeviceStatus { connected });
         }
@@ -179,7 +182,6 @@ impl ClientIpc for ClientIpcHandler {
             for (k, mut data) in user_data.saved_sessions.iter() {
                 let mut final_data = data.clone();
                 final_data.session_id = Some(k.to_string());
-                new_map.insert(k.to_string(), final_data.clone());
 
                 let connected: bool = {
                     if let Some(conn) = client.connections.get(&data.device_id.clone()) {
@@ -188,6 +190,9 @@ impl ClientIpc for ClientIpcHandler {
                         false
                     }
                 };
+
+                final_data.active = connected && client.sessions.contains_key(&k.to_string());
+                new_map.insert(k.to_string(), final_data.clone());
 
                 parent_map.insert(
                     final_data.device_id,
@@ -713,6 +718,7 @@ impl ClientIpc for ClientIpcHandler {
                     .unwrap();
                 let mut user_data = Client::get_json_as::<UserData>(save_file).await.unwrap();
                 session_data_cloned.session_id = Some(id.clone());
+                session_data_cloned.active = false;
                 user_data
                     .saved_sessions
                     .insert(id.clone(), session_data_cloned);
@@ -769,6 +775,7 @@ impl ClientIpc for ClientIpcHandler {
             let was_active = session.is_active();
             if !session.is_active() {
                 session.new_session_channel().await.unwrap();
+                info!("OPENING NEW SESSION CHANNEL!")
             }
 
             (
@@ -778,12 +785,13 @@ impl ClientIpc for ClientIpcHandler {
                 event_receiver,
             )
         };
-
+        let stream_id = Uuid::new_v4();
         let res = async_stream::try_stream! {
 
             let send_handle = tokio::spawn(async move {
                 while let Some(Ok(msg)) = stream.next().await {
                     match msg.r#type {
+                        
                         Some(Type::ShellRequest(_) | Type::PtyRequest(_)) if !active => {
                             let _ = server_msg_sender.send(msg);
                         }

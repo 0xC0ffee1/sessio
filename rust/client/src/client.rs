@@ -641,7 +641,7 @@ impl Session {
     }
 
     pub fn set_active(&self) {
-        return self.active.store(false, Ordering::SeqCst);
+        return self.active.store(true, Ordering::SeqCst);
     }
 
     pub async fn direct_tcpip_forward(
