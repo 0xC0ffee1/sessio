@@ -6,3 +6,4 @@ image = "aarch64-unknown-linux-gnu-protoc"
 
 [target.i686-unknown-linux-gnu]
 image = "i686-unknown-linux-gnu-protoc"
+
