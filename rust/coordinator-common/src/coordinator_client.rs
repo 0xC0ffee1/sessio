@@ -1,4 +1,3 @@
-use std::error::Error;
 // EventBus not used in Docker build - commenting out to fix compilation
 // use common::utils::events::EventBus;
 use log::{debug, error, info, warn};
@@ -12,6 +11,8 @@ use tokio::net::UdpSocket;
 
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::mpsc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use url::Url;
 
@@ -46,14 +47,17 @@ pub struct CoordinatorClient {
 
     //Client-bound rx - EventBus commented out to fix Docker build
     client_packet_bus: EventBus<Packet>,
+    
+    // Connection state tracking
+    is_connected: Arc<AtomicBool>,
 }
 
 // HTTP/WebSocket doesn't need MTUD configuration - removed legacy functions
 
 impl CoordinatorClient {
     pub fn is_closed(&self) -> bool {
-        // WebSocket client is considered closed if the HTTP client is dropped
-        false // For now, always return false - could be enhanced with connection state tracking
+        // WebSocket client is considered closed if the connection state is false
+        !self.is_connected.load(Ordering::Relaxed)
     }
 
     pub async fn get_nat_type() -> Result<NATFilteringType> {
@@ -77,6 +81,21 @@ impl CoordinatorClient {
         let external_v6 = client_v6.query_external_address_async(sock).await.ok();
 
         (external_v4, external_v6)
+    }
+
+    pub async fn get_external_ips_dual_sock_new(
+
+    ) -> (Option<SocketAddr>, Option<SocketAddr>, UdpSocket) {
+        let sock = UdpSocket::bind("[::]:0").await.expect("Failed to bind socket");
+        //stun.l.google.com in ipv6 mapped ipv4 address
+        let client_v4 = StunClient::new("[::ffff:74.125.250.129]:19302".parse().unwrap());
+        let external_v4 = client_v4.query_external_address_async(&sock).await.ok();
+
+        //Just making sure it is ipv6
+        let client_v6 = StunClient::new("[2001:4860:4864:5:8000::1]:19302".parse().unwrap());
+        let external_v6 = client_v6.query_external_address_async(&sock).await.ok();
+
+        (external_v4, external_v6, sock)
     }
 
     pub async fn get_external_ips(
@@ -198,7 +217,7 @@ impl CoordinatorClient {
         let mut ws_url = Self::construct_api_url(&coordinator_url, "/ws")?;
         ws_url.set_scheme("ws").map_err(|_| anyhow!("Invalid URL scheme"))?;
 
-        let (ws_stream, _) = connect_async(ws_url).await?;
+        let (ws_stream, _) = connect_async(ws_url.clone()).await?;
         let mut stream = create_websocket_stream(ws_stream).await?;
 
         CoordinatorClient::handle_auth(
@@ -213,24 +232,112 @@ impl CoordinatorClient {
         // EventBus commented out to fix Docker build
         let client_packet_bus = EventBus::<Packet>::default();
         let (server_packet_sender, mut server_packet_receiver) = mpsc::channel::<ServerPacket>(16);
-        let client_packet_sender = client_packet_bus.new_sender().await;
+
+        // Initialize connection state
+        let is_connected = Arc::new(AtomicBool::new(true));
+        let is_connected_clone = is_connected.clone();
+
+        // Clone values for the reconnection logic
+        let ws_url_clone = ws_url.clone();
+        let http_client_clone = http_client.clone();
+        let coordinator_url_clone = coordinator_url.clone();
+        let id_own_clone = id_own.clone();
+        let jwt_token_clone = jwt_token.clone();
+        let client_packet_bus_clone = client_packet_bus.clone();
 
         tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    //Server-bound
-                    Some(send_packet) = server_packet_receiver.recv() => {
-                        if let Err(e) = stream.send_packet::<ServerPacket>(&send_packet).await {
-                            error!("Failed to send packet to stream {}", e);
-                            break;
+            let mut reconnect_attempts = 0;
+            let max_reconnect_attempts = 10;
+            let mut backoff_ms = 1000;
+            let client_packet_sender = client_packet_bus_clone.new_sender().await;
+            
+            'reconnect_loop: loop {
+                // Main communication loop
+                loop {
+                    tokio::select! {
+                        //Server-bound
+                        Some(send_packet) = server_packet_receiver.recv() => {
+                            if let Err(e) = stream.send_packet::<ServerPacket>(&send_packet).await {
+                                error!("Failed to send packet to stream {}", e);
+                                break;
+                            }
+                        },
+                        //Client-bound
+                        Ok(recv_packet) = stream.read_response::<Packet>() => {
+                            if let Err(e) = client_packet_sender.send(recv_packet) {
+                                error!("Failed to broadcast received packet {}", e);
+                                break;
+                            }
+                            // Reset reconnect attempts on successful communication
+                            reconnect_attempts = 0;
+                            backoff_ms = 1000;
                         }
-                    },
-                    //Client-bound
-                    Ok(recv_packet) = stream.read_response::<Packet>() => {
-                        if let Err(e) = client_packet_sender.send(recv_packet) {
-                            error!("Failed to broadcast received packet {}", e);
-                            break;
+                    }
+                }
+                
+                // Connection closed, attempt to reconnect and reauthenticate
+                warn!("WebSocket connection closed, attempting to reconnect and reauthenticate...");
+                is_connected_clone.store(false, Ordering::Relaxed);
+                
+                // Drain any packets that were queued while we were trying to send to a broken connection
+                let mut drained_count = 0;
+                while server_packet_receiver.try_recv().is_ok() {
+                    drained_count += 1;
+                }
+                if drained_count > 0 {
+                    warn!("Discarded {} stale packets from send queue", drained_count);
+                }
+                
+                // Check if we've exceeded max attempts
+                if reconnect_attempts >= max_reconnect_attempts {
+                    error!("Max reconnection attempts reached, giving up");
+                    break 'reconnect_loop;
+                }
+                
+                reconnect_attempts += 1;
+                info!("Reconnection attempt {} of {}", reconnect_attempts, max_reconnect_attempts);
+                
+                // Wait with exponential backoff
+                tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
+                backoff_ms = (backoff_ms * 2).min(30000); // Cap at 30 seconds
+                
+                // Try to reauthenticate first
+                match CoordinatorClient::handle_auth(
+                    &http_client_clone,
+                    &coordinator_url_clone,
+                    id_own_clone.clone(),
+                    jwt_token_clone.clone(),
+                    ipv4,
+                    ipv6,
+                ).await {
+                    Ok(_) => {
+                        info!("Successfully reauthenticated with coordinator");
+                        
+                        // Try to reconnect WebSocket
+                        match connect_async(ws_url_clone.clone()).await {
+                            Ok((ws_stream, _)) => {
+                                match create_websocket_stream(ws_stream).await {
+                                    Ok(new_stream) => {
+                                        stream = new_stream;
+                                        info!("Successfully reconnected WebSocket");
+                                        is_connected_clone.store(true, Ordering::Relaxed);
+                                        reconnect_attempts = 0;
+                                        backoff_ms = 1000;
+                                        info!("Resuming normal operation with queued packets");
+                                        // Continue to main communication loop - any packets queued in the channel will be sent
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to create WebSocket stream: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to reconnect WebSocket: {}", e);
+                            }
                         }
+                    }
+                    Err(e) => {
+                        error!("Failed to reauthenticate: {}", e);
                     }
                 }
             }
@@ -243,6 +350,7 @@ impl CoordinatorClient {
             token: jwt_token.clone(),
             server_packet_sender,
             client_packet_bus,
+            is_connected,
         };
 
         // Start heartbeat task
@@ -261,6 +369,10 @@ impl CoordinatorClient {
 
     ///Wraps the input Packet into a ServerPacket by using information from this struct
     pub async fn send_server_packet(&self, packet: Packet) -> Result<(), anyhow::Error> {
+        if !self.is_connected.load(Ordering::Relaxed) {
+            return Err(anyhow!("Coordinator client is disconnected"));
+        }
+        
         self.server_packet_sender
             .send(ServerPacket {
                 base: Some(PacketBase {
@@ -280,12 +392,18 @@ impl CoordinatorClient {
         let server_packet_sender = self.server_packet_sender.clone();
         let id_own = self.id_own.clone();
         let token = self.token.clone();
+        let is_connected = self.is_connected.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
 
             loop {
                 interval.tick().await;
+
+                // Skip heartbeat if disconnected
+                if !is_connected.load(Ordering::Relaxed) {
+                    continue;
+                }
 
                 let heartbeat_request = HeartbeatRequest {
                     device_id: device_id.clone(),
@@ -302,9 +420,7 @@ impl CoordinatorClient {
                 };
 
                 match server_packet_sender.send(heartbeat_packet).await {
-                    Ok(_) => {
-                        debug!("Heartbeat sent successfully over WebSocket");
-                    }
+                    Ok(_) => {}
                     Err(e) => {
                         error!("Failed to send heartbeat over WebSocket: {}", e);
                     }
@@ -322,12 +438,10 @@ impl CoordinatorClient {
         passkey_json: Option<String>,
         sync_interval_secs: u64,
         authorized_keys_path: std::path::PathBuf,
-        include_unverified: bool,
+        _include_unverified: bool,
     ) {
         let http_client = self.http_client.clone();
         let coordinator_url = self.coordinator_url.clone();
-
-        info!("passkey {:?}", passkey_json);
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(sync_interval_secs));

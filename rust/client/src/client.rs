@@ -184,10 +184,6 @@ impl Client {
             ).into());
         }
 
-        let ipv6 =
-            CoordinatorClient::get_new_external_ipv6(self.endpoint.local_addr().unwrap().port())
-                .await;
-
         self.coordinator = HolepunchService::new(coord_url.clone(), jwt_token.clone(), self.external_ipv4, self.external_ipv6, settings.device_id.clone(), self.endpoint.clone())
         .await
         .ok();
@@ -435,7 +431,6 @@ impl Client {
     where
         T: AsRef<Path>,
     {
-        info!("here!");
         let known_hosts_path = self.data_folder_path.join("keys/known_hosts");
 
         let key_pair = Client::get_keypair(&self.data_folder_path)?;
@@ -537,10 +532,9 @@ impl Client {
 impl client::Handler for ClientHandler {
     type Error = russh::Error;
 
-    //The default path is /home/ssh for some reason
     fn check_server_key(
         &mut self,
-        _server_public_key: &russh::keys::ssh_key::PublicKey,
+        server_public_key: &PublicKey,
     ) -> impl std::future::Future<Output = Result<bool, Self::Error>> + Send {
         async move {
         let host = &self.server_id;
@@ -549,15 +543,15 @@ impl client::Handler for ClientHandler {
         let is_known_res = check_known_hosts_path(
             host,
             port,
-            _server_public_key,
+            server_public_key,
             &self.known_hosts_path,
         );
 
         if let Ok(known) = is_known_res {
             if !known {
-                info!("New host {}:{} (auto-accept disabled in russh 0.53.0)", host, port);
-                // TODO: Re-implement host learning when russh 0.53.0 API is clarified
-                // russh::keys::learn_known_hosts_path is no longer available
+                error!("Device is not known. You need to sign the target server in coordinator web ui to trust it. Server sent public key {}",
+                    server_public_key.to_openssh().unwrap_or("Unknown".parse().unwrap()));
+                return Ok(false);
             }
         } else if let Err(e) = is_known_res {
             match e {

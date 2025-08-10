@@ -235,6 +235,14 @@ async fn handle_new_session(
     let target_device = server.clients.get_mut(target_id)
         .ok_or_else(|| anyhow::anyhow!("Target device not found: {}", target_id))?;
     
+    // Get target device info from database to fetch public key
+    let target_device_info = server.db.get_device_by_id(target_id, target_device.account_id).await?
+        .ok_or_else(|| anyhow::anyhow!("Target device not found in database: {}", target_id))?;
+    
+    // Get client's public key for verification
+    let client_device_info = server.db.get_device_by_id(&client.id, client.account_id).await?
+        .ok_or_else(|| anyhow::anyhow!("Client device not found in database: {}", client.id))?;
+    
     // Determine IP protocol preference
     let using_ipv6 = client.ipv6.is_some() && target_device.ipv6.is_some();
     let client_addr = if using_ipv6 {
@@ -255,10 +263,11 @@ async fn handle_new_session(
     client.session_ids.push(session_id.clone());
     target_device.session_ids.push(session_id.clone());
     
-    // Send connect packet to target device
+    // Send connect packet to target device with client's public key
     let connect_packet = Packet::ConnectTo(ConnectTo {
         target: client_addr,
         session_id: session_id.clone(),
+        target_public_key: client_device_info.public_key.unwrap_or_default(),
     });
     
     let packet_json = serde_json::to_string(&connect_packet)?;
@@ -302,6 +311,10 @@ async fn handle_server_connection_request(
     let client_peer = server.clients.get(&session.client_id)
         .ok_or_else(|| anyhow::anyhow!("Client not found: {}", session.client_id))?;
     
+    // Get server's public key for verification  
+    let server_device_info = server.db.get_device_by_id(&client.id, client.account_id).await?
+        .ok_or_else(|| anyhow::anyhow!("Server device not found in database: {}", client.id))?;
+    
     // Determine server address to send to client
     let server_addr = if session.using_ipv6 {
         client.ipv6.unwrap_or(client.ipv4)
@@ -309,10 +322,11 @@ async fn handle_server_connection_request(
         client.ipv4
     };
     
-    // Send connect-to packet directly to client via WebSocket
+    // Send connect-to packet directly to client via WebSocket with server's public key
     let connect_packet = Packet::ConnectTo(ConnectTo {
         target: server_addr,
         session_id: session_id.clone(),
+        target_public_key: server_device_info.public_key.unwrap_or_default(),
     });
     
     let packet_json = serde_json::to_string(&connect_packet)?;

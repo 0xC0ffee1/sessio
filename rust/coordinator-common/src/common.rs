@@ -99,6 +99,7 @@ pub struct PeerIpChanged {
 pub struct ConnectTo {
     pub target: SocketAddr,
     pub session_id: String,
+    pub target_public_key: String, // Ed25519 public key for verification
 }
 
 ///Client-bound

@@ -111,6 +111,7 @@ pub async fn auth_handler(
         ipv6: auth_data.ipv6,
         ipv4: auth_data.ipv4.unwrap_or_else(|| "0.0.0.0:0".parse().unwrap()),
         device_uuid: device.id,
+        account_id,
     };
     
     server.clients.insert(device_id.clone(), client);

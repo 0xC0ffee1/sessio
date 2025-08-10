@@ -32,6 +32,8 @@ pub struct Client {
     pub ipv4: SocketAddr,
     /// Device UUID from database
     pub device_uuid: Uuid,
+    /// Account UUID from database
+    pub account_id: Uuid,
 }
 
 

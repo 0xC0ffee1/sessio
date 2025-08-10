@@ -17,6 +17,7 @@ axum-server = { version = "0.6", features = ["tls-rustls"] }
 
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
+
 env_logger = "0.10"
 anyhow = "1.0.86"
 log = "0.4"

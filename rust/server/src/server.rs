@@ -23,7 +23,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::broadcast::Receiver;
 
 use clap::Parser;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use quinn::{crypto, Connection, Endpoint, EndpointConfig, ServerConfig, VarInt};
 use rand::rngs::OsRng;
 use rand::{seq, CryptoRng};
@@ -162,6 +162,28 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                     match packet {
                         Packet::ConnectTo(data) => {
                             log::info!("connect to received");
+                            
+                            // Verify target public key against authorized_keys before connecting
+                            let authorized_keys = common::utils::keygen::read_authorized_keys(None).await.unwrap_or_else(|e| {
+                                    error!("Failed to read authorized_keys: {}", e);
+                                    Vec::new()
+                                });
+                            
+                            // Parse the target public key and check if it's authorized
+                            let is_authorized = match russh::keys::parse_public_key_base64(&data.target_public_key) {
+                                Ok(target_key) => authorized_keys.contains(&target_key),
+                                Err(e) => {
+                                    error!("Failed to parse target public key: {}", e);
+                                    false
+                                }
+                            };
+                            
+                            if !is_authorized {
+                                warn!("Connection denied: target public key {} not found in authorized_keys", data.target_public_key);
+                                continue;
+                            }
+                            
+                            info!("Target public key verified, attempting connection");
                             match endpoint.connect(data.target, "client") {
                                 Ok(_) => {
                                     info!("Connection attempt made!");
@@ -275,12 +297,11 @@ pub async fn run(opt: crate::RunConfig) {
         .expect("Failed to load account data");
     let passkey_json = account_data.passkey_public_key; // Now contains full JSON Passkey instead of base64 CBOR
     
-    // For server, we need to write to each user's home directory
-    // The coordinator client's sync task will handle writing to the appropriate path
-    // We'll use a placeholder path here - the actual implementation should iterate through users
-    let authorized_keys_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("/root"))
-        .join(".sessio/authorized_keys");
+
+    let home_dir = homedir::my_home()
+        .expect("Failed to get home directory")
+        .expect("Home directory not found");
+    let authorized_keys_path = home_dir.join(".sessio/authorized_keys");
     
     holepuncher.c_client.start_authorized_keys_sync_task(
         jwt_token.clone(),
@@ -554,22 +575,14 @@ impl server::Handler for ServerSession {
 
         let ptys = self.ptys.clone();
 
-        let Some(user) = &self.user else {
-            bail!("Authentication has not finished yet(?)");
-        };
+        // We're not using the stored user as proper multi-user handling is not implemented yet
+
         let shell = if cfg!(windows) {
             vec![
-                OsString::from("cmd.exe"),
-                OsString::from("/C"),
-                OsString::from(format!("runas /user:{}", user)),
+                OsString::from("cmd.exe")
             ]
         } else {
-            vec![
-                OsString::from("/usr/bin/sudo"),
-                OsString::from("-u"),
-                OsString::from(user),
-                OsString::from("/bin/bash"),
-            ]
+            vec![OsString::from("/bin/bash")]
         };
 
         tokio::spawn(async move {
@@ -747,7 +760,8 @@ impl server::Handler for ServerSession {
         log::debug!("Attempting to authenticate user: {}", user);
         log::debug!("Public key: {:?}", public_key);
 
-        let authorized_keys = common::utils::keygen::read_authorized_keys(Some(user))
+        // For now, we ignore the user parameter
+        let authorized_keys = common::utils::keygen::read_authorized_keys(None)
             .await
             .map_err(|e| {
                 error!("{}", e);

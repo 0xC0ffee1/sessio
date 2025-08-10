@@ -100,7 +100,7 @@ fi
 # Build frontend image
 if [ "$BUILD_FRONTEND" = true ]; then
     echo "🔨 Building frontend image: $FRONTEND_TAG"
-    docker build -t "$FRONTEND_TAG" ../../coordinator-frontend/
+    docker build -t "$FRONTEND_TAG" ../../../coordinator-frontend/
     
     if [ $? -eq 0 ]; then
         echo "✅ Successfully built frontend image"

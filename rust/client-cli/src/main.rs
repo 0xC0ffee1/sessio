@@ -172,8 +172,9 @@ async fn new_session(client: &mut ClientIpcClient<Channel>, session_data: Sessio
     let connection_response = client.new_connection(connection_request).await?;
 
     // Request a new session from the server
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     let request = tonic::Request::new(NewSessionRequest {
-        private_key: "/home/s/.sessio/keys/id_ed25519".to_string(),  
+        private_key: format!("{}/.sessio/keys/id_ed25519", home_dir),  
         known_hosts_path: "".to_string(), 
         session_data: Some(session_data),
     });
@@ -596,7 +597,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     // Connect to the client daemon's Unix socket
-    let socket_path = "/home/s/.sessio/sessio.sock";
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let socket_path = format!("{}/.sessio/sessio.sock", home_dir);
     
     let channel = Endpoint::try_from("http://[::]:50051")?
         .connect_with_connector(service_fn(move |_: Uri| {

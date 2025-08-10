@@ -8,7 +8,7 @@ use crate::{
     coordinator_client::CoordinatorClient,
 };
 
-use log::{error, info};
+use log::{error, info, warn};
 
 use anyhow::Result;
 use quinn::{Connection, Endpoint};
@@ -21,8 +21,9 @@ pub struct HolepunchService {
     coordinator_url: Url,
     jwt_token: String,
 
-    // The public ipv4
+    // The public ips
     ipv4: Option<SocketAddr>,
+    ipv6: Option<SocketAddr>,
 
     // Quinn endpoint for P2P connections
     pub endpoint: Endpoint,
@@ -75,12 +76,13 @@ impl HolepunchService {
         endpoint: Endpoint,
     ) -> Result<Self> {
         let c_client =
-            HolepunchService::connect(&coordinator_url, jwt_token.clone(), ipv4.clone(), ipv6, id_own.clone()).await?;
+            HolepunchService::connect(&coordinator_url, jwt_token.clone(), ipv4.clone(), ipv6.clone(), id_own.clone()).await?;
         let mut service = HolepunchService {
             c_client,
             coordinator_url,
             jwt_token,
             ipv4,
+            ipv6,
             endpoint,
         };
         service.start_connection_update_task();
@@ -94,7 +96,7 @@ impl HolepunchService {
             &self.coordinator_url,
             self.jwt_token.clone(),
             self.ipv4,
-            None, // IPv6 rediscovery could be added later
+            self.ipv6,
             self.c_client.id_own.clone(),
         )
             .await?;
@@ -163,7 +165,49 @@ impl HolepunchService {
                         match packet {
                             Packet::ConnectTo(data) => {
                                 info!("trying to connect to {:?}", data.target);
-
+                                
+                                // Verify target public key against known_hosts before connecting
+                                // Use string comparison since russh is not available in this crate
+                                let is_known_host = match std::env::var("KNOWN_HOSTS_PATH")
+                                    .map(std::path::PathBuf::from)
+                                    .or_else(|_| {
+                                        dirs::home_dir()
+                                            .map(|h| h.join(".sessio/known_hosts"))
+                                            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found"))
+                                    }) {
+                                    Ok(known_hosts_path) => {
+                                        match tokio::fs::read_to_string(&known_hosts_path).await {
+                                            Ok(content) => {
+                                                // Check if the target public key is in known_hosts
+                                                content.lines().any(|line| {
+                                                    // Parse SSH public key format: "ssh-ed25519 <key> <comment>"
+                                                    let parts: Vec<&str> = line.trim().split_whitespace().collect();
+                                                    if parts.len() >= 2 && parts[0] == "ssh-ed25519" {
+                                                        parts[1] == data.target_public_key
+                                                    } else {
+                                                        false
+                                                    }
+                                                })
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to read known_hosts: {}", e);
+                                                false
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to get known_hosts path: {}", e);
+                                        false
+                                    }
+                                };
+                                
+                                if !is_known_host {
+                                    warn!("Connection denied: target public key {} not found in known_hosts", data.target_public_key);
+                                    error!("Holepunch failed: target not in known_hosts. Please sign the target device from the coordinator web ui.");
+                                    break;
+                                }
+                                
+                                info!("Target public key verified in known_hosts, attempting connection");
                                 match endpoint_clone.connect(data.target, "server").unwrap().await {
                                     Ok(conn) => {
                                         let _ = connection_sender.send(conn).await;
@@ -199,6 +243,7 @@ impl HolepunchService {
         let jwt = self.jwt_token.clone();
 
         let mut ipv4 = self.ipv4.clone();
+        let mut ipv6 = self.ipv6.clone();
         let endpoint = self.endpoint.clone();
 
         tokio::spawn(async move {
@@ -207,12 +252,14 @@ impl HolepunchService {
                     _ = update_interval.tick() => {
 
                         // Use endpoint for IP discovery
-                        let ipv4_now = CoordinatorClient::get_new_external_ipv4().await;
+                        let (ipv4_now, ipv6_now, sock) = CoordinatorClient::get_external_ips_dual_sock_new().await;
 
                         // Update IPv4 if it has changed
-                        if let (Some(ipv4_now), sock) = ipv4_now {
+                        if let Some(ipv4_now) = ipv4_now {
                             if ipv4.is_none() || ipv4_now.ip() != ipv4.unwrap().ip() {
                                 ipv4 = Some(ipv4_now);
+                                ipv6 = ipv6_now;
+
                                 endpoint.rebind(sock.into_std().unwrap()).expect("Failed to rebind socket");
                             }
                         }
@@ -223,7 +270,7 @@ impl HolepunchService {
                                 token: jwt.clone(),
                             }),
                             packet: Packet::UpdateIp(UpdateIp {
-                                ipv6: None, // IPv6 discovery could be added later
+                                ipv6,
                                 ipv4
                             })
                         };
