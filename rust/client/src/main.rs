@@ -5,6 +5,7 @@ use log::error;
 
 mod client;
 pub mod ipc;
+mod config_manager;
 use homedir::my_home;
 
 #[derive(Parser, Debug)]

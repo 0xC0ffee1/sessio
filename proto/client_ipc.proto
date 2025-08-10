@@ -39,6 +39,16 @@ service ClientIPC {
     rpc SaveUserData(UserData) returns (UserData);
 
     rpc GetActiveSessions(SessionRequest) returns (SessionMap);
+    
+    // Coordinator status
+    rpc GetCoordinatorStatus(CoordinatorStatusRequest) returns (CoordinatorStatusResponse);
+    
+    // Account management
+    rpc GetAccountData(AccountDataRequest) returns (AccountData);
+    rpc SaveAccountData(AccountData) returns (AccountData);
+    
+    // Device installation
+    rpc Install(InstallRequest) returns (InstallResponse);
 }
 
 message SessionCloseRequest{
@@ -170,6 +180,7 @@ message SessionData{
     optional string session_id = 4;
     string username = 5;
     string device_id = 6;
+    bool active = 7;
 }
 
 message LocalPortForwardResponse{
@@ -205,6 +216,12 @@ message SettingsRequest{
 message Settings {
     string coordinator_url = 1;
     string device_id = 2;
+    // Account data fields
+    optional string jwt_token = 3;  // JWT token for authentication
+    optional int64 registered_at = 4;
+    optional bool is_registered = 5;
+    // Allow HTTP coordinator connections (dangerous, for development only)
+    optional bool dangerously_use_http_coordinator = 6;
 }
 
 message UserData {
@@ -400,4 +417,46 @@ message NewConnectionRequest {
 
 message NewConnectionResponse {
     string connection_id = 1;
+}
+
+// Account data messages
+message AccountDataRequest {
+    
+}
+
+message AccountData {
+    string device_id = 1;
+    int64 registered_at = 2;
+    string coordinator_url = 3;
+    bool is_registered = 4;
+    optional string jwt_token = 5;
+}
+
+// Installation messages
+message InstallRequest {
+    string install_key = 1;
+    string coordinator_url = 2;
+}
+
+message InstallResponse {
+    bool success = 1;
+    string device_id = 2;
+    optional string error = 3;
+    optional string jwt_token = 4;
+}
+
+// Coordinator status messages
+message CoordinatorStatusRequest {
+    
+}
+
+message CoordinatorStatusResponse {
+    repeated DeviceInfo devices = 1;
+}
+
+message DeviceInfo {
+    string device_id = 1;
+    string os_name = 2;
+    bool is_online = 3;
+    repeated string categories = 4;
 }

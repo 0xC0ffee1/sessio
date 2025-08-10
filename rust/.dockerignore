@@ -1,0 +1,108 @@
+# Rust build artifacts - the most important exclusions
+**/target/
+target/
+**/*.pdb
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git repository
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+**/*.md
+!README.md
+
+# Test files
+tests/
+**/tests/
+**/*_test.rs
+**/*_tests.rs
+
+# Development and temporary files
+.env*
+!.env.example
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.cache
+
+# Docker files (avoid recursive inclusion)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+**/Dockerfile*
+**/docker-compose*.yml
+**/.dockerignore
+
+# Node.js (if any frontend uses it)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Python cache (if any scripts use Python)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Rust-specific ignores
+**/*.rs.bk
+**/Cargo.lock.bk
+
+# Release and packaging artifacts
+release/
+dist/
+packaging/
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Local development directories
+.sessio/
+keys/
+
+# Frontend build artifacts (if any)
+**/build/
+**/dist/
+
+# Database files
+*.db
+*.sqlite*
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.cert
+
+# Backup files
+*.bak
+*.backup

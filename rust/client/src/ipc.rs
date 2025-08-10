@@ -19,6 +19,8 @@ use clientipc::{
     SessionCloseRequest, SessionCloseResponse, SessionData, SessionMap, SessionRequest,
     SettingCheckRequest, SettingCheckResponse, Settings, SettingsRequest, SftpRequest,
     SftpRequestResponse, StreamResponse, SubscribeRequest, UserData, Value,
+    AccountData, AccountDataRequest, InstallRequest, InstallResponse,
+    CoordinatorStatusRequest, CoordinatorStatusResponse, DeviceInfo,
 };
 use clientipc::{FileDeleteResponse, FileRenameRequest, FileRenameResponse};
 use futures::{stream, Stream, StreamExt};
@@ -26,7 +28,7 @@ use log4rs::append::file;
 use quinn::Connection;
 use russh_sftp::{client::SftpSession, protocol::Stat};
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
-use sessio_coordinator::coordinator_client::CoordinatorClient;
+use sessio_coordinator_common::coordinator_client::CoordinatorClient;
 use std::{any::Any, collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
 use tokio::{
     fs::File,
@@ -38,9 +40,10 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::client::{Client, Session};
-use log::info;
+use log::{info, warn};
 use tokio::io::BufReader;
 use tokio::sync::Mutex;
+use common;
 
 #[cfg(windows)]
 use tokio::net::TcpListener;
@@ -145,6 +148,7 @@ impl ClientIpc for ClientIpcHandler {
         }))
     }
 
+    //Todo rename -> get_all_sessions
     async fn get_active_sessions(
         &self,
         request: Request<SessionRequest>,
@@ -156,7 +160,6 @@ impl ClientIpc for ClientIpcHandler {
         for (k, v) in client.sessions.iter() {
             let mut session = v.lock().await;
             session.data.session_id = Some(session.id.clone());
-            new_map.insert(session.id.clone(), session.data.clone());
 
             let connected: bool = {
                 if let Some(conn) = client.connections.get(&session.server_id.clone()) {
@@ -165,6 +168,9 @@ impl ClientIpc for ClientIpcHandler {
                     false
                 }
             };
+            
+            session.data.active = connected;
+            new_map.insert(session.id.clone(), session.data.clone());
 
             parent_map.insert(session.server_id.clone(), DeviceStatus { connected });
         }
@@ -179,7 +185,6 @@ impl ClientIpc for ClientIpcHandler {
             for (k, mut data) in user_data.saved_sessions.iter() {
                 let mut final_data = data.clone();
                 final_data.session_id = Some(k.to_string());
-                new_map.insert(k.to_string(), final_data.clone());
 
                 let connected: bool = {
                     if let Some(conn) = client.connections.get(&data.device_id.clone()) {
@@ -188,6 +193,9 @@ impl ClientIpc for ClientIpcHandler {
                         false
                     }
                 };
+
+                final_data.active = connected && client.sessions.contains_key(&k.to_string());
+                new_map.insert(k.to_string(), final_data.clone());
 
                 parent_map.insert(
                     final_data.device_id,
@@ -245,18 +253,24 @@ impl ClientIpc for ClientIpcHandler {
         request: Request<SettingsRequest>,
     ) -> Result<Response<Settings>, Status> {
         let request = request.into_inner();
-        let mut client = self.client.lock().await;
+        let client = self.client.lock().await;
 
-        let file = Client::get_settings_file(&client.data_folder_path)
-            .await
+        // Load settings from config manager
+        let mut config_manager = crate::config_manager::ClientConfigManager::new()
             .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+            
+        let client_settings = config_manager.load_settings().await
+            .unwrap_or_default();
 
-        let settings = Client::get_json_as::<Settings>(file)
-            .await
-            .unwrap_or(Settings {
-                coordinator_url: "quic://example.com:2223".into(),
-                device_id: "Your-Device-ID".into(),
-            });
+        // Convert ClientSettings to protobuf Settings (without passkey data for IPC)
+        let settings = Settings {
+            coordinator_url: client_settings.coordinator_url,
+            device_id: client_settings.device_id,
+            jwt_token: client_settings.jwt_token,
+            registered_at: client_settings.registered_at,
+            is_registered: client_settings.is_registered,
+            dangerously_use_http_coordinator: client_settings.dangerously_use_http_coordinator,
+        };
 
         Ok(Response::new(settings))
     }
@@ -284,17 +298,28 @@ impl ClientIpc for ClientIpcHandler {
         request: Request<Settings>,
     ) -> Result<Response<Settings>, Status> {
         let request = request.into_inner();
-        let mut client = self.client.lock().await;
+        let client = self.client.lock().await;
 
-        let file = Client::get_settings_file(&client.data_folder_path)
-            .await
+        // Load existing settings from config manager to preserve passkey data
+        let mut config_manager = crate::config_manager::ClientConfigManager::new()
+            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+            
+        let mut client_settings = config_manager.load_settings().await
+            .unwrap_or_default();
+
+        // Update only the fields from the protobuf request (preserve passkey data)
+        client_settings.coordinator_url = request.coordinator_url.clone();
+        client_settings.device_id = request.device_id.clone();
+        client_settings.jwt_token = request.jwt_token.clone();
+        client_settings.registered_at = request.registered_at;
+        client_settings.is_registered = request.is_registered;
+        client_settings.dangerously_use_http_coordinator = request.dangerously_use_http_coordinator;
+
+        // Save updated settings
+        config_manager.save_settings(&client_settings).await
             .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
 
-        let data = Client::save_json_as::<Settings>(file, request)
-            .await
-            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
-
-        Ok(Response::new(data))
+        Ok(Response::new(request))
     }
 
     async fn save_user_data(
@@ -313,6 +338,196 @@ impl ClientIpc for ClientIpcHandler {
             .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
 
         Ok(Response::new(data))
+    }
+
+    async fn get_account_data(
+        &self,
+        request: Request<AccountDataRequest>,
+    ) -> Result<Response<AccountData>, Status> {
+        let client = self.client.lock().await;
+        
+        // Load settings from config manager
+        let mut config_manager = crate::config_manager::ClientConfigManager::new()
+            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+            
+        let settings = config_manager.load_settings().await
+            .unwrap_or_default();
+
+        let account_data = AccountData {
+            device_id: settings.device_id.clone(),
+            registered_at: settings.registered_at.unwrap_or(0),
+            coordinator_url: settings.coordinator_url.clone(),
+            is_registered: settings.is_registered.unwrap_or(false),
+            jwt_token: settings.jwt_token.clone(),
+        };
+
+        Ok(Response::new(account_data))
+    }
+
+    async fn save_account_data(
+        &self,
+        request: Request<AccountData>,
+    ) -> Result<Response<AccountData>, Status> {
+        let request = request.into_inner();
+        let client = self.client.lock().await;
+
+        // Load existing settings from config manager to preserve all data including passkey
+        let mut config_manager = crate::config_manager::ClientConfigManager::new()
+            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+            
+        let mut client_settings = config_manager.load_settings().await
+            .unwrap_or_default();
+
+        // Update with account data
+        client_settings.jwt_token = request.jwt_token.clone();
+        client_settings.device_id = request.device_id.clone();
+        client_settings.registered_at = Some(request.registered_at);
+        client_settings.coordinator_url = request.coordinator_url.clone();
+        client_settings.is_registered = Some(request.is_registered);
+
+        // Save updated settings
+        config_manager.save_settings(&client_settings).await
+            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+
+        Ok(Response::new(request))
+    }
+
+    async fn install(
+        &self,
+        request: Request<InstallRequest>,
+    ) -> Result<Response<InstallResponse>, Status> {
+        let request = request.into_inner();
+        let client = self.client.lock().await;
+        
+        info!("Processing installation request");
+        
+        // Ensure keys exist, generate if needed
+        let keys_dir = client.data_folder_path.join("keys");
+        if !keys_dir.exists() {
+            std::fs::create_dir_all(&keys_dir)
+                .map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to create keys directory: {}", e)))?;
+        }
+        
+        let private_key_path = keys_dir.join("id_ed25519");
+        if !private_key_path.exists() {
+            info!("Generating new SSH keypair...");
+            generate_keypair(
+                &keys_dir,
+                russh::keys::ssh_key::Algorithm::Ed25519,
+                "id_ed25519",
+            ).map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to generate keys: {}", e)))?;
+        }
+        
+        // Read the public key
+        let public_key_path = keys_dir.join("id_ed25519.pub");
+
+        let file_content = std::fs::read_to_string(&public_key_path)
+            .map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to read public key: {}", e)))?;
+
+        let public_key_split: Vec<&str> = file_content.trim().split_whitespace().collect();
+
+        // Robust extraction of the middle part
+        let public_key = match public_key_split.len() {
+            0 => return Err(Status::new(tonic::Code::InvalidArgument, "Public key file is empty")),
+            1 => public_key_split[0], // Only one part, assume it's the key
+            2 => public_key_split[1], // Two parts, take the second one
+            _ => {
+                if public_key_split.len() >= 3 {
+                    public_key_split[1]
+                } else {
+                    return Err(Status::new(tonic::Code::InvalidArgument, "Invalid public key format"));
+                }
+            }
+        }.to_string();
+
+        if public_key.is_empty() {
+            return Err(Status::new(tonic::Code::InvalidArgument, "Public key is empty"));
+        }
+        
+        // Create device metadata
+        let os_name = std::env::consts::OS;
+        let metadata = serde_json::json!({
+            "os_name": os_name,
+        });
+        
+        // Create install request for coordinator
+        let install_request = serde_json::json!({
+            "install_key": request.install_key,
+            "public_key": public_key,
+            "metadata": metadata,
+        });
+
+        info!("request {:?}", install_request);
+        
+        // Send install request to coordinator
+        let http_client = reqwest::Client::new();
+        let install_url = format!("{}/install", request.coordinator_url);
+        
+        let response = http_client
+            .post(&install_url)
+            .json(&install_request)
+            .send()
+            .await
+            .map_err(|e| Status::new(tonic::Code::Unavailable, format!("Failed to connect to coordinator: {}", e)))?;
+        
+        if response.status().is_success() {
+            let install_response: serde_json::Value = response.json().await
+                .map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to parse response: {}", e)))?;
+
+            info!("response {:?}", install_response);
+            let device_id = install_response["device_id"].as_str()
+                .ok_or_else(|| Status::new(tonic::Code::Internal, "Missing device_id in response"))?;
+            let jwt_token = install_response["jwt_token"].as_str();
+            
+            // Extract passkey data for cryptographic verification
+            let passkey_public_key = install_response["passkey_public_key"].as_str().map(|s| s.to_string());
+            let passkey_credential_id = install_response["passkey_credential_id"].as_str().map(|s| s.to_string());
+            
+            if passkey_public_key.is_some() && passkey_credential_id.is_some() {
+                info!("Received passkey public key for signature verification");
+            } else {
+                warn!("No passkey data received - known hosts verification will not be available");
+            }
+            
+            // Save settings using config manager (includes passkey data)
+            let mut config_manager = crate::config_manager::ClientConfigManager::new()
+                .map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to create config manager: {}", e)))?;
+                
+            let client_settings = common::utils::config_types::ClientSettings {
+                coordinator_url: request.coordinator_url.clone(),
+                device_id: device_id.to_string(),
+                jwt_token: jwt_token.map(|s| s.to_string()),
+                registered_at: Some(chrono::Utc::now().timestamp() as i64),
+                is_registered: Some(true),
+                dangerously_use_http_coordinator: Some(false),
+                connection_timeout: Some(30),
+                retry_attempts: Some(3),
+                authorized_keys_sync_interval: Some(300),
+                known_hosts_sync_interval: Some(300),
+                passkey_public_key,
+                passkey_credential_id,
+            };
+            
+            config_manager.save_settings(&client_settings).await
+                .map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to save settings: {}", e)))?;
+            
+            info!("Installation successful for device: {}", device_id);
+            
+            Ok(Response::new(InstallResponse {
+                success: true,
+                device_id: device_id.to_string(),
+                error: None,
+                jwt_token: jwt_token.map(|s| s.to_string()),
+            }))
+        } else {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            
+            Err(Status::new(
+                tonic::Code::InvalidArgument,
+                format!("Installation failed ({}): {}", status, error_text)
+            ))
+        }
     }
 
     async fn get_nat_filter_type(
@@ -640,7 +855,7 @@ impl ClientIpc for ClientIpcHandler {
 
         let res = generate_keypair(
             client.data_folder_path.join("keys"),
-            ssh_key::Algorithm::Ed25519,
+            russh::keys::ssh_key::Algorithm::Ed25519,
             "id_ed25519",
         );
 
@@ -713,6 +928,7 @@ impl ClientIpc for ClientIpcHandler {
                     .unwrap();
                 let mut user_data = Client::get_json_as::<UserData>(save_file).await.unwrap();
                 session_data_cloned.session_id = Some(id.clone());
+                session_data_cloned.active = false;
                 user_data
                     .saved_sessions
                     .insert(id.clone(), session_data_cloned);
@@ -769,6 +985,7 @@ impl ClientIpc for ClientIpcHandler {
             let was_active = session.is_active();
             if !session.is_active() {
                 session.new_session_channel().await.unwrap();
+                info!("OPENING NEW SESSION CHANNEL!")
             }
 
             (
@@ -778,12 +995,13 @@ impl ClientIpc for ClientIpcHandler {
                 event_receiver,
             )
         };
-
+        let stream_id = Uuid::new_v4();
         let res = async_stream::try_stream! {
 
             let send_handle = tokio::spawn(async move {
                 while let Some(Ok(msg)) = stream.next().await {
                     match msg.r#type {
+                        
                         Some(Type::ShellRequest(_) | Type::PtyRequest(_)) if !active => {
                             let _ = server_msg_sender.send(msg);
                         }
@@ -822,6 +1040,71 @@ impl ClientIpc for ClientIpcHandler {
         };
 
         Ok(Response::new(Box::pin(res) as Self::OpenChannelStream))
+    }
+
+    async fn get_coordinator_status(
+        &self,
+        request: Request<CoordinatorStatusRequest>,
+    ) -> Result<Response<CoordinatorStatusResponse>, Status> {
+        let client = self.client.lock().await;
+        
+        // Get account data for coordinator URL and JWT token
+        let mut config_manager = crate::config_manager::ClientConfigManager::new()
+            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+            
+        let settings = config_manager.load_settings().await
+            .map_err(|e| Status::new(tonic::Code::Internal, e.to_string()))?;
+
+        let jwt_token = settings.jwt_token
+            .ok_or_else(|| Status::new(tonic::Code::Unauthenticated, "No JWT token available"))?;
+
+        // Make request to coordinator to get device status
+        let http_client = reqwest::Client::new();
+        let devices_url = format!("{}/devices", settings.coordinator_url);
+        
+        let response = http_client
+            .post(&devices_url)
+            .header("Authorization", format!("Bearer {}", jwt_token))
+            .send()
+            .await
+            .map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to connect to coordinator: {}", e)))?;
+
+        info!("Coordinator : {:?}", response);
+
+        if !response.status().is_success() {
+            return Err(Status::new(
+                tonic::Code::Internal,
+                format!("Coordinator returned error: {}", response.status())
+            ));
+        }
+
+        let devices_json: serde_json::Value = response.json()
+            .await
+            .map_err(|e| Status::new(tonic::Code::Internal, format!("Failed to parse coordinator response: {}", e)))?;
+
+        info!("json : {:?}", devices_json);
+
+        let mut devices = Vec::new();
+        
+        if let Some(device_list) = devices_json["devices"].as_array() {
+            for device in device_list {
+                let device_info = DeviceInfo {
+                    device_id: device["device_id"].as_str().unwrap_or("Unknown").to_string(),
+                    os_name: device["os_name"].as_str().unwrap_or("Unknown").to_string(),
+                    is_online: device["is_online"].as_bool().unwrap_or(false),
+                    categories: if let Some(cats) = device["categories"].as_array() {
+                        cats.iter()
+                            .filter_map(|c| c.as_str().map(|s| s.to_string()))
+                            .collect()
+                    } else {
+                        Vec::new()
+                    },
+                };
+                devices.push(device_info);
+            }
+        }
+
+        Ok(Response::new(CoordinatorStatusResponse { devices }))
     }
 }
 
@@ -904,7 +1187,7 @@ pub async fn start_grpc_server(path_str: &str) {
                 conns.remove(&key);
             }
             if let Some(coordinator) = client.coordinator.as_mut() {
-                if let Some(_) = coordinator.c_client.is_closed() {
+                if coordinator.c_client.is_closed() {
                     _ = coordinator.reconnect().await;
                 }
             };

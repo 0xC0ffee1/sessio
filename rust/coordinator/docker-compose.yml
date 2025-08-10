@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: sessio_postgres
+    env_file:
+      - config/coordinator.env
+    environment:
+      POSTGRES_DB: sessio_coordinator
+      POSTGRES_USER: sessio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sessio123}
+    volumes:
+      - sessio_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sessio -d sessio_coordinator"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - sessio-network
+
+  coordinator:
+    image: sessio/coordinator:latest
+    container_name: sessio_coordinator
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - config/coordinator.env
+    ports:
+      - "${COORDINATOR_PORT:-2223}:2223"
+    volumes:
+      # Mount certificates directory for HTTPS
+      - ./certs:/app/certs:ro
+    restart: unless-stopped
+    networks:
+      - sessio-network
+  frontend:
+    image: sessio/frontend:latest
+    container_name: sessio_frontend
+    depends_on:
+      - coordinator
+    env_file:
+      - config/coordinator.env
+    restart: unless-stopped
+    networks:
+      - sessio-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: sessio_nginx
+    depends_on:
+      - frontend
+      - coordinator
+    ports:
+      - "${FRONTEND_PORT:-8000}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    networks:
+      - sessio-network
+
+volumes:
+  sessio_db_data:
+
+networks:
+  sessio-network:
+    driver: bridge

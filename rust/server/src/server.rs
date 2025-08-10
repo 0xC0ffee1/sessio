@@ -11,18 +11,17 @@ use common::utils::map_ipv4_to_ipv6;
 use quinn::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use rustls::internal::msgs::base;
 use serde_json::json;
-use sessio_coordinator::common::{Packet, PacketBase, ServerConnectionRequest, ServerPacket};
-use sessio_coordinator::holepuncher::HolepunchService;
+use sessio_coordinator_common::common::{Packet, PacketBase, ServerConnectionRequest, ServerPacket};
+use sessio_coordinator_common::holepuncher::HolepunchService;
 
 use tokio::process::Command as TokioCommand;
 
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 
-use homedir::home;
+use dirs;
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::broadcast::Receiver;
 
-use async_trait::async_trait;
 use clap::Parser;
 use log::{debug, error, info};
 use quinn::{crypto, Connection, Endpoint, EndpointConfig, ServerConfig, VarInt};
@@ -30,9 +29,9 @@ use rand::rngs::OsRng;
 use rand::{seq, CryptoRng};
 use russh::server::{Msg, Server as _, Session};
 use russh::*;
-use russh_keys::key::KeyPair;
-use russh_keys::*;
-use ssh_key::{Algorithm, HashAlg, LineEnding, PrivateKey, PublicKey};
+use russh::MethodKind;
+use russh::keys::{load_secret_key, PublicKeyBase64};
+use russh::keys::ssh_key::{Algorithm, HashAlg, LineEnding, PrivateKey, PublicKey};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener};
 use std::process::{Command, Stdio};
 use std::str;
@@ -52,10 +51,11 @@ use std::task::Poll;
 use std::time::{Duration, Instant};
 
 use crate::{sftp::*, Opt};
+use crate::config_manager::ServerConfigManager;
 use common::utils::keygen::generate_keypair;
-use sessio_coordinator::coordinator_client::*;
+use sessio_coordinator_common::coordinator_client::*;
 use url::Url;
-
+use common::utils::quinn_utils::configure_client;
 use common::utils::streams::BiStream;
 
 /// Returns default server configuration along with its certificate.
@@ -95,6 +95,10 @@ pub fn make_server_endpoint(socket: UdpSocket) -> anyhow::Result<Endpoint> {
         runtime,
     )?;
 
+    // Needed if this endpoint is the one initiating connections (in hole punching)
+    let client_cfg = configure_client();
+    endpoint.set_default_client_config(client_cfg?);
+
     Ok(endpoint)
 }
 
@@ -125,22 +129,24 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
     let id = holepuncher.c_client.id_own.clone();
 
     tokio::spawn(async move {
+        info!("Listening to coordinator");
         loop {
             tokio::select! {
                 // Check if the holepuncher connection is closed
-                close_reason = holepuncher.c_client.conn.closed() => {
-                    log::warn!(
-                        "Coordinator connection closed. {}. Reconnecting..",
-                        close_reason
-                    );
-                    if let Err(e) = holepuncher.reconnect().await {
-                        log::error!("{}", e);
-                        continue;
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+                    if holepuncher.c_client.is_closed() {
+                        log::warn!(
+                            "Coordinator connection closed. Reconnecting.."
+                        );
+                        if let Err(e) = holepuncher.reconnect().await {
+                            log::error!("{}", e);
+                            continue;
+                        }
+                        receiver = holepuncher.c_client.subscribe_to_packets().await;
+                        sender = holepuncher.c_client.new_packet_sender();
+                        //Restart ip updater
+                        holepuncher.start_connection_update_task();
                     }
-                    receiver = holepuncher.c_client.subscribe_to_packets().await;
-                    sender = holepuncher.c_client.new_packet_sender();
-                    //Restart ip updater
-                    holepuncher.start_connection_update_task();
                 },
 
                 // Await the next packet from the receiver
@@ -152,7 +158,7 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                             break;
                         }
                     };
-
+                    info!("Server received from coordinator {:?}", packet);
                     match packet {
                         Packet::ConnectTo(data) => {
                             log::info!("connect to received");
@@ -169,7 +175,6 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                                     base: Some(PacketBase {
                                         own_id: id.clone(),
                                         token: holepuncher.c_client.token.clone(),
-                                        session_id: None
                                     }),
                                     packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
                                         session_id: data.session_id,
@@ -189,8 +194,7 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
     });
 }
 
-#[tokio::main]
-pub async fn run(opt: Opt) {
+pub async fn run(opt: crate::RunConfig) {
     let mut builder = env_logger::Builder::from_default_env();
     if cfg!(debug_assertions) {
         // Debug mode
@@ -200,35 +204,101 @@ pub async fn run(opt: Opt) {
     }
     builder.init();
 
-    let host_key = load_host_key(opt.private_key).unwrap();
+    // Initialize configuration manager
+    let mut config_manager = ServerConfigManager::new()
+        .expect("Failed to initialize configuration manager");
+    
+    // Load or create default settings
+    let settings = config_manager.load_settings().await
+        .expect("Failed to load server settings");
+    
+    // Check if server is registered
+    if !config_manager.is_registered().await.unwrap_or(false) {
+        eprintln!("Server is not registered. Please run 'sessio-server install' first.");
+        std::process::exit(1);
+    }
+    
+    let (jwt_token, device_id) = config_manager.get_account_info().await
+        .expect("Failed to get account information");
+    
+    info!("Using JWT token for authentication");
+    info!("Using device ID: {}", device_id);
+    
+    // Load host key from settings
+    let host_key = load_host_key(&settings.private_key_path).unwrap();
+    
+    // Get coordinator URL from settings
+    let coordinator_url = config_manager.get_coordinator_url().await
+        .expect("Invalid coordinator URL in settings");
+    
+    // Check if using HTTP coordinator is allowed
+    if coordinator_url.scheme() == "http" && !config_manager.is_http_coordinator_allowed().await.unwrap_or(false) {
+        panic!("HTTP coordinator connections are not allowed. Enable 'dangerously_use_http_coordinator' setting in config file or use HTTPS.");
+    }
 
-    let config = russh::server::Config {
-        inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
-        auth_rejection_time: std::time::Duration::from_secs(3),
-        auth_rejection_time_initial: Some(std::time::Duration::from_secs(0)),
+    // Get SSH configuration from settings
+    let ssh_config = config_manager.get_ssh_config().await
+        .expect("Failed to get SSH configuration");
+    
+    let config = server::Config {
+        inactivity_timeout: Some(Duration::from_secs(ssh_config.inactivity_timeout)),
+        auth_rejection_time: Duration::from_secs(ssh_config.auth_rejection_time),
+        auth_rejection_time_initial: Some(Duration::from_secs(0)),
         keys: vec![host_key.clone()],
         ..Default::default()
     };
-
-    //Dual stack
     let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap())
         .await
         .unwrap();
 
-    let ipv6 = CoordinatorClient::get_external_ipv6(&sock_v6).await;
-    //let endpoint_v4 = make_server_endpoint(sock_v4).unwrap();
+
+    // Discover external IPs before creating endpoint
+    let (external_ipv4, external_ipv6) = CoordinatorClient::get_external_ips_dual_sock(&sock_v6).await;
+    
+    info!("Server discovered external IPs - IPv4: {:?}, IPv6: {:?}", external_ipv4, external_ipv6);
+    
+    // Use the IPv6 socket for the endpoint (dual-stack)
     let mut endpoint_v6 = make_server_endpoint(sock_v6).unwrap();
 
-    CoordinatorClient::configure_crypto(&mut endpoint_v6);
+    // CoordinatorClient::configure_crypto removed for WebSocket-only implementation
     let holepuncher =
-        HolepunchService::new(opt.coordinator, endpoint_v6.clone(), host_key, ipv6, opt.id)
+        HolepunchService::new(coordinator_url.clone(), jwt_token.clone(), external_ipv4, external_ipv6, device_id.clone(), endpoint_v6.clone())
             .await
             .unwrap();
+    
+    // Start consolidated authorized keys synchronization using coordinator client
+    let sync_interval = config_manager.get_authorized_keys_sync_interval().await
+        .expect("Failed to get authorized keys sync interval");
+    
+    // Load passkey JSON for signature verification
+    let account_data = config_manager.load_account_data().await
+        .expect("Failed to load account data");
+    let passkey_json = account_data.passkey_public_key; // Now contains full JSON Passkey instead of base64 CBOR
+    
+    // For server, we need to write to each user's home directory
+    // The coordinator client's sync task will handle writing to the appropriate path
+    // We'll use a placeholder path here - the actual implementation should iterate through users
+    let authorized_keys_path = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/root"))
+        .join(".sessio/authorized_keys");
+    
+    holepuncher.c_client.start_authorized_keys_sync_task(
+        jwt_token.clone(),
+        passkey_json,
+        sync_interval,
+        authorized_keys_path,
+        false, // Only include verified keys
+    ).await;
+
+    // Start heartbeat task
+    holepuncher.c_client.start_heartbeat_task(
+        device_id.clone(),
+        jwt_token.clone(),
+    ).await;
+    
     listen_to_coordinator(endpoint_v6.clone(), holepuncher).await;
 
     let config = Arc::new(config);
-
-    println!("Started!");
 
     let config_v6 = config.clone();
     let v6_handle = tokio::spawn(async move {
@@ -238,7 +308,7 @@ pub async fn run(opt: Opt) {
     let v6 = tokio::join!(v6_handle);
 }
 
-fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error::Error>> {
+fn load_host_key<P: AsRef<Path>>(path: P) -> Result<russh::keys::ssh_key::PrivateKey, Box<dyn std::error::Error>> {
     let path = path.as_ref();
     if !path.exists() {
         generate_keypair(
@@ -247,7 +317,7 @@ fn load_host_key<P: AsRef<Path>>(path: P) -> Result<KeyPair, Box<dyn std::error:
             path.file_name().unwrap().to_str().unwrap(),
         )?;
     }
-    let private_key = russh_keys::load_secret_key(path.to_str().unwrap(), None)?;
+    let private_key = load_secret_key(path.to_str().unwrap(), None)?;
     Ok(private_key)
 }
 
@@ -384,7 +454,7 @@ impl ServerSession {
     }
 }
 
-#[async_trait]
+
 impl server::Handler for ServerSession {
     type Error = anyhow::Error;
 
@@ -658,14 +728,19 @@ impl server::Handler for ServerSession {
         password: &str,
     ) -> Result<server::Auth, Self::Error> {
         Ok(server::Auth::Reject {
-            proceed_with_methods: (Some(MethodSet::PUBLICKEY)),
+            proceed_with_methods: Some({
+                let mut methods = MethodSet::empty();
+                methods.push(MethodKind::PublicKey);
+                methods
+            }),
+            partial_success: false,
         })
     }
 
     async fn auth_publickey_offered(
         &mut self,
         user: &str,
-        public_key: &key::PublicKey,
+        public_key: &PublicKey,
     ) -> Result<server::Auth, Self::Error> {
         //User based auth isn't implemented yet
 
@@ -682,7 +757,8 @@ impl server::Handler for ServerSession {
             server::Auth::Accept
         } else {
             server::Auth::Reject {
-                proceed_with_methods: (None),
+                proceed_with_methods: None,
+                partial_success: false,
             }
         };
 
@@ -692,7 +768,7 @@ impl server::Handler for ServerSession {
     async fn auth_publickey(
         &mut self,
         user: &str,
-        public_key: &key::PublicKey,
+        public_key: &PublicKey,
     ) -> Result<server::Auth, Self::Error> {
         self.user = Some(user.into());
         //Accept after auth_publickey_offered has succeeded
@@ -796,3 +872,7 @@ impl server::Handler for ServerSession {
         Ok(true)
     }
 }
+
+
+
+

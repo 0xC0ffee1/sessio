@@ -1,2 +1,0 @@
-cert = "/etc/sessio/coordinator_cert.pem"
-key = "/etc/sessio/coordinator_key.pem"

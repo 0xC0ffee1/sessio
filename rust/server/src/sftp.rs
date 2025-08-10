@@ -1,19 +1,14 @@
-use anyhow::Context;
-use async_trait::async_trait;
-use homedir::home;
+use homedir;
 use log::{debug, error, info};
 use russh_sftp::protocol::{
     Data, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version,
 };
 use russh_sftp::server::Handler;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::fs::metadata;
 use tokio::fs::{self, File as TokioFile, OpenOptions, ReadDir};
 use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-use tokio::sync::Mutex;
 
 pub struct SftpSession {
     version: Option<u32>,
@@ -48,7 +43,7 @@ impl SftpSession {
     }
 
     fn get_user_relative_path(&mut self, filename: &String) -> Result<PathBuf, StatusCode> {
-        let path = home(&self.user)
+        let path = homedir::home(&self.user)
             .map_err(|e| StatusCode::Failure)?
             .ok_or(StatusCode::NoSuchFile)?
             .join(filename);
@@ -56,7 +51,6 @@ impl SftpSession {
     }
 }
 
-#[async_trait]
 impl Handler for SftpSession {
     type Error = StatusCode;
 
@@ -247,7 +241,7 @@ impl Handler for SftpSession {
             &path
         };
 
-        let path_full = home(&self.user)
+        let path_full = homedir::home(&self.user)
             .map_err(|e| StatusCode::Failure)?
             .ok_or(StatusCode::NoSuchFile)?
             .join(cleaned_path);

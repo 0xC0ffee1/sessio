@@ -1,77 +1,57 @@
 [package]
 name = "sessio-coordinator"
-version = "0.3.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 authors = ["0xc0ffee1"]
 description = "Coordinator for sessio"
 license = "GPL-3.0-or-later"
 
 
-[package.metadata.generate-rpm]
-assets = [
-    # Install the binary
-    { source = "target/release/sessio-coordinator", dest = "/usr/bin/sessio-coordinator", mode = "755" },
-
-    # Install the systemd service file
-    { source = "../packaging/services/coordinator/service", dest = "/usr/lib/systemd/system/sessio-coordinator.service", mode = "644" },
-
-
-    # Install the server config
-    { source = "../packaging/sessio-coordinator.conf.dist", dest = "/etc/sessio/coordinator.conf", mode = "644", config = "noreplace" },
-]
-
-requires = { systemd = "*" }
-
-post_install_script = """
-systemctl daemon-reload
-systemctl enable sessio-coordinator.service
-systemctl start sessio-coordinator.service
-"""
-
-pre_uninstall_script = """
-systemctl stop sessio-coordinator.service
-systemctl disable sessio-coordinator.service
-"""
-
-[package.metadata.deb]
-assets = [
-    # Install the binary
-    ["target/release/sessio-coordinator", "usr/bin/sessio-coordinator", "755"],
-]
-
-systemd-units = { enable = true, start = true, restart-after-upgrade = true }
-maintainer-scripts = "../../packaging/services/coordinator"
-
 [dependencies]
 common = { path = "../common" }
+sessio-coordinator-common = { path = "../coordinator-common" }
 tokio = { version = "1.0", features = ["full"] }
-quinn = "0.11.2"
-tokio-util = { version = "0.6", features = ["io"] }
-russh = "0.44.1"
-russh-keys = "0.44.0"
-async-trait = "0.1.80"
+# HTTP/WebSocket server dependencies
+axum = { version = "0.7", features = ["ws"] }
+axum-server = { version = "0.6", features = ["tls-rustls"] }
+
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
 env_logger = "0.10"
 anyhow = "1.0.86"
 log = "0.4"
 rand = { version = "0.8", features = ["std"] }
+base64 = "0.21"
+regex = "1.10"
+# WebAuthn dependencies
+webauthn-rs = { version = "0.5", features = [ "danger-allow-state-serialisation", "danger-credential-internals", "conditional-ui"] }
 
 clap = { version = "4.5.6", features = ["derive"] }
 url = "2.5.0"
-rustls = { version = "0.23.5", features = ["std"], default-features = false }
-rustls-pemfile = "2.1.2"
-rcgen = "0.12.1"
+# TLS dependencies removed - handled by reverse proxy in production
 
 log4rs = "1.2.0"
 serde = "1.0.203"
 toml = "0.8.14"
 bytes = "1.6.0"
 serde_json = "1.0.118"
-rustls-pki-types = "1.8.0"
-quinn-proto = "0.11.2"
-webpki-roots = "0.26.3"
+# More QUIC/TLS dependencies removed
 stunclient = { git = "https://github.com/vi/rust-stunclient" }
 stun-client = "0.1.4"
 futures = "0.3.30"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Database dependencies
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
+# JWT token handling
+jsonwebtoken = "9.2"
+# CBOR serialization for COSE keys (must match webauthn-rs version)
+serde_cbor_2 = { version = "0.12.0-dev" }
+# Cryptographic hashing for manual WebAuthn verification
+sha2 = "0.10"
+# ECDSA signature verification
+p256 = "0.13"
+ecdsa = "0.16"
 
 [dependencies.uuid]
 version = "1.9.1"
@@ -79,4 +59,6 @@ features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+    "serde",             # Enable serialization support for database storage
 ]
+

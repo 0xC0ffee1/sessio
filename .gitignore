@@ -1,7 +1,9 @@
-/.idea/
+.idea
 build
 target
+releases
 jniLibs
+node_modules
 authorized_keys
 known_hosts
 keys

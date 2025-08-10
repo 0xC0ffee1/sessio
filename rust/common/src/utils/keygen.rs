@@ -1,8 +1,8 @@
 use anyhow::Context;
 use log::info;
 use rand::rngs::OsRng;
-use russh_keys::key::PublicKey;
-use ssh_key::{Algorithm, LineEnding, PrivateKey};
+use russh::keys::PublicKey;
+use russh::keys::ssh_key::{Algorithm, LineEnding, PrivateKey};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -42,7 +42,7 @@ pub async fn read_authorized_keys(user: Option<&str>) -> anyhow::Result<Vec<Publ
 
         split.next();
 
-        if let Ok(public_key) = russh_keys::parse_public_key_base64(split.next().unwrap()) {
+        if let Ok(public_key) = russh::keys::parse_public_key_base64(split.next().unwrap()) {
             keys.push(public_key);
         } else {
             anyhow::bail!("Failed to read authorized public key {}", line)

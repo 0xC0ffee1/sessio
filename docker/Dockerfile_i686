@@ -2,7 +2,7 @@ FROM ghcr.io/cross-rs/i686-unknown-linux-gnu:edge
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y wget unzip clang && \
+    apt-get install -y wget unzip clang libssl-dev pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
 # Set clang as the default compiler
@@ -14,4 +14,4 @@ RUN wget https://github.com/protocolbuffers/protobuf/releases/download/v23.4/pro
     unzip protoc.zip -d /usr/local && \
     rm protoc.zip
 
-COPY proto/ ../../proto 
+COPY proto/ ../../proto

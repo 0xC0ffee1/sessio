@@ -1,0 +1,67 @@
+[package]
+name = "sessio-cli"
+version.workspace = true
+edition.workspace = true
+authors = ["0xc0ffee1"]
+description = "CLI for sessio-clientd"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+common = { path = "../common" }
+sessio-coordinator = { path = "../coordinator" }
+tokio = { version = "1.0", features = ["full"] }
+
+tokio-util = { version = "0.6", features = ["io"] }
+
+async-trait = "0.1.80"
+env_logger = "0.10"
+anyhow = "1.0.86"
+log = "0.4"
+rand = { version = "0.8", features = ["std"] }
+ssh-key = { version = "0.6.6", features = ["ed25519"] }
+chrono = { version = "0.4", features = ["serde"] }
+homedir = "0.3.3"
+
+clap = { version = "4.5.6", features = ["derive"] }
+url = "2.5.0"
+rustls = { version = "0.23.12", default-features = false }
+rustls-pemfile = "2.1.2"
+rcgen = "0.13.1"
+
+log4rs = "1.2.0"
+serde = "1.0.203"
+toml = "0.8.14"
+crossterm = "0.27.0"
+shell-escape = "0.1.5"
+futures = "0.3.30"
+bytes = "1.6.0"
+serde_json = "1.0.118"
+reqwest = { version = "0.11", features = ["json"] }
+socket2 = "0.5.7"
+tonic = "0.12.3"
+prost = "0.13.3"
+android_logger = "0.10"
+tokio-stream = { version = "0.1.15", features = ["net"] }
+async-stream = "0.3.5"
+russh-sftp = "2.0.3"
+
+if-addrs = "0.13.1"
+quinn-proto = "0.11.8"
+ring = "0.17.8"
+hex = "0.4.3"
+tower = { version = "0.5.1", features = ["util"] }
+hyper-util = { version = "0.1.9", features = ["tokio"] }
+prettytable = "0.10.0"
+
+
+[target.'cfg(target_os="android")'.dependencies]
+jni = { version = "0.5", default-features = false }
+
+
+[target.'cfg(windows)'.dependencies]
+uds_windows = "1.1.0"
+
+futures-util = "0.3.30"
+
+[build-dependencies]
+tonic-build = "0.12.3"

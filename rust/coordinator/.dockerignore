@@ -1,0 +1,72 @@
+# Rust build artifacts
+target/
+***/target/
+**/target/**
+
+# Rust debug info
+**/*.pdb
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Test files
+tests/
+**/tests/
+
+# Development files
+.env*
+!.env.example
+
+# Docker files (avoid recursive copying)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Node modules (if any)
+node_modules/
+
+# Python cache (if any)
+__pycache__/
+*.pyc
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Coverage reports
+coverage/
+
+# Package files
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+
+# Release artifacts that shouldn't be in context
+release/
+dist/
+packaging/
+
+# Local development
+.sessio/

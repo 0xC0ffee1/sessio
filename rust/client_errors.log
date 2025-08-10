@@ -1,0 +1,949 @@
+warning: unused imports: `File` and `OpenOptions`
+ --> common/src/utils/file_manager.rs:3:15
+  |
+3 | use std::fs::{File, OpenOptions};
+  |               ^^^^  ^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `Read` and `Write`
+ --> common/src/utils/file_manager.rs:4:15
+  |
+4 | use std::io::{Read, Write};
+  |               ^^^^  ^^^^^
+
+warning: unused imports: `AsyncReadExt` and `AsyncWriteExt`
+ --> common/src/utils/file_manager.rs:7:17
+  |
+7 | use tokio::io::{AsyncReadExt, AsyncWriteExt};
+  |                 ^^^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> common/src/utils/file_manager.rs:106:13
+    |
+106 |         let mut data: T = self.load_json(filename).await?;
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: `common` (lib) generated 4 warnings (run `cargo fix --lib -p common` to apply 4 suggestions)
+warning: unused import: `std::error::Error`
+ --> coordinator/src/coordinator_client.rs:1:5
+  |
+1 | use std::error::Error;
+  |     ^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `DatabaseRepository` and `models`
+ --> coordinator/src/auth/webauthn.rs:6:17
+  |
+6 | use crate::db::{DatabaseRepository, models};
+  |                 ^^^^^^^^^^^^^^^^^^  ^^^^^^
+
+warning: unused import: `generate_device_jwt_token`
+ --> coordinator/src/auth/webauthn.rs:8:38
+  |
+8 | use super::jwt::{generate_jwt_token, generate_device_jwt_token, verify_jwt_token, Claims};
+  |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+ --> coordinator/src/auth/webauthn.rs:9:5
+  |
+9 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+ --> coordinator/src/handlers/device.rs:5:5
+  |
+5 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: unused import: `crate::db::DatabaseRepository`
+ --> coordinator/src/handlers/device.rs:6:5
+  |
+6 | use crate::db::DatabaseRepository;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::net::SocketAddr`
+ --> coordinator/src/handlers/session.rs:2:5
+  |
+2 | use std::net::SocketAddr;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `http::HeaderMap`
+ --> coordinator/src/handlers/session.rs:4:34
+  |
+4 | use axum::{extract::State, Json, http::HeaderMap};
+  |                                  ^^^^^^^^^^^^^^^
+
+warning: unused imports: `Context` and `bail`
+ --> coordinator/src/handlers/session.rs:9:22
+  |
+9 | use anyhow::{Result, bail, Context};
+  |                      ^^^^  ^^^^^^^
+
+warning: unused imports: `DatabaseRepository` and `models`
+  --> coordinator/src/handlers/session.rs:10:17
+   |
+10 | use crate::db::{DatabaseRepository, models};
+   |                 ^^^^^^^^^^^^^^^^^^  ^^^^^^
+
+warning: unused import: `DeviceMetadata`
+  --> coordinator/src/handlers/session.rs:11:69
+   |
+11 | use crate::models::{InstallRequest, InstallResponse, ErrorResponse, DeviceMetadata};
+   |                                                                     ^^^^^^^^^^^^^^
+
+warning: unused imports: `HeartbeatRequest` and `HeartbeatResponse`
+  --> coordinator/src/handlers/session.rs:12:21
+   |
+12 | use crate::common::{HeartbeatRequest, HeartbeatResponse};
+   |                     ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Session`
+  --> coordinator/src/handlers/session.rs:13:29
+   |
+13 | use crate::models::{Server, Session, Client};
+   |                             ^^^^^^^
+
+warning: unused import: `extract_jwt_token_from_headers`
+  --> coordinator/src/handlers/session.rs:14:51
+   |
+14 | use crate::auth::jwt::{generate_device_jwt_token, extract_jwt_token_from_headers, validate_device_jwt_token};
+   |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Packet` and `ServerPacket`
+  --> coordinator/src/handlers/session.rs:15:21
+   |
+15 | use crate::common::{ServerPacket, Packet, Auth, AuthResponse};
+   |                     ^^^^^^^^^^^^  ^^^^^^
+
+warning: unused import: `tokio::sync::mpsc`
+  --> coordinator/src/handlers/session.rs:16:5
+   |
+16 | use tokio::sync::mpsc;
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> coordinator/src/handlers/session.rs:17:5
+   |
+17 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> coordinator/src/handlers/websocket.rs:2:5
+  |
+2 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `PacketBase`
+  --> coordinator/src/handlers/websocket.rs:11:43
+   |
+11 | use crate::common::{ServerPacket, Packet, PacketBase, PeerIpChanged, Status, ConnectTo};
+   |                                           ^^^^^^^^^^
+
+warning: unused import: `Mutex`
+ --> coordinator/src/models.rs:4:25
+  |
+4 | use tokio::sync::{mpsc, Mutex};
+  |                         ^^^^^
+
+warning: unused imports: `Context` and `Result`
+ --> coordinator/src/models.rs:6:14
+  |
+6 | use anyhow::{Result, Context};
+  |              ^^^^^^  ^^^^^^^
+
+warning: unused imports: `error`, `info`, and `warn`
+ --> coordinator/src/models.rs:7:11
+  |
+7 | use log::{info, error, warn};
+  |           ^^^^  ^^^^^  ^^^^
+
+warning: unused imports: `ConnectTo`, `PacketBase`, `Packet`, `PeerIpChanged`, `ServerPacket`, and `Status`
+  --> coordinator/src/models.rs:10:21
+   |
+10 | use crate::common::{ServerPacket, Packet, PacketBase, PeerIpChanged, Status, ConnectTo};
+   |                     ^^^^^^^^^^^^  ^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^  ^^^^^^^^^
+
+warning: unused import: `crate::auth::jwt::validate_device_jwt_token`
+  --> coordinator/src/models.rs:11:5
+   |
+11 | use crate::auth::jwt::validate_device_jwt_token;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `anyhow::bail`
+  --> coordinator/src/models.rs:12:5
+   |
+12 | use anyhow::bail;
+   |     ^^^^^^^^^^^^
+
+warning: unused import: `validate_jwt_token`
+ --> coordinator/src/middleware.rs:8:24
+  |
+8 | use crate::auth::jwt::{validate_jwt_token, validate_jwt_token_with_expiration, extract_jwt_token_from_headers};
+  |                        ^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `include_unverified`
+   --> coordinator/src/coordinator_client.rs:324:9
+    |
+324 |         include_unverified: bool,
+    |         ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_include_unverified`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: `sessio-coordinator` (lib) generated 27 warnings (run `cargo fix --lib -p sessio-coordinator` to apply 26 suggestions)
+    Checking sessio-clientd v0.3.1 (/home/s/Documents/quic_proxy/rust/client)
+error[E0432]: unresolved import `key::KeyPair`
+ --> client/src/client.rs:8:5
+  |
+8 | use key::KeyPair;
+  |     ^^^^^^^^^^^^ no `KeyPair` in `keys::key`
+  |
+help: consider importing one of these items instead
+  |
+8 - use key::KeyPair;
+8 + use quinn::crypto::KeyPair;
+  |
+8 - use key::KeyPair;
+8 + use quinn_proto::crypto::KeyPair;
+  |
+8 - use key::KeyPair;
+8 + use rcgen::KeyPair;
+  |
+8 - use key::KeyPair;
+8 + use ring::rsa::KeyPair;
+  |
+    and 1 other candidate
+
+error[E0425]: cannot find function `learn_known_hosts_path` in module `russh::keys`
+   --> client/src/client.rs:527:30
+    |
+527 |                   russh::keys::learn_known_hosts_path(
+    |                                ^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: /home/s/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/russh-0.53.0/src/keys/known_hosts.rs:23:1
+    |
+23  | / pub fn check_known_hosts_path<P: AsRef<Path>>(
+24  | |     host: &str,
+25  | |     port: u16,
+26  | |     pubkey: &ssh_key::PublicKey,
+27  | |     path: P,
+28  | | ) -> Result<bool, Error> {
+    | |________________________- similarly named function `check_known_hosts_path` defined here
+    |
+help: a function with a similar name exists
+    |
+527 -                 russh::keys::learn_known_hosts_path(
+527 +                 russh::keys::check_known_hosts_path(
+    |
+help: consider importing one of these functions
+    |
+3   + use crate::client::keys::known_hosts::learn_known_hosts_path;
+    |
+3   + use russh::keys::known_hosts::learn_known_hosts_path;
+    |
+help: if you import `learn_known_hosts_path`, refer to it directly
+    |
+527 -                 russh::keys::learn_known_hosts_path(
+527 +                 learn_known_hosts_path(
+    |
+
+error[E0659]: `ssh_key` is ambiguous
+  --> client/src/client.rs:14:5
+   |
+14 | use ssh_key::known_hosts;
+   |     ^^^^^^^ ambiguous name
+   |
+   = note: ambiguous because of a conflict between a name from a glob import and an outer scope during import or macro resolution
+   = note: `ssh_key` could refer to a crate passed with `--extern`
+   = help: use `::ssh_key` to refer to this crate unambiguously
+note: `ssh_key` could also refer to the crate imported here
+  --> client/src/client.rs:50:5
+   |
+50 | use russh::keys::*;
+   |     ^^^^^^^^^^^^^^
+   = help: consider adding an explicit import of `ssh_key` to disambiguate
+   = help: or use `self::ssh_key` to refer to this crate unambiguously
+
+error[E0603]: struct `PublicKey` is private
+   --> client/src/client.rs:512:35
+    |
+512 |         _server_public_key: &key::PublicKey,
+    |                                   ^^^^^^^^^ private struct
+    |
+note: the struct `PublicKey` is defined here
+   --> /home/s/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/russh-0.53.0/src/keys/key.rs:17:47
+    |
+17  | use ssh_key::{Algorithm, EcdsaCurve, HashAlg, PublicKey};
+    |                                               ^^^^^^^^^
+help: consider importing one of these structs instead
+    |
+512 -         _server_public_key: &key::PublicKey,
+512 +         _server_public_key: &crate::client::keys::PublicKey,
+    |
+512 -         _server_public_key: &key::PublicKey,
+512 +         _server_public_key: &russh::keys::PublicKey,
+    |
+help: import `PublicKey` directly
+    |
+512 -         _server_public_key: &key::PublicKey,
+512 +         _server_public_key: &internal_russh_forked_ssh_key::public::PublicKey,
+    |
+
+warning: unused imports: `net::SocketAddr` and `sync::Arc`
+ --> client/src/main.rs:1:11
+  |
+1 | use std::{net::SocketAddr, sync::Arc};
+  |           ^^^^^^^^^^^^^^^  ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `Subcommand`
+ --> client/src/main.rs:3:20
+  |
+3 | use clap::{Parser, Subcommand};
+  |                    ^^^^^^^^^^
+
+warning: unused import: `log::error`
+ --> client/src/main.rs:4:5
+  |
+4 | use log::error;
+  |     ^^^^^^^^^^
+
+warning: unused import: `chrono::Utc`
+ --> client/src/client.rs:3:5
+  |
+3 | use chrono::Utc;
+  |     ^^^^^^^^^^^
+
+warning: unused import: `client::Msg`
+ --> client/src/client.rs:5:5
+  |
+5 | use client::Msg;
+  |     ^^^^^^^^^^^
+
+warning: unused import: `common::utils::map_ipv4_to_ipv6`
+ --> client/src/client.rs:7:5
+  |
+7 | use common::utils::map_ipv4_to_ipv6;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ClientConfig` and `VarInt`
+ --> client/src/client.rs:9:13
+  |
+9 | use quinn::{ClientConfig, Connection, Endpoint, EndpointConfig, VarInt};
+  |             ^^^^^^^^^^^^                                        ^^^^^^
+
+warning: unused imports: `CertificateDer`, `ServerName`, and `UnixTime`
+  --> client/src/client.rs:11:25
+   |
+11 | use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+   |                         ^^^^^^^^^^^^^^  ^^^^^^^^^^  ^^^^^^^^
+
+warning: unused import: `json`
+  --> client/src/client.rs:12:18
+   |
+12 | use serde_json::{json, Value};
+   |                  ^^^^
+
+warning: unused import: `ssh_key::known_hosts`
+  --> client/src/client.rs:14:5
+   |
+14 | use ssh_key::known_hosts;
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Context as DigestContext`, `Digest`, and `SHA256`
+  --> client/src/client.rs:17:20
+   |
+17 | use ring::digest::{Context as DigestContext, Digest, SHA256};
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^  ^^^^^^
+
+warning: unused import: `std::f64::consts::E`
+  --> client/src/client.rs:22:5
+   |
+22 | use std::f64::consts::E;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Ipv4Addr`, `Ipv6Addr`, and `SocketAddrV6`
+  --> client/src/client.rs:23:16
+   |
+23 | use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV6};
+   |                ^^^^^^^^  ^^^^^^^^  ^^^^^^^^^^^^
+
+warning: unused import: `AtomicU32`
+  --> client/src/client.rs:24:37
+   |
+24 | use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+   |                                     ^^^^^^^^^
+
+warning: unused import: `error::Error`
+  --> client/src/client.rs:25:11
+   |
+25 | use std::{error::Error, net::SocketAddr, sync::Arc};
+   |           ^^^^^^^^^^^^
+
+warning: unused imports: `AsyncRead`, `AsyncWrite`, `Stdin`, and `Stdout`
+  --> client/src/client.rs:27:11
+   |
+27 |     self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout,
+   |           ^^^^^^^^^                ^^^^^^^^^^                                       ^^^^^  ^^^^^^
+
+warning: unused import: `tokio::sync::oneshot::channel`
+  --> client/src/client.rs:29:5
+   |
+29 | use tokio::sync::oneshot::channel;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `quinn_proto::crypto::rustls::QuicClientConfig`
+  --> client/src/client.rs:32:5
+   |
+32 | use quinn_proto::crypto::rustls::QuicClientConfig;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `PtyRequest`
+  --> client/src/client.rs:35:40
+   |
+35 | use crate::ipc::clientipc::msg::{Data, PtyRequest, Type};
+   |                                        ^^^^^^^^^^
+
+warning: unused imports: `Kind as SessionKind` and `PtySession`
+  --> client/src/client.rs:36:43
+   |
+36 | use crate::ipc::clientipc::session_data::{Kind as SessionKind, PtySession};
+   |                                           ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `client_event::ServerMigrateEvent`
+  --> client/src/client.rs:38:29
+   |
+38 | use crate::ipc::clientipc::{client_event::ServerMigrateEvent, ClientEvent, SessionData};
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `self`
+  --> client/src/client.rs:39:18
+   |
+39 | use crate::ipc::{self, clientipc};
+   |                  ^^^^
+
+warning: unused imports: `SignalKind` and `signal`
+  --> client/src/client.rs:41:27
+   |
+41 | use tokio::signal::unix::{signal, SignalKind};
+   |                           ^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `std::pin::Pin`
+  --> client/src/client.rs:47:5
+   |
+47 | use std::pin::Pin;
+   |     ^^^^^^^^^^^^^
+
+warning: unused import: `std::task::Poll`
+  --> client/src/client.rs:48:5
+   |
+48 | use std::task::Poll;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+  --> client/src/client.rs:54:20
+   |
+54 | use anyhow::{bail, Context, Result};
+   |                    ^^^^^^^
+
+warning: unused import: `bytes::Bytes`
+  --> client/src/client.rs:55:5
+   |
+55 | use bytes::Bytes;
+   |     ^^^^^^^^^^^^
+
+warning: unused imports: `ClearType`, `Clear`, `EnterAlternateScreen`, `Event`, `KeyCode`, `LeaveAlternateScreen`, `disable_raw_mode`, `enable_raw_mode`, `execute`, `queue`, `read`, and `size as terminal_size`
+  --> client/src/client.rs:57:13
+   |
+57 |     event::{read, Event, KeyCode},
+   |             ^^^^  ^^^^^  ^^^^^^^
+58 |     execute, queue,
+   |     ^^^^^^^  ^^^^^
+59 |     terminal::{
+60 |         disable_raw_mode, enable_raw_mode, size as terminal_size, Clear, ClearType,
+   |         ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^  ^^^^^  ^^^^^^^^^
+61 |         EnterAlternateScreen, LeaveAlternateScreen,
+   |         ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `select` and `stream`
+  --> client/src/client.rs:64:15
+   |
+64 | use futures::{select, stream};
+   |               ^^^^^^  ^^^^^^
+
+warning: unused import: `russh::keys::*`
+  --> client/src/client.rs:66:5
+   |
+66 | use russh::keys::*;
+   |     ^^^^^^^^^^^^^^
+
+warning: unused import: `protocol::OpenFlags`
+  --> client/src/client.rs:67:39
+   |
+67 | use russh_sftp::{client::SftpSession, protocol::OpenFlags};
+   |                                       ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Instant`
+  --> client/src/client.rs:70:27
+   |
+70 | use std::time::{Duration, Instant};
+   |                           ^^^^^^^
+
+warning: unused imports: `TcpStream` and `ToSocketAddrs`
+  --> client/src/client.rs:71:31
+   |
+71 | use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
+   |                               ^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `broadcast`
+  --> client/src/client.rs:72:19
+   |
+72 | use tokio::sync::{broadcast, mpsc, Mutex};
+   |                   ^^^^^^^^^
+
+warning: unused imports: `task` and `time`
+  --> client/src/client.rs:73:13
+   |
+73 | use tokio::{task, time};
+   |             ^^^^  ^^^^
+
+warning: unused import: `dirs`
+  --> client/src/client.rs:74:5
+   |
+74 | use dirs;
+   |     ^^^^
+
+warning: unnecessary parentheses around function argument
+   --> client/src/client.rs:499:12
+    |
+499 |         Ok((id))
+    |            ^  ^
+    |
+    = note: `#[warn(unused_parens)]` on by default
+help: remove these parentheses
+    |
+499 -         Ok((id))
+499 +         Ok(id)
+    |
+
+warning: unused import: `clientipc::session_data::Kind as SessionKind`
+ --> client/src/ipc.rs:7:5
+  |
+7 | use clientipc::session_data::Kind as SessionKind;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `clientipc::value::Kind`
+ --> client/src/ipc.rs:8:5
+  |
+8 | use clientipc::value::Kind;
+  |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `FileCloseResponse`, `FileMetadataResponse`, `FileReadRequest`, `FileReadResponse`, `FileWriteRequest`, `FileWriteResponse`, `LocalPortForwardRequest`, `SftpRequest`, `StreamResponse`, `Value`, and `session_data`
+  --> client/src/ipc.rs:13:5
+   |
+13 |     session_data, ClientEvent, CoordinatorStartRequest, CoordinatorStartResponse, DeviceStatus,
+   |     ^^^^^^^^^^^^
+14 |     FileCloseResponse, FileData, FileDeleteRequest, FileList, FileMetadataResponse,
+   |     ^^^^^^^^^^^^^^^^^                                         ^^^^^^^^^^^^^^^^^^^^
+15 |     FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferStatus, FileWriteRequest,
+   |     ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^                                           ^^^^^^^^^^^^^^^^
+16 |     FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest,
+   |     ^^^^^^^^^^^^^^^^^
+17 |     LocalPortForwardRequest, LocalPortForwardResponse, Msg, NatFilterRequest, NatFilterResponse,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+...
+20 |     SettingCheckRequest, SettingCheckResponse, Settings, SettingsRequest, SftpRequest,
+   |                                                                           ^^^^^^^^^^^
+21 |     SftpRequestResponse, StreamResponse, SubscribeRequest, UserData, Value,
+   |                          ^^^^^^^^^^^^^^                              ^^^^^
+
+warning: unused import: `stream`
+  --> client/src/ipc.rs:25:15
+   |
+25 | use futures::{stream, Stream, StreamExt};
+   |               ^^^^^^
+
+warning: unused import: `log4rs::append::file`
+  --> client/src/ipc.rs:26:5
+   |
+26 | use log4rs::append::file;
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `client::SftpSession` and `protocol::Stat`
+  --> client/src/ipc.rs:28:18
+   |
+28 | use russh_sftp::{client::SftpSession, protocol::Stat};
+   |                  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: unused imports: `SerializeMap`, `SerializeSeq`, `SerializeStruct`, `Serialize`, and `Serializer`
+  --> client/src/ipc.rs:29:18
+   |
+29 | use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
+   |                  ^^^^^^^^^  ^^^^^^^^^^^^  ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: unused imports: `any::Any`, `net::Ipv6Addr`, and `path::PathBuf`
+  --> client/src/ipc.rs:31:11
+   |
+31 | use std::{any::Any, collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
+   |           ^^^^^^^^                        ^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `url::Url`
+  --> client/src/ipc.rs:38:5
+   |
+38 | use url::Url;
+   |     ^^^^^^^^
+
+warning: unused import: `std::path::Path`
+  --> client/src/ipc.rs:58:5
+   |
+58 | use std::path::Path;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused imports: `TryFutureExt` and `stream::FuturesUnordered`
+    --> client/src/ipc.rs:1047:19
+     |
+1047 |     use futures::{stream::FuturesUnordered, TryFutureExt};
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+
+warning: unused import: `clientipc::session_data::Kind as SessionKind`
+ --> client/src/ipc.rs:7:5
+  |
+7 | use clientipc::session_data::Kind as SessionKind;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `client::Client`
+ --> client/src/lib.rs:8:5
+  |
+8 | use client::Client;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `ipc::clientipc::Settings`
+ --> client/src/lib.rs:9:5
+  |
+9 | use ipc::clientipc::Settings;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `os::raw::c_char` and `path::Path`
+  --> client/src/lib.rs:10:11
+   |
+10 | use std::{os::raw::c_char, path::Path};
+   |           ^^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `std::ffi::CStr`
+  --> client/src/lib.rs:11:5
+   |
+11 | use std::ffi::CStr;
+   |     ^^^^^^^^^^^^^^
+
+error[E0195]: lifetime parameters or bounds on method `check_server_key` do not match the trait declaration
+   --> client/src/client.rs:510:14
+    |
+510 |       async fn check_server_key(
+    |  ______________^
+511 | |         &mut self,
+512 | |         _server_public_key: &key::PublicKey,
+513 | |     ) -> Result<bool, Self::Error> {
+    | |_____^ lifetimes do not match method in trait
+
+error[E0195]: lifetime parameters or bounds on method `channel_close` do not match the trait declaration
+   --> client/src/client.rs:550:14
+    |
+550 |       async fn channel_close(
+    |  ______________^
+551 | |         &mut self,
+552 | |         channel: ChannelId,
+553 | |         session: &mut russh::client::Session,
+554 | |     ) -> Result<(), Self::Error> {
+    | |_____^ lifetimes do not match method in trait
+
+warning: unused variable: `ipv6`
+   --> client/src/client.rs:188:13
+    |
+188 |         let ipv6 =
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_ipv6`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unreachable expression
+    --> client/src/ipc.rs:1124:9
+     |
+1096 | /         loop {
+1097 | |             check_interval.tick().await;
+1098 | |             let mut client = client.lock().await;
+...    |
+1121 | |             };
+1122 | |         }
+     | |_________- any code following this expression is unreachable
+1123 |
+1124 |           Ok(()) as Result<(), Box<dyn std::error::Error>>
+     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable expression
+     |
+     = note: `#[warn(unreachable_code)]` on by default
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:265:13
+    |
+265 |         let mut f = File::options()
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:275:13
+    |
+275 |         let mut f = File::options()
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:334:14
+    |
+334 |         let (mut reader, mut writer) = tokio::io::split(file);
+    |              ----^^^^^^
+    |              |
+    |              help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:334:26
+    |
+334 |         let (mut reader, mut writer) = tokio::io::split(file);
+    |                          ----^^^^^^
+    |                          |
+    |                          help: remove this `mut`
+
+error[E0600]: cannot apply unary operator `!` to type `AuthResult`
+   --> client/src/client.rs:476:12
+    |
+476 |         if !auth_res {
+    |            ^^^^^^^^^ cannot apply unary operator `!`
+    |
+note: the foreign item type `AuthResult` doesn't implement `Not`
+   --> /home/s/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/russh-0.53.0/src/auth.rs:139:1
+    |
+139 | pub enum AuthResult {
+    | ^^^^^^^^^^^^^^^^^^^ not implement `Not`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:641:13
+    |
+641 |         let mut channel = self.handle.channel_open_session().await?;
+    |             ----^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/config_manager.rs:116:13
+    |
+116 |         let mut settings = self.load_settings().await?;
+    |             ----^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused import: `clap::Parser`
+ --> client/src/client.rs:4:5
+  |
+4 | use clap::Parser;
+  |     ^^^^^^^^^^^^
+
+warning: unused import: `future::Future`
+    --> client/src/ipc.rs:1041:15
+     |
+1041 |     use std::{future::Future, time::Duration};
+     |               ^^^^^^^^^^^^^^
+
+warning: unused variable: `session`
+   --> client/src/client.rs:553:9
+    |
+553 |         session: &mut russh::client::Session,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session`
+
+warning: unused variable: `channel`
+   --> client/src/client.rs:552:9
+    |
+552 |         channel: ChannelId,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_channel`
+
+warning: unused variable: `request`
+  --> client/src/ipc.rs:77:9
+   |
+77 |         request: Request<SubscribeRequest>,
+   |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+  --> client/src/ipc.rs:80:17
+   |
+80 |             let mut client = self.client.lock().await;
+   |                 ----^^^^^^
+   |                 |
+   |                 help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:123:9
+    |
+123 |         request: Request<CoordinatorStartRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:140:9
+    |
+140 |         request: Request<SettingCheckRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:142:13
+    |
+142 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:152:9
+    |
+152 |         request: Request<SessionRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `k`
+   --> client/src/ipc.rs:158:14
+    |
+158 |         for (k, v) in client.sessions.iter() {
+    |              ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:154:13
+    |
+154 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:183:21
+    |
+183 |             for (k, mut data) in user_data.saved_sessions.iter() {
+    |                     ----^^^^
+    |                     |
+    |                     help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:253:13
+    |
+253 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:254:13
+    |
+254 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:278:13
+    |
+278 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:279:13
+    |
+279 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:297:13
+    |
+297 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:315:13
+    |
+315 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:330:9
+    |
+330 |         request: Request<AccountDataRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:332:13
+    |
+332 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:365:13
+    |
+365 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:528:9
+    |
+528 |         request: Request<NatFilterRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:846:13
+    |
+846 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:865:13
+    |
+865 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `res`
+   --> client/src/ipc.rs:875:13
+    |
+875 |         let res = reader.read_to_string(&mut contents).await?;
+    |             ^^^ help: if this is intentional, prefix it with an underscore: `_res`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:868:13
+    |
+868 |         let mut file = File::options()
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `stream_id`
+   --> client/src/ipc.rs:991:13
+    |
+991 |         let stream_id = Uuid::new_v4();
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_stream_id`
+
+Some errors have detailed explanations: E0195, E0425, E0432, E0600, E0603, E0659.
+For more information about an error, try `rustc --explain E0195`.
+warning: `sessio-clientd` (bin "sessio-clientd") generated 83 warnings (1 duplicate)
+error: could not compile `sessio-clientd` (bin "sessio-clientd") due to 7 previous errors; 83 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `sessio-clientd` (lib) generated 85 warnings (78 duplicates)
+error: could not compile `sessio-clientd` (lib) due to 7 previous errors; 85 warnings emitted

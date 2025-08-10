@@ -1,6 +1,7 @@
 
 pub mod ipc;
 pub mod client;
+pub mod config_manager;
 
 
 use android_logger::Config;

@@ -1,110 +1,41 @@
 [package]
 name = "sessio-server"
-version = "0.3.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 authors = ["0xc0ffee1"]
 description = "Server for sessio"
 license = "GPL-3.0-or-later"
 
-[package.metadata.generate-rpm]
-assets = [
-    # Install the binary
-    { source = "target/release/sessio-server", dest = "/usr/bin/sessio-server", mode = "755" },
-
-    # Install the systemd service file
-    { source = "../packaging/services/server/service", dest = "/usr/lib/systemd/system/sessio-server.service", mode = "644" },
-
-    # Install the server config
-    { source = "../packaging/sessio-server.conf.dist", dest = "/etc/sessio/server.conf", mode = "644", config = "noreplace" },
-]
-
-requires = { systemd = "*" }
-
-post_install_script = """
-systemctl daemon-reload
-systemctl enable sessio-server.service
-systemctl start sessio-server.service
-"""
-
-pre_uninstall_script = """
-systemctl stop sessio-server.service
-systemctl disable sessio-server.service
-"""
-
-[package.metadata.deb]
-# Specify the assets to include in the Debian package
-assets = [
-    # Install the binary
-    [
-        "target/release/sessio-server",
-        "usr/bin/sessio-server",
-        "755",
-    ],
-
-    # Install the server config
-    [
-        "../../packaging/sessio-server.conf.dist",
-        "etc/sessio/server.conf",
-        "644",
-    ],
-]
-
-systemd-units = { enable = true, start = true, restart-after-upgrade = true }
-maintainer-scripts = "../../packaging/services/server"
-
-# Mark the configuration file as a conffile to prevent overwriting during upgrades
-conf-files = ["etc/sessio/server.conf"]
-
-
 [dependencies]
 common = { path = "../common" }
-sessio-coordinator = { path = "../coordinator" }
+sessio-coordinator-common = { path = "../coordinator-common" }
 tokio = { version = "1.0", features = ["full"] }
-quinn = "0.11.2"
+quinn = "0.11.8"
 tokio-util = { version = "0.6", features = ["io"] }
-russh = "0.44.1"
-russh-keys = "0.44.0"
+russh = "0.53.0"
 async-trait = "0.1.80"
 env_logger = "0.10"
 anyhow = "1.0.86"
 log = "0.4"
 rand = { version = "0.8", features = ["std"] }
-ssh-key = { version = "0.6.6", features = ["ed25519"] }
 portable-pty = "0.8.1"
+
 
 clap = { version = "4.5.6", features = ["derive"] }
 url = { version = "2.5.0", features = ["serde"] }
 rustls = { version = "0.23.5", features = ["std"] }
-rustls-pemfile = "2.1.2"
+
 rcgen = "0.13"
 
 
-log4rs = "1.2.0"
 serde = "1.0.203"
 toml = "0.8.14"
+dirs = "5.0"
 homedir = "0.3.3"
 
-shell-escape = "0.1.5"
 
-bytes = "1.6.0"
 serde_json = "1.0.118"
+reqwest = { version = "0.11", features = ["json"] }
 
-
-tokio-stream = { version = "0.1.15", features = ["net"] }
-futures-util = "0.3.30"
 russh-sftp = "2.0.3"
-if-addrs = "0.13.1"
-shared_memory = "0.12.4"
-raw_sync = "0.1.5"
 
-[dependencies.uuid]
-version = "1.9.1"
-features = [
-    "v4",                # Lets you generate random UUIDs
-    "fast-rng",          # Use a faster (but still sufficiently random) RNG
-    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
-]
-
-
-[build-dependencies]
-tonic-build = "0.11"

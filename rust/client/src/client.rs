@@ -5,13 +5,14 @@ use clap::Parser;
 use client::Msg;
 use common::utils::events::EventBus;
 use common::utils::map_ipv4_to_ipv6;
-use key::KeyPair;
+use russh::keys::ssh_key::PrivateKey;
+
 use quinn::{ClientConfig, Connection, Endpoint, EndpointConfig, VarInt};
 use russh::client::Handle;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use serde_json::{json, Value};
-use sessio_coordinator::holepuncher::HolepunchService;
-use ssh_key::known_hosts;
+use sessio_coordinator_common::holepuncher::HolepunchService;
+use russh::keys::check_known_hosts_path;
 use tokio::fs::File;
 
 use ring::digest::{Context as DigestContext, Digest, SHA256};
@@ -47,9 +48,8 @@ use url::Url;
 use std::pin::Pin;
 use std::task::Poll;
 
-use russh_keys::*;
+use russh::keys::*;
 
-use async_trait::async_trait;
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
@@ -63,7 +63,7 @@ use crossterm::{
 };
 use futures::{select, stream};
 use russh::*;
-use russh_keys::*;
+use russh::keys::*;
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -71,9 +71,10 @@ use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::{task, time};
+use dirs;
 
 use common::utils::streams::BiStream;
-use sessio_coordinator::coordinator_client::CoordinatorClient;
+use sessio_coordinator_common::coordinator_client::CoordinatorClient;
 
 //Reusable channel where the listening end always takes the receiver
 
@@ -85,109 +86,12 @@ pub struct ChannelBiStream {
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn, Level};
+use common::utils::quinn_utils::configure_client;
 
 #[derive(Clone)]
 struct PeerChangeMsg {
     pub new_ip: SocketAddr,
     pub old_ip: SocketAddr,
-}
-
-/// Enables MTUD if supported by the operating system
-#[cfg(unix)]
-pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
-    quinn::TransportConfig::default()
-}
-
-/// Enables MTUD if supported by the operating system
-#[cfg(windows)]
-pub fn enable_mtud_if_supported() -> quinn::TransportConfig {
-    let mut transport_config = quinn::TransportConfig::default();
-    transport_config.mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()));
-    transport_config
-}
-
-#[derive(Debug)]
-//The actual authenticity of the server is verified by the SSH protocol
-struct SkipServerVerification(Arc<rustls::crypto::CryptoProvider>);
-
-impl SkipServerVerification {
-    fn new() -> Arc<Self> {
-        Arc::new(Self(Arc::new(rustls::crypto::ring::default_provider())))
-    }
-}
-
-impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _server_name: &ServerName<'_>,
-        _ocsp: &[u8],
-        _now: UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        let der_bytes = _end_entity.as_ref();
-        let mut hasher = DigestContext::new(&SHA256);
-
-        hasher.update(der_bytes);
-
-        let fingerprint: Digest = hasher.finish();
-
-        // Convert the fingerprint to a hexadecimal string if needed
-        let fingerprint_hex = hex::encode(fingerprint.as_ref());
-
-        info!("Certificate fingerprint (SHA-256): {}", fingerprint_hex);
-
-        Ok(rustls::client::danger::ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(
-            message,
-            cert,
-            dss,
-            &self.0.signature_verification_algorithms,
-        )
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls13_signature(
-            message,
-            cert,
-            dss,
-            &self.0.signature_verification_algorithms,
-        )
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.0.signature_verification_algorithms.supported_schemes()
-    }
-}
-
-fn configure_client() -> Result<ClientConfig> {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let mut client_config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(
-        rustls::ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(SkipServerVerification::new())
-            .with_no_client_auth(),
-    )?));
-
-    let mut transport_config = enable_mtud_if_supported();
-    transport_config.max_idle_timeout(Some(VarInt::from_u32(10_000).into()));
-    transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
-    client_config.transport_config(Arc::new(transport_config));
-
-    Ok(client_config)
 }
 
 #[allow(unused)]
@@ -217,6 +121,9 @@ pub struct Client {
     //This is optional for the initial setting configuration
     pub coordinator: Option<HolepunchService>,
     pub endpoint: Endpoint,
+    // Discovered external IP addresses
+    pub external_ipv4: Option<SocketAddr>,
+    pub external_ipv6: Option<SocketAddr>,
 }
 
 //The name "Session" is confusing, it's actually a SSH connection
@@ -255,28 +162,83 @@ impl Client {
     }
 
     pub async fn init_coordinator(&mut self) -> Result<()> {
-        let data_folder_path = self.data_folder_path.clone();
-        let settings =
-            Client::get_json_as::<Settings>(Client::get_settings_file(&data_folder_path).await?)
-                .await?;
+        // Load settings using config manager
+        let mut config_manager = crate::config_manager::ClientConfigManager::new()?;
+        let settings = config_manager.load_settings().await?;
+
+        // Check if JWT token exists - if not, client is not installed yet
+        let jwt_token = match settings.jwt_token {
+            Some(token) if !token.is_empty() => token,
+            _ => {
+                log::info!("Client not configured yet. Skipping coordinator initialization.");
+                return Ok(());
+            }
+        };
 
         let coord_url = Url::parse(&settings.coordinator_url)?;
+        
+        // Check if using HTTP coordinator is allowed
+        if coord_url.scheme() == "http" && !settings.dangerously_use_http_coordinator.unwrap_or(false) {
+            return Err(anyhow::anyhow!(
+                "HTTP coordinator connections are not allowed. Enable 'dangerously_use_http_coordinator' setting or use HTTPS."
+            ).into());
+        }
 
         let ipv6 =
             CoordinatorClient::get_new_external_ipv6(self.endpoint.local_addr().unwrap().port())
                 .await;
 
-        let key_pair = Client::get_keypair(&data_folder_path)?;
-
-        self.coordinator = HolepunchService::new(
-            coord_url,
-            self.endpoint.clone(),
-            key_pair,
-            ipv6,
-            settings.device_id,
-        )
+        self.coordinator = HolepunchService::new(coord_url.clone(), jwt_token.clone(), self.external_ipv4, self.external_ipv6, settings.device_id.clone(), self.endpoint.clone())
         .await
         .ok();
+
+        // Start consolidated authorized keys sync task using coordinator client
+        if let Some(coordinator) = &self.coordinator {
+            // Start heartbeat task
+            coordinator.c_client.start_heartbeat_task(
+                settings.device_id.clone(),
+                jwt_token.clone(),
+            ).await;
+
+            // Start known hosts sync task
+            // Get sync interval from settings
+            let sync_interval = if let Ok(mut config_manager) = crate::config_manager::ClientConfigManager::new() {
+                config_manager.load_settings().await
+                    .ok()
+                    .and_then(|s| s.known_hosts_sync_interval)
+                    .unwrap_or(300) // Default to 5 minutes
+            } else {
+                300 // Default to 5 minutes
+            };
+            
+            // Load passkey data from ClientSettings for cryptographic verification
+            let passkey_json = if let Ok(mut config_manager) = crate::config_manager::ClientConfigManager::new() {
+                config_manager.load_settings().await.ok()
+                    .and_then(|s| s.passkey_public_key)
+            } else {
+                None
+            };
+            
+            // Use client's known_hosts path (same as used in connect_to_server)
+            let known_hosts_path = self.data_folder_path.join("keys/known_hosts");
+            
+            // Ensure keys directory exists
+            if let Some(parent) = known_hosts_path.parent() {
+                if let Err(e) = tokio::fs::create_dir_all(parent).await {
+                    log::warn!("Failed to create keys directory: {}", e);
+                }
+            }
+            
+            coordinator.c_client.start_known_hosts_sync_task(
+                jwt_token.clone(),
+                passkey_json,
+                sync_interval,
+                known_hosts_path.clone(),
+            ).await;
+            
+            log::info!("Started known hosts sync task with interval: {} seconds, path: {:?}", 
+                     sync_interval, known_hosts_path);
+        }
 
         Ok(())
     }
@@ -306,8 +268,16 @@ impl Client {
     pub async fn new(data_folder_path: String) -> Result<Self> {
         log::info!("Loading settings from {}", data_folder_path);
         let data_folder_path = PathBuf::from(data_folder_path);
-        let udp_socket = UdpSocket::bind("[::]:0").await?;
-        let endpoint = make_client_endpoint(udp_socket)?;
+
+        let udp_socket_v6 = UdpSocket::bind("[::]:0").await?;
+        
+        // Discover external IPs before creating endpoint
+        let (external_ipv4, external_ipv6) = CoordinatorClient::get_external_ips_dual_sock(&udp_socket_v6).await;
+        
+        info!("Discovered external IPs - IPv4: {:?}, IPv6: {:?}", external_ipv4, external_ipv6);
+        
+        // Use the IPv6 socket for the endpoint (dual-stack)
+        let endpoint = make_client_endpoint(udp_socket_v6)?;
 
         let mut client = Client {
             data_folder_path: data_folder_path,
@@ -316,22 +286,18 @@ impl Client {
             sessions: HashMap::default(),
             event_bus: EventBus::default(),
             coordinator: None,
+            external_ipv4,
+            external_ipv6,
         };
 
-        client.init_coordinator();
+        // Try to initialize coordinator - will skip if not configured yet
+        if let Err(e) = client.init_coordinator().await {
+            log::warn!("Failed to initialize coordinator: {}. Client will run without coordinator connection.", e);
+        }
 
         Ok(client)
     }
 
-    pub async fn get_settings_file(path: &Path) -> Result<File> {
-        let mut f = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path.join("settings.json"))
-            .await?;
-        Ok(f)
-    }
 
     pub async fn get_save_file(path: &Path) -> Result<File> {
         let mut f = File::options()
@@ -422,12 +388,12 @@ impl Client {
         self.connections.insert(target_id.clone(), conn);
     }
 
-    //Create a new connection and on success return the its ID
+    //Create a new connection
     pub async fn new_connection(
         &mut self,
         target_id: String,
         conn_tx: mpsc::Sender<Connection>,
-    ) -> anyhow::Result<bool> {
+    ) -> Result<bool> {
         if let Some(conn) = self.connections.get_mut(&target_id) {
             if conn.close_reason().is_none() {
                 //Connection is still open, reusing the old one
@@ -441,13 +407,13 @@ impl Client {
         };
 
         coordinator
-            .attempt_holepunch(target_id.clone(), conn_tx)
+            .attempt_holepunch(target_id.clone(), coordinator.c_client.token.clone(), conn_tx)
             .await?;
 
         Ok(true)
     }
 
-    pub fn get_keypair(path: &Path) -> Result<KeyPair> {
+    pub fn get_keypair(path: &Path) -> Result<PrivateKey> {
         let private_key_path = path.join("keys/id_ed25519");
         let res = load_secret_key(private_key_path, None)?;
         Ok(res)
@@ -469,6 +435,7 @@ impl Client {
     where
         T: AsRef<Path>,
     {
+        info!("here!");
         let known_hosts_path = self.data_folder_path.join("keys/known_hosts");
 
         let key_pair = Client::get_keypair(&self.data_folder_path)?;
@@ -530,11 +497,15 @@ impl Client {
         info!("Authenticating!");
 
         // use publickey authentication, with or without certificate
+        let key_pair_with_hash = PrivateKeyWithHashAlg::new(
+            Arc::new(key_pair),
+            None, // Let russh determine the appropriate hash algorithm
+        );
         let auth_res = handle
-            .authenticate_publickey(username.clone(), Arc::new(key_pair))
+            .authenticate_publickey(username.clone(), key_pair_with_hash)
             .await?;
 
-        if !auth_res {
+        if !auth_res.success() {
             anyhow::bail!("Authentication (with publickey) failed");
         }
 
@@ -563,19 +534,19 @@ impl Client {
 
 // More SSH event handlers
 // can be defined in this trait
-#[async_trait]
-impl russh::client::Handler for ClientHandler {
+impl client::Handler for ClientHandler {
     type Error = russh::Error;
 
     //The default path is /home/ssh for some reason
-    async fn check_server_key(
+    fn check_server_key(
         &mut self,
-        _server_public_key: &key::PublicKey,
-    ) -> Result<bool, Self::Error> {
+        _server_public_key: &russh::keys::ssh_key::PublicKey,
+    ) -> impl std::future::Future<Output = Result<bool, Self::Error>> + Send {
+        async move {
         let host = &self.server_id;
         let port = 0;
 
-        let is_known_res = russh_keys::check_known_hosts_path(
+        let is_known_res = check_known_hosts_path(
             host,
             port,
             _server_public_key,
@@ -584,17 +555,13 @@ impl russh::client::Handler for ClientHandler {
 
         if let Ok(known) = is_known_res {
             if !known {
-                info!("Learned new host {}:{}", host, port);
-                russh_keys::learn_known_hosts_path(
-                    host,
-                    port,
-                    _server_public_key,
-                    &self.known_hosts_path,
-                )?;
+                info!("New host {}:{} (auto-accept disabled in russh 0.53.0)", host, port);
+                // TODO: Re-implement host learning when russh 0.53.0 API is clarified
+                // russh::keys::learn_known_hosts_path is no longer available
             }
         } else if let Err(e) = is_known_res {
             match e {
-                russh_keys::Error::KeyChanged { line } => {
+                russh::keys::Error::KeyChanged { line } => {
                     error!("Key changed at line: {}", line);
                     return Ok(false);
                 }
@@ -606,15 +573,18 @@ impl russh::client::Handler for ClientHandler {
         }
 
         Ok(true)
+        }
     }
 
-    async fn channel_close(
+    fn channel_close(
         &mut self,
         channel: ChannelId,
         session: &mut russh::client::Session,
-    ) -> Result<(), Self::Error> {
-        info!("Channel closed!");
-        Ok(())
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+        async move {
+            info!("Channel closed!");
+            Ok(())
+        }
     }
 
     /*     async fn channel_accept_stream(&mut self,
@@ -641,7 +611,7 @@ impl Session {
     }
 
     pub fn set_active(&self) {
-        return self.active.store(false, Ordering::SeqCst);
+        return self.active.store(true, Ordering::SeqCst);
     }
 
     pub async fn direct_tcpip_forward(

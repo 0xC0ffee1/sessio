@@ -4,6 +4,9 @@ pub mod streams;
 pub mod keygen;
 pub mod ipv6;
 pub mod events;
+pub mod quinn_utils;
+pub mod file_manager;
+pub mod config_types;
 
 pub fn map_ipv4_to_ipv6(socket_addr: SocketAddr) -> SocketAddr {
     match socket_addr {

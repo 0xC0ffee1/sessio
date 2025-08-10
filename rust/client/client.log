@@ -1,0 +1,748 @@
+warning: virtual workspace defaulting to `resolver = "1"` despite one or more workspace members being on edition 2021 which implies `resolver = "2"`
+note: to keep the current resolver, specify `workspace.resolver = "1"` in the workspace root's manifest
+note: to use the edition 2021 resolver, specify `workspace.resolver = "2"` in the workspace root's manifest
+note: for more details see https://doc.rust-lang.org/cargo/reference/resolver.html#resolver-versions
+warning: unused import: `ConnectionClose`
+ --> coordinator/src/coordinator_client.rs:3:13
+  |
+3 | use quinn::{ConnectionClose, ConnectionError, Endpoint, VarInt};
+  |             ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `Error`
+  --> coordinator/src/coordinator_client.rs:28:37
+   |
+28 | use anyhow::{anyhow, bail, Context, Error, Result};
+   |                                     ^^^^^
+
+warning: unused import: `WebSocketStream`
+  --> coordinator/src/coordinator_client.rs:32:62
+   |
+32 | use tokio_tungstenite::{connect_async, tungstenite::Message, WebSocketStream};
+   |                                                              ^^^^^^^^^^^^^^^
+
+warning: unused import: `log::info`
+ --> coordinator/src/common.rs:5:5
+  |
+5 | use log::info;
+  |     ^^^^^^^^^
+
+warning: unused import: `serde_json::Value`
+ --> coordinator/src/common.rs:7:5
+  |
+7 | use serde_json::Value;
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `collections::HashMap`
+ --> coordinator/src/holepuncher.rs:1:11
+  |
+1 | use std::{collections::HashMap, net::SocketAddr, time::Duration};
+  |           ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NewChannelResponse`
+ --> coordinator/src/holepuncher.rs:5:28
+  |
+5 |         NewChannelRequest, NewChannelResponse, NewSession, Packet, PacketBase, ServerPacket,
+  |                            ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `sync::mpsc::Receiver`
+  --> coordinator/src/holepuncher.rs:16:13
+   |
+16 | use tokio::{sync::mpsc::Receiver, sync::mpsc::Sender, time};
+   |             ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `uuid::Uuid`
+  --> coordinator/src/holepuncher.rs:18:5
+   |
+18 | use uuid::Uuid;
+   |     ^^^^^^^^^^
+
+warning: unnecessary parentheses around type
+  --> coordinator/src/holepuncher.rs:34:17
+   |
+34 |     ) -> Result<(CoordinatorClient)> {
+   |                 ^                 ^
+   |
+   = note: `#[warn(unused_parens)]` on by default
+help: remove these parentheses
+   |
+34 -     ) -> Result<(CoordinatorClient)> {
+34 +     ) -> Result<CoordinatorClient> {
+   |
+
+warning: variable does not need to be mutable
+  --> coordinator/src/holepuncher.rs:85:13
+   |
+85 |         let mut c_client =
+   |             ----^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: function `get_stream_from_conn` is never used
+   --> coordinator/src/common.rs:167:21
+    |
+167 | pub(crate) async fn get_stream_from_conn(connection: &quinn::Connection) -> Result<ClientStream> {
+    |                     ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `sessio-coordinator` (lib) generated 12 warnings (run `cargo fix --lib -p sessio-coordinator` to apply 11 suggestions)
+warning: unused imports: `net::SocketAddr` and `sync::Arc`
+ --> client/src/main.rs:1:11
+  |
+1 | use std::{net::SocketAddr, sync::Arc};
+  |           ^^^^^^^^^^^^^^^  ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `Subcommand`
+ --> client/src/main.rs:3:20
+  |
+3 | use clap::{Parser, Subcommand};
+  |                    ^^^^^^^^^^
+
+warning: unused import: `log::error`
+ --> client/src/main.rs:4:5
+  |
+4 | use log::error;
+  |     ^^^^^^^^^^
+
+warning: unused import: `chrono::Utc`
+ --> client/src/client.rs:3:5
+  |
+3 | use chrono::Utc;
+  |     ^^^^^^^^^^^
+
+warning: unused import: `client::Msg`
+ --> client/src/client.rs:5:5
+  |
+5 | use client::Msg;
+  |     ^^^^^^^^^^^
+
+warning: unused import: `common::utils::map_ipv4_to_ipv6`
+ --> client/src/client.rs:7:5
+  |
+7 | use common::utils::map_ipv4_to_ipv6;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `json`
+  --> client/src/client.rs:12:18
+   |
+12 | use serde_json::{json, Value};
+   |                  ^^^^
+
+warning: unused import: `ssh_key::known_hosts`
+  --> client/src/client.rs:14:5
+   |
+14 | use ssh_key::known_hosts;
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::f64::consts::E`
+  --> client/src/client.rs:22:5
+   |
+22 | use std::f64::consts::E;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Ipv4Addr`, `Ipv6Addr`, and `SocketAddrV6`
+  --> client/src/client.rs:23:16
+   |
+23 | use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV6};
+   |                ^^^^^^^^  ^^^^^^^^  ^^^^^^^^^^^^
+
+warning: unused import: `AtomicU32`
+  --> client/src/client.rs:24:37
+   |
+24 | use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+   |                                     ^^^^^^^^^
+
+warning: unused import: `error::Error`
+  --> client/src/client.rs:25:11
+   |
+25 | use std::{error::Error, net::SocketAddr, sync::Arc};
+   |           ^^^^^^^^^^^^
+
+warning: unused imports: `AsyncRead`, `AsyncWrite`, `Stdin`, and `Stdout`
+  --> client/src/client.rs:27:11
+   |
+27 |     self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout,
+   |           ^^^^^^^^^                ^^^^^^^^^^                                       ^^^^^  ^^^^^^
+
+warning: unused import: `tokio::sync::oneshot::channel`
+  --> client/src/client.rs:29:5
+   |
+29 | use tokio::sync::oneshot::channel;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `PtyRequest`
+  --> client/src/client.rs:35:40
+   |
+35 | use crate::ipc::clientipc::msg::{Data, PtyRequest, Type};
+   |                                        ^^^^^^^^^^
+
+warning: unused imports: `Kind as SessionKind` and `PtySession`
+  --> client/src/client.rs:36:43
+   |
+36 | use crate::ipc::clientipc::session_data::{Kind as SessionKind, PtySession};
+   |                                           ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `client_event::ServerMigrateEvent`
+  --> client/src/client.rs:38:29
+   |
+38 | use crate::ipc::clientipc::{client_event::ServerMigrateEvent, ClientEvent, SessionData};
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `self`
+  --> client/src/client.rs:39:18
+   |
+39 | use crate::ipc::{self, clientipc};
+   |                  ^^^^
+
+warning: unused imports: `SignalKind` and `signal`
+  --> client/src/client.rs:41:27
+   |
+41 | use tokio::signal::unix::{signal, SignalKind};
+   |                           ^^^^^^  ^^^^^^^^^^
+
+warning: unused import: `std::pin::Pin`
+  --> client/src/client.rs:47:5
+   |
+47 | use std::pin::Pin;
+   |     ^^^^^^^^^^^^^
+
+warning: unused import: `std::task::Poll`
+  --> client/src/client.rs:48:5
+   |
+48 | use std::task::Poll;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+  --> client/src/client.rs:54:20
+   |
+54 | use anyhow::{bail, Context, Result};
+   |                    ^^^^^^^
+
+warning: unused import: `bytes::Bytes`
+  --> client/src/client.rs:55:5
+   |
+55 | use bytes::Bytes;
+   |     ^^^^^^^^^^^^
+
+warning: unused imports: `ClearType`, `Clear`, `EnterAlternateScreen`, `Event`, `KeyCode`, `LeaveAlternateScreen`, `disable_raw_mode`, `enable_raw_mode`, `execute`, `queue`, `read`, and `size as terminal_size`
+  --> client/src/client.rs:57:13
+   |
+57 |     event::{read, Event, KeyCode},
+   |             ^^^^  ^^^^^  ^^^^^^^
+58 |     execute, queue,
+   |     ^^^^^^^  ^^^^^
+59 |     terminal::{
+60 |         disable_raw_mode, enable_raw_mode, size as terminal_size, Clear, ClearType,
+   |         ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^  ^^^^^  ^^^^^^^^^
+61 |         EnterAlternateScreen, LeaveAlternateScreen,
+   |         ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `select` and `stream`
+  --> client/src/client.rs:64:15
+   |
+64 | use futures::{select, stream};
+   |               ^^^^^^  ^^^^^^
+
+warning: unused import: `russh_keys::*`
+  --> client/src/client.rs:66:5
+   |
+66 | use russh_keys::*;
+   |     ^^^^^^^^^^^^^
+
+warning: unused import: `protocol::OpenFlags`
+  --> client/src/client.rs:67:39
+   |
+67 | use russh_sftp::{client::SftpSession, protocol::OpenFlags};
+   |                                       ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Instant`
+  --> client/src/client.rs:70:27
+   |
+70 | use std::time::{Duration, Instant};
+   |                           ^^^^^^^
+
+warning: unused imports: `TcpStream` and `ToSocketAddrs`
+  --> client/src/client.rs:71:31
+   |
+71 | use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
+   |                               ^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `broadcast`
+  --> client/src/client.rs:72:19
+   |
+72 | use tokio::sync::{broadcast, mpsc, Mutex};
+   |                   ^^^^^^^^^
+
+warning: unused imports: `task` and `time`
+  --> client/src/client.rs:73:13
+   |
+73 | use tokio::{task, time};
+   |             ^^^^  ^^^^
+
+warning: unnecessary parentheses around function argument
+   --> client/src/client.rs:561:12
+    |
+561 |         Ok((id))
+    |            ^  ^
+    |
+    = note: `#[warn(unused_parens)]` on by default
+help: remove these parentheses
+    |
+561 -         Ok((id))
+561 +         Ok(id)
+    |
+
+warning: unused import: `clientipc::session_data::Kind as SessionKind`
+ --> client/src/ipc.rs:7:5
+  |
+7 | use clientipc::session_data::Kind as SessionKind;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `clientipc::value::Kind`
+ --> client/src/ipc.rs:8:5
+  |
+8 | use clientipc::value::Kind;
+  |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `FileCloseResponse`, `FileMetadataResponse`, `FileReadRequest`, `FileReadResponse`, `FileWriteRequest`, `FileWriteResponse`, `LocalPortForwardRequest`, `SftpRequest`, `StreamResponse`, `Value`, and `session_data`
+  --> client/src/ipc.rs:13:5
+   |
+13 |     session_data, ClientEvent, CoordinatorStartRequest, CoordinatorStartResponse, DeviceStatus,
+   |     ^^^^^^^^^^^^
+14 |     FileCloseResponse, FileData, FileDeleteRequest, FileList, FileMetadataResponse,
+   |     ^^^^^^^^^^^^^^^^^                                         ^^^^^^^^^^^^^^^^^^^^
+15 |     FileReadRequest, FileReadResponse, FileTransferRequest, FileTransferStatus, FileWriteRequest,
+   |     ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^                                           ^^^^^^^^^^^^^^^^
+16 |     FileWriteResponse, GenKeysRequest, GenKeysResponse, GetKeyRequest, GetSaveDataRequest,
+   |     ^^^^^^^^^^^^^^^^^
+17 |     LocalPortForwardRequest, LocalPortForwardResponse, Msg, NatFilterRequest, NatFilterResponse,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+...
+20 |     SettingCheckRequest, SettingCheckResponse, Settings, SettingsRequest, SftpRequest,
+   |                                                                           ^^^^^^^^^^^
+21 |     SftpRequestResponse, StreamResponse, SubscribeRequest, UserData, Value,
+   |                          ^^^^^^^^^^^^^^                              ^^^^^
+
+warning: unused import: `stream`
+  --> client/src/ipc.rs:24:15
+   |
+24 | use futures::{stream, Stream, StreamExt};
+   |               ^^^^^^
+
+warning: unused import: `log4rs::append::file`
+  --> client/src/ipc.rs:25:5
+   |
+25 | use log4rs::append::file;
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `client::SftpSession` and `protocol::Stat`
+  --> client/src/ipc.rs:27:18
+   |
+27 | use russh_sftp::{client::SftpSession, protocol::Stat};
+   |                  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: unused imports: `SerializeMap`, `SerializeSeq`, `SerializeStruct`, `Serialize`, and `Serializer`
+  --> client/src/ipc.rs:28:18
+   |
+28 | use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
+   |                  ^^^^^^^^^  ^^^^^^^^^^^^  ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: unused imports: `any::Any`, `net::Ipv6Addr`, and `path::PathBuf`
+  --> client/src/ipc.rs:30:11
+   |
+30 | use std::{any::Any, collections::HashMap, net::Ipv6Addr, path::PathBuf, pin::Pin, sync::Arc};
+   |           ^^^^^^^^                        ^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `url::Url`
+  --> client/src/ipc.rs:37:5
+   |
+37 | use url::Url;
+   |     ^^^^^^^^
+
+warning: unused import: `std::path::Path`
+  --> client/src/ipc.rs:57:5
+   |
+57 | use std::path::Path;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused imports: `TryFutureExt` and `stream::FuturesUnordered`
+   --> client/src/ipc.rs:844:19
+    |
+844 |     use futures::{stream::FuturesUnordered, TryFutureExt};
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:328:13
+    |
+328 |         let mut f = File::options()
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:338:13
+    |
+338 |         let mut f = File::options()
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:397:14
+    |
+397 |         let (mut reader, mut writer) = tokio::io::split(file);
+    |              ----^^^^^^
+    |              |
+    |              help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:397:26
+    |
+397 |         let (mut reader, mut writer) = tokio::io::split(file);
+    |                          ----^^^^^^
+    |                          |
+    |                          help: remove this `mut`
+
+warning: unused variable: `private_key_path`
+   --> client/src/client.rs:467:9
+    |
+467 |         private_key_path: T,
+    |         ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_private_key_path`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `known_hosts_path`
+   --> client/src/client.rs:468:9
+    |
+468 |         known_hosts_path: T,
+    |         ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_known_hosts_path`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:500:14
+    |
+500 |         let (mut send, mut recv) = connection
+    |              ----^^^^
+    |              |
+    |              help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:500:24
+    |
+500 |         let (mut send, mut recv) = connection
+    |                        ----^^^^
+    |                        |
+    |                        help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/client.rs:703:13
+    |
+703 |         let mut channel = self.handle.channel_open_session().await?;
+    |             ----^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unreachable expression
+   --> client/src/ipc.rs:921:9
+    |
+893 | /         loop {
+894 | |             check_interval.tick().await;
+895 | |             let mut client = client.lock().await;
+...   |
+918 | |             };
+919 | |         }
+    | |_________- any code following this expression is unreachable
+920 |
+921 |           Ok(()) as Result<(), Box<dyn std::error::Error>>
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable expression
+    |
+    = note: `#[warn(unreachable_code)]` on by default
+
+warning: unused import: `clap::Parser`
+ --> client/src/client.rs:4:5
+  |
+4 | use clap::Parser;
+  |     ^^^^^^^^^^^^
+
+warning: unused import: `future::Future`
+   --> client/src/ipc.rs:838:15
+    |
+838 |     use std::{future::Future, time::Duration};
+    |               ^^^^^^^^^^^^^^
+
+warning: unused variable: `session`
+   --> client/src/client.rs:615:9
+    |
+615 |         session: &mut russh::client::Session,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session`
+
+warning: unused variable: `channel`
+   --> client/src/client.rs:614:9
+    |
+614 |         channel: ChannelId,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_channel`
+
+warning: unused variable: `request`
+  --> client/src/ipc.rs:76:9
+   |
+76 |         request: Request<SubscribeRequest>,
+   |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+  --> client/src/ipc.rs:79:17
+   |
+79 |             let mut client = self.client.lock().await;
+   |                 ----^^^^^^
+   |                 |
+   |                 help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:122:9
+    |
+122 |         request: Request<CoordinatorStartRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:139:9
+    |
+139 |         request: Request<SettingCheckRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:141:13
+    |
+141 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:151:9
+    |
+151 |         request: Request<SessionRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `k`
+   --> client/src/ipc.rs:157:14
+    |
+157 |         for (k, v) in client.sessions.iter() {
+    |              ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:153:13
+    |
+153 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:182:21
+    |
+182 |             for (k, mut data) in user_data.saved_sessions.iter() {
+    |                     ----^^^^
+    |                     |
+    |                     help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:252:13
+    |
+252 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:253:13
+    |
+253 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:273:13
+    |
+273 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:274:13
+    |
+274 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:292:13
+    |
+292 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:310:13
+    |
+310 |         let mut client = self.client.lock().await;
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:325:9
+    |
+325 |         request: Request<NatFilterRequest>,
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:643:13
+    |
+643 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `request`
+   --> client/src/ipc.rs:662:13
+    |
+662 |         let request = request.into_inner();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: unused variable: `res`
+   --> client/src/ipc.rs:672:13
+    |
+672 |         let res = reader.read_to_string(&mut contents).await?;
+    |             ^^^ help: if this is intentional, prefix it with an underscore: `_res`
+
+warning: variable does not need to be mutable
+   --> client/src/ipc.rs:665:13
+    |
+665 |         let mut file = File::options()
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused variable: `stream_id`
+   --> client/src/ipc.rs:788:13
+    |
+788 |         let stream_id = Uuid::new_v4();
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_stream_id`
+
+warning: struct `PeerChangeMsg` is never constructed
+  --> client/src/client.rs:90:8
+   |
+90 | struct PeerChangeMsg {
+   |        ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: field `username` is never read
+   --> client/src/client.rs:230:9
+    |
+226 | pub struct Session {
+    |            ------- field in this struct
+...
+230 |     pub username: String,
+    |         ^^^^^^^^
+
+warning: fields `connection`, `remote_addr`, `session_id`, and `event_tx` are never read
+   --> client/src/client.rs:244:5
+    |
+243 | pub struct ClientHandler {
+    |            ------------- fields in this struct
+244 |     connection: Connection,
+    |     ^^^^^^^^^^
+245 |     remote_addr: SocketAddr,
+    |     ^^^^^^^^^^^
+246 |     server_id: String,
+247 |     session_id: String,
+    |     ^^^^^^^^^^
+248 |     event_tx: Sender<ClientEvent>,
+    |     ^^^^^^^^
+
+warning: associated items `get_json_value`, `set_json_value`, and `session_exists` are never used
+   --> client/src/client.rs:376:18
+    |
+252 | impl Client {
+    | ----------- associated items in this implementation
+...
+376 |     pub async fn get_json_value<T>(key: &str, file: File) -> Result<Option<T>>
+    |                  ^^^^^^^^^^^^^^
+...
+393 |     pub async fn set_json_value<T>(key: &str, value: &T, file: File) -> Result<Option<Value>>
+    |                  ^^^^^^^^^^^^^^
+...
+457 |     pub fn session_exists(&self, session_id: &str) -> bool {
+    |            ^^^^^^^^^^^^^^
+
+warning: unused `Result` that must be used
+   --> client/src/client.rs:777:33
+    |
+777 | / ...                   client_sender.send(clientipc::Msg { r#type: Some(Type::Data(Data {
+778 | | ...                       payload: data.to_vec()
+779 | | ...                   })) });
+    | |____________________________^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+777 |                                 let _ = client_sender.send(clientipc::Msg { r#type: Some(Type::Data(Data {
+    |                                 +++++++
+
+warning: unused `Result` that must be used
+   --> client/src/client.rs:790:33
+    |
+790 | ...                   channel.eof().await;
+    |                       ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+790 |                                 let _ = channel.eof().await;
+    |                                 +++++++
+
+warning: unused `Result` that must be used
+   --> client/src/client.rs:802:33
+    |
+802 | ...                   channel.eof().await;
+    |                       ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+802 |                                 let _ = channel.eof().await;
+    |                                 +++++++
+
+warning: `sessio-clientd` (bin "sessio-clientd") generated 85 warnings (run `cargo fix --bin "sessio-clientd"` to apply 59 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running `/home/s/Documents/quic_proxy/rust/target/debug/sessio-clientd`
+[2025-07-15T20:20:20Z INFO  sessio_clientd::client] Loading settings from /home/s/.sessio
+[2025-07-15T20:20:20Z INFO  sessio_clientd::client] Connecting to http://127.0.0.1:8080
+Connecting to WebSocket URL: ws://127.0.0.1:8080/ws
+[2025-07-15T20:20:20Z DEBUG tungstenite::handshake::client] Client handshake done.
+WebSocket connection established
+Sending auth message: {"base":null,"packet":{"Auth":{"id":"test-websocket-client","ipv6":null,"public_key_base64":"AAAAC3NzaC1lZDI1NTE5AAAAIGWNBtrQjZ4smP48fDIkvlUR6f2fqze/FgAoIe5Yql0C","signed_data":"50f39795-ce88-434a-a9fd-4c2267b66148","signature":"AAAAUwAAAAtzc2gtZWQyNTUxOQAAAEA0fOyrv2oO8Oojwnr7OXNKX6BO11eYC7gcen+kWFpSqKMfJaJ1zbGUvH8YORm72EDjFDEvgYPB7OOHMH/v1xgA"}}}
+Auth message sent, waiting for response...
+Received auth response: Text("{\"AuthResponse\":{\"token\":\"ae8e4554-3e48-4a93-902e-0ecfc8efbf18\",\"success\":true,\"status_msg\":null}}")
+Auth response text: {"AuthResponse":{"token":"ae8e4554-3e48-4a93-902e-0ecfc8efbf18","success":true,"status_msg":null}}
+[2025-07-15T20:20:20Z INFO  sessio_clientd::ipc] Starting grpc server!
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_write] send frame=Settings { flags: (0x0), initial_window_size: 1048576, max_frame_size: 16384, max_header_list_size: 16777216 }
+[2025-07-15T20:22:25Z DEBUG h2::proto::connection] Connection; peer=Server
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_read] received frame=Settings { flags: (0x0), enable_push: 0, initial_window_size: 2097152, max_frame_size: 16384, max_header_list_size: 16384 }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_write] send frame=Settings { flags: (0x1: ACK) }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_read] received frame=WindowUpdate { stream_id: StreamId(0), size_increment: 5177345 }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_write] send frame=WindowUpdate { stream_id: StreamId(0), size_increment: 983041 }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_read] received frame=Settings { flags: (0x1: ACK) }
+[2025-07-15T20:22:25Z DEBUG h2::proto::settings] received settings ACK; applying Settings { flags: (0x0), initial_window_size: 1048576, max_frame_size: 16384, max_header_list_size: 16777216 }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_read] received frame=Headers { stream_id: StreamId(1), flags: (0x4: END_HEADERS) }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_read] received frame=Data { stream_id: StreamId(1) }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_read] received frame=Data { stream_id: StreamId(1), flags: (0x1: END_STREAM) }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_write] send frame=Headers { stream_id: StreamId(1), flags: (0x4: END_HEADERS) }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_write] send frame=Data { stream_id: StreamId(1) }
+[2025-07-15T20:22:25Z DEBUG h2::codec::framed_write] send frame=Headers { stream_id: StreamId(1), flags: (0x5: END_HEADERS | END_STREAM) }
