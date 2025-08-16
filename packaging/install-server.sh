@@ -6,18 +6,14 @@
 
 set -e
 
-# Get script directory and source script constants
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/script_consts.sh"
-
 # Configuration
-VERSION="$SESSIO_VERSION"
-GITHUB_REPO="$SESSIO_GITHUB_REPO"
-RELEASE_URL="$SESSIO_RELEASE_URL"
+VERSION="0.4.1"
+GITHUB_REPO="0xC0ffee1/sessio"
+RELEASE_URL="https://github.com/0xC0ffee1/sessio/releases/download/v0.4.1"
 
 # Default values
 COORDINATOR="https://127.0.0.1:2223"
-DEVICE_ID=""
+
 INSTALL_KEY=""
 USER_INSTALL=false
 SERVICE_NAME="sessio-server"
@@ -67,9 +63,7 @@ Required Options:
     -c, --coordinator URL   Coordinator URL (default: $COORDINATOR)
 
 Optional:
-    -i, --id ID            Device ID (optional, auto-generated if not provided)
     -u, --user             Install as user service (default: system-wide)
-    -v, --version VERSION  Version to install (default: $VERSION)
     -h, --help             Show this help message
 
 Examples:
@@ -89,17 +83,9 @@ while [[ $# -gt 0 ]]; do
             COORDINATOR="$2"
             shift 2
             ;;
-        -i|--id)
-            DEVICE_ID="$2"
-            shift 2
-            ;;
         -u|--user)
             USER_INSTALL=true
             shift
-            ;;
-        -v|--version)
-            VERSION="$2"
-            shift 2
             ;;
         -h|--help)
             usage
@@ -116,11 +102,6 @@ if [[ -z "$INSTALL_KEY" ]]; then
     error "Install key is required. Use -k or --install-key option."
 fi
 
-# Generate device ID if not provided
-if [[ -z "$DEVICE_ID" ]]; then
-    DEVICE_ID="$(hostname)-server"
-    log "Generated device ID: $DEVICE_ID"
-fi
 
 # Check for root permissions if system-wide install
 check_root
@@ -146,15 +127,13 @@ DOWNLOAD_URL="${RELEASE_URL}/${BIN_NAME}-${ARCH_SUFFIX}"
 # Set installation paths based on user or system install
 if [[ "$USER_INSTALL" == true ]]; then
     BIN_DIR="$HOME/.local/bin"
-    CONFIG_DIR="$HOME/.sessio"
     SERVICE_DIR="$HOME/.config/systemd/user"
-    DATA_DIR="$HOME/.sessio/server-data"
+    DATA_DIR="$HOME/.sessio/"
     SYSTEMCTL_CMD="systemctl --user"
 else
     BIN_DIR="/usr/local/bin"
-    CONFIG_DIR="/etc/sessio"
     SERVICE_DIR="/etc/systemd/system"
-    DATA_DIR="/var/lib/sessio"
+    DATA_DIR="/root/.sessio/"
     SYSTEMCTL_CMD="systemctl"
 fi
 
@@ -164,13 +143,11 @@ log "Architecture: $ARCH_SUFFIX"
 log "Install type: $([ "$USER_INSTALL" == true ] && echo "User" || echo "System-wide")"
 log "Binary URL: $DOWNLOAD_URL"
 log "Binary directory: $BIN_DIR"
-log "Config directory: $CONFIG_DIR"
 log "Data directory: $DATA_DIR"
 
 # Create directories
 log "Creating directories..."
 mkdir -p "$BIN_DIR"
-mkdir -p "$CONFIG_DIR"
 mkdir -p "$SERVICE_DIR"
 mkdir -p "$DATA_DIR"
 
@@ -198,31 +175,15 @@ log "Installing binary..."
 cp "$TEMP_DIR/$BIN_NAME" "$BIN_DIR/$BIN_NAME"
 chmod +x "$BIN_DIR/$BIN_NAME"
 
-# Handle user creation and ownership for system install
-if [[ "$USER_INSTALL" == false ]]; then
-    # Create service user
-    log "Creating service user..."
-    if ! id "sessio" &>/dev/null; then
-        useradd --system --no-create-home --shell /bin/false sessio
-        log "Created user: sessio"
-    else
-        log "User already exists: sessio"
-    fi
-    
-    # Set ownership
-    chown -R sessio:sessio "$CONFIG_DIR"
-    chown -R sessio:sessio "$DATA_DIR"
-fi
-
 # Run the install command
 log "Running server installation..."
 cd "$DATA_DIR"
 if [[ "$USER_INSTALL" == true ]]; then
-    if ! "$BIN_DIR/$BIN_NAME" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR" --id "$DEVICE_ID"; then
+    if ! "$BIN_DIR/$BIN_NAME" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR"; then
         error "Server installation failed"
     fi
 else
-    if ! sudo -u sessio "$BIN_DIR/$BIN_NAME" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR" --id "$DEVICE_ID"; then
+    if ! sudo "$BIN_DIR/$BIN_NAME" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR"; then
         error "Server installation failed"
     fi
 fi
@@ -237,11 +198,10 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$DATA_DIR
-ExecStart=$BIN_DIR/$BIN_NAME run --coordinator "$COORDINATOR" --id "$DEVICE_ID"
+ExecStart=$BIN_DIR/$BIN_NAME run
 Restart=always
 RestartSec=10
-Environment="RUST_LOG=info"
+Environment="RUST_LOG=info TERM=xterm-256color"
 
 [Install]
 WantedBy=default.target
@@ -255,28 +215,13 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=sessio
-Group=sessio
-WorkingDirectory=$DATA_DIR
-ExecStart=$BIN_DIR/$BIN_NAME run --coordinator "$COORDINATOR" --id "$DEVICE_ID"
+ExecStart=$BIN_DIR/$BIN_NAME run
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=$SERVICE_NAME
-Environment="RUST_LOG=info"
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$DATA_DIR
-ReadWritePaths=$CONFIG_DIR
-
-# Network capabilities for port binding
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+Environment=RUST_LOG=info TERM=xterm-256color
 
 [Install]
 WantedBy=multi-user.target
@@ -307,16 +252,14 @@ fi
 # Installation complete
 success "Sessio Server installation completed!"
 echo ""
-echo "📦 Version: $VERSION"
-echo "🏗️ Architecture: $ARCH_SUFFIX"
-echo "📁 Binary: $BIN_DIR/$BIN_NAME"
-echo "🔧 Service: $SERVICE_NAME"
-if [[ "$USER_INSTALL" == false ]]; then
-    echo "👤 User: sessio"
-fi
-echo "📂 Data: $DATA_DIR"
-echo "📋 Status: $SYSTEMCTL_CMD status $SERVICE_NAME"
-echo "📄 Logs: journalctl $([ "$USER_INSTALL" == true ] && echo "--user") -u $SERVICE_NAME -f"
+echo "Version: $VERSION"
+echo "Architecture: $ARCH_SUFFIX"
+echo "Binary: $BIN_DIR/$BIN_NAME"
+echo "Service: $SERVICE_NAME"
+
+echo "Data: $DATA_DIR"
+echo "Status: $SYSTEMCTL_CMD status $SERVICE_NAME"
+echo "Logs: journalctl $([ "$USER_INSTALL" == true ] && echo "--user") -u $SERVICE_NAME -f"
 echo ""
 echo "Service management:"
 if [[ "$USER_INSTALL" == true ]]; then

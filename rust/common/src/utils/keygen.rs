@@ -9,6 +9,10 @@ use std::path::{Path, PathBuf};
 use tokio::io::{self, AsyncReadExt};
 
 pub async fn read_authorized_keys(user: Option<&str>) -> anyhow::Result<Vec<PublicKey>> {
+    read_authorized_keys_with_filter(user, None).await
+}
+
+pub async fn read_authorized_keys_with_filter(user: Option<&str>, match_user: Option<&str>) -> anyhow::Result<Vec<PublicKey>> {
     let path = match std::env::var("AUTHORIZED_KEYS_PATH").ok() {
         Some(path) => PathBuf::from(path),
         None => {
@@ -40,9 +44,28 @@ pub async fn read_authorized_keys(user: Option<&str>) -> anyhow::Result<Vec<Publ
     for line in contents.lines() {
         let mut split = line.split_whitespace();
 
+        // Skip the key type (ssh-ed25519, ssh-rsa, etc.)
         split.next();
 
-        if let Ok(public_key) = russh::keys::parse_public_key_base64(split.next().unwrap()) {
+        // Get the public key data
+        let key_data = match split.next() {
+            Some(data) => data,
+            None => continue, // Skip malformed lines
+        };
+
+        // Get the comment/device_id (third field)
+        let comment = split.next().unwrap_or("");
+
+        // If match_user is specified, only include keys for that user/device_id
+        if let Some(target_user) = match_user {
+            // Extract device_id from "device-id@os" format
+            let device_id = comment.split('@').next().unwrap_or("");
+            if device_id != target_user {
+                continue; // Skip this key as it doesn't match the target user
+            }
+        }
+
+        if let Ok(public_key) = russh::keys::parse_public_key_base64(key_data) {
             keys.push(public_key);
         } else {
             anyhow::bail!("Failed to read authorized public key {}", line)
@@ -53,6 +76,10 @@ pub async fn read_authorized_keys(user: Option<&str>) -> anyhow::Result<Vec<Publ
 }
 
 pub async fn read_known_hosts(user: Option<&str>) -> anyhow::Result<Vec<PublicKey>> {
+    read_known_hosts_with_filter(user, None).await
+}
+
+pub async fn read_known_hosts_with_filter(user: Option<&str>, match_user: Option<&str>) -> anyhow::Result<Vec<PublicKey>> {
     let path = match std::env::var("KNOWN_HOSTS_PATH").ok() {
         Some(path) => PathBuf::from(path),
         None => {
@@ -84,14 +111,31 @@ pub async fn read_known_hosts(user: Option<&str>) -> anyhow::Result<Vec<PublicKe
     for line in contents.lines() {
         let mut split = line.split_whitespace();
 
-        split.next(); // Skip the hostname/key type
+        // Skip the hostname or key type (first field)
+        split.next();
 
-        if let Some(key_data) = split.next() {
-            if let Ok(public_key) = russh::keys::parse_public_key_base64(key_data) {
-                keys.push(public_key);
-            } else {
-                anyhow::bail!("Failed to read known host public key {}", line)
+        // Get the public key data (second field)
+        let key_data = match split.next() {
+            Some(data) => data,
+            None => continue, // Skip malformed lines
+        };
+
+        // Get the comment/device_id (third field)
+        let comment = split.next().unwrap_or("");
+
+        // If match_user is specified, only include keys for that user/device_id
+        if let Some(target_user) = match_user {
+            // Extract device_id from "device-id@os" format
+            let device_id = comment.split('@').next().unwrap_or("");
+            if device_id != target_user {
+                continue; // Skip this key as it doesn't match the target user
             }
+        }
+
+        if let Ok(public_key) = russh::keys::parse_public_key_base64(key_data) {
+            keys.push(public_key);
+        } else {
+            anyhow::bail!("Failed to read known host public key {}", line)
         }
     }
 

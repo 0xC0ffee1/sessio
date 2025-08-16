@@ -6,18 +6,13 @@
 
 set -e
 
-# Get script directory and source script constants
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/script_consts.sh"
-
-# Configuration  
-VERSION="$SESSIO_VERSION"
-GITHUB_REPO="$SESSIO_GITHUB_REPO"
-RELEASE_URL="$SESSIO_RELEASE_URL"
+# Configuration
+VERSION="0.4.1"
+GITHUB_REPO="0xC0ffee1/sessio"
+RELEASE_URL="https://github.com/0xC0ffee1/sessio/releases/download/v0.4.1"
 
 # Default values
 COORDINATOR="https://127.0.0.1:2223"
-DEVICE_ID=""
 INSTALL_KEY=""
 USER_INSTALL=false
 SERVICE_NAME="sessio-clientd"
@@ -61,9 +56,7 @@ Required Options:
     -c, --coordinator URL   Coordinator URL (default: $COORDINATOR)
 
 Optional:
-    -i, --id ID            Device ID (optional, auto-generated if not provided)
     -u, --user             Install as user service (default: system-wide)
-    -v, --version VERSION  Version to install (default: $VERSION)
     -h, --help             Show this help message
 
 Examples:
@@ -83,17 +76,9 @@ while [[ $# -gt 0 ]]; do
             COORDINATOR="$2"
             shift 2
             ;;
-        -i|--id)
-            DEVICE_ID="$2"
-            shift 2
-            ;;
         -u|--user)
             USER_INSTALL=true
             shift
-            ;;
-        -v|--version)
-            VERSION="$2"
-            shift 2
             ;;
         -h|--help)
             usage
@@ -110,11 +95,7 @@ if [[ -z "$INSTALL_KEY" ]]; then
     error "Install key is required. Use -k or --install-key option."
 fi
 
-# Generate device ID if not provided
-if [[ -z "$DEVICE_ID" ]]; then
-    DEVICE_ID="$(hostname)-client"
-    log "Generated device ID: $DEVICE_ID"
-fi
+
 
 # Check for root permissions if system-wide install
 if [[ "$USER_INSTALL" == false ]] && [[ $EUID -ne 0 ]]; then
@@ -213,8 +194,8 @@ chmod +x "$BIN_DIR/$DAEMON_BIN_NAME"
 
 # Create systemd service file
 log "Creating systemd service..."
-if [[ "$USER_INSTALL" == true ]]; then
-    cat > "$SERVICE_DIR/$SERVICE_NAME.service" << EOF
+WANTED_BY_TARGET=$([ "$USER_INSTALL" == true ] && echo "default.target" || echo "multi-user.target")
+cat > "$SERVICE_DIR/$SERVICE_NAME.service" << EOF
 [Unit]
 Description=Sessio Client Daemon
 After=network.target
@@ -227,51 +208,8 @@ RestartSec=10
 Environment="RUST_LOG=info"
 
 [Install]
-WantedBy=default.target
+WantedBy=$WANTED_BY_TARGET
 EOF
-else
-    cat > "$SERVICE_DIR/$SERVICE_NAME.service" << EOF
-[Unit]
-Description=Sessio Client Daemon
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=$BIN_DIR/$DAEMON_BIN_NAME
-Restart=always
-RestartSec=10
-User=sessio
-Group=sessio
-Environment="RUST_LOG=info"
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=$CONFIG_DIR
-ReadWritePaths=/home/sessio/.sessio
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Create service user for system-wide install
-    log "Creating service user..."
-    if ! id "sessio" &>/dev/null; then
-        useradd --system --create-home --shell /bin/false sessio
-        log "Created user: sessio"
-    else
-        log "User already exists: sessio"
-    fi
-    
-    # Create .sessio directory for the service user
-    mkdir -p /home/sessio/.sessio
-    chown -R sessio:sessio /home/sessio/.sessio
-    
-    # Set ownership for system-wide install
-    chown -R sessio:sessio "$CONFIG_DIR"
-fi
 
 # Start the daemon
 log "Starting daemon..."
@@ -285,21 +223,21 @@ sleep 3
 # Run the install command
 log "Running install command..."
 if [[ "$USER_INSTALL" == true ]]; then
-    "$BIN_DIR/sessio" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR" --device-id "$DEVICE_ID"
+    "$BIN_DIR/sessio" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR"
 else
-    sudo -u sessio "$BIN_DIR/sessio" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR" --device-id "$DEVICE_ID"
+    sudo "$BIN_DIR/sessio" install --install-key "$INSTALL_KEY" --coordinator "$COORDINATOR"
 fi
 
 # Check if installation was successful
 if [[ $? -eq 0 ]]; then
     success "Sessio Client installed successfully!"
     echo ""
-    echo "📦 Version: $VERSION"
-    echo "🏗️ Architecture: $ARCH_SUFFIX"
-    echo "📁 Binaries: $BIN_DIR"
-    echo "🔧 Service: $SERVICE_NAME"
-    echo "📋 Status: $SYSTEMCTL_CMD status $SERVICE_NAME"
-    echo "📄 Logs: journalctl $([ "$USER_INSTALL" == true ] && echo "--user") -u $SERVICE_NAME -f"
+    echo "Version: $VERSION"
+    echo "Architecture: $ARCH_SUFFIX"
+    echo "Binaries: $BIN_DIR"
+    echo "Service: $SERVICE_NAME"
+    echo "Status: $SYSTEMCTL_CMD status $SERVICE_NAME"
+    echo "Logs: journalctl $([ "$USER_INSTALL" == true ] && echo "--user") -u $SERVICE_NAME -f"
     echo ""
     echo "You can now use the 'sessio' command to interact with devices."
     echo "Try 'sessio status' to see available devices."
