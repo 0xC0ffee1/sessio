@@ -108,6 +108,8 @@ impl HolepunchService {
         target: String,
         token: String,
         connection_sender: Sender<Connection>,
+        private_key_path: Option<String>,
+        target_public_key: Option<String>,
     ) -> Result<()> {
         let c_client = &self.c_client;
 
@@ -119,12 +121,49 @@ impl HolepunchService {
             own_id: self.c_client.id_own.clone(),
         };
 
+        // Generate crypto fields for authentication
+        let (public_key_base64, signed_data, signature) = if let (Some(key_path), Some(target_key)) = (&private_key_path, &target_public_key) {
+            use russh::keys::load_secret_key;
+            use russh::keys::PublicKeyBase64;
+            use uuid::Uuid;
+            
+            // Load private key
+            let private_key = load_secret_key(key_path, None)
+                .map_err(|e| anyhow::anyhow!("Failed to load private key: {}", e))?;
+            
+            // Get our public key in base64 format
+            let public_key_base64 = private_key.public_key().public_key_base64();
+            
+            // Create challenge: CONNECTION:<target_public_key>
+            let challenge = format!("CONNECTION:{}", target_key);
+            
+            // Sign the challenge
+            use russh::keys::ssh_key::HashAlg;
+            let signature = private_key.sign("sessio", HashAlg::default(), challenge.as_bytes())
+                .map_err(|e| anyhow::anyhow!("Failed to sign challenge: {}", e))?;
+            
+            // Convert signature to base64
+            use base64::{Engine, engine::general_purpose};
+            use russh::keys::ssh_key::LineEnding;
+            let signature_pem = signature.to_pem(LineEnding::LF)
+                .map_err(|e| anyhow::anyhow!("Failed to serialize signature: {}", e))?;
+            let signature_b64 = general_purpose::STANDARD.encode(&signature_pem);
+            
+            (public_key_base64, challenge, signature_b64)
+        } else {
+            // Fallback to empty values if crypto parameters not provided
+            (String::new(), String::new(), String::new())
+        };
+
         sender
             .send(ServerPacket {
                 base: Some(base),
                 packet: Packet::NewSession(NewSession {
                     session_id: token.clone(),
                     target_id: target,
+                    public_key_base64,
+                    signed_data,
+                    signature,
                 }),
             })
             .await?;
@@ -165,49 +204,112 @@ impl HolepunchService {
                         match packet {
                             Packet::ConnectTo(data) => {
                                 info!("trying to connect to {:?}", data.target);
-                                
-                                // Verify target public key against known_hosts before connecting
-                                // Use string comparison since russh is not available in this crate
-                                let is_known_host = match std::env::var("KNOWN_HOSTS_PATH")
-                                    .map(std::path::PathBuf::from)
-                                    .or_else(|_| {
-                                        dirs::home_dir()
-                                            .map(|h| h.join(".sessio/known_hosts"))
-                                            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found"))
-                                    }) {
-                                    Ok(known_hosts_path) => {
-                                        match tokio::fs::read_to_string(&known_hosts_path).await {
-                                            Ok(content) => {
-                                                // Check if the target public key is in known_hosts
-                                                content.lines().any(|line| {
-                                                    // Parse SSH public key format: "ssh-ed25519 <key> <comment>"
-                                                    let parts: Vec<&str> = line.trim().split_whitespace().collect();
-                                                    if parts.len() >= 2 && parts[0] == "ssh-ed25519" {
-                                                        parts[1] == data.target_public_key
-                                                    } else {
-                                                        false
-                                                    }
-                                                })
-                                            }
+
+                                // Verify cryptographic signature if present
+                                if !data.target_public_key.is_empty() && !data.signed_data.is_empty() && !data.signature.is_empty() {
+                                    use russh::keys::parse_public_key_base64;
+                                    use base64;
+                                    
+                                    // Parse the sender's public key
+                                    let sender_public_key = match parse_public_key_base64(&data.target_public_key) {
+                                        Ok(key) => key,
+                                        Err(e) => {
+                                            error!("Failed to parse sender public key: {}", e);
+                                            break;
+                                        }
+                                    };
+                                    
+                                    // Decode the signature
+                                    use base64::{Engine, engine::general_purpose};
+                                    let signature_pem = match general_purpose::STANDARD.decode(&data.signature) {
+                                        Ok(bytes) => bytes,
+                                        Err(e) => {
+                                            error!("Failed to decode signature: {}", e);
+                                            break;
+                                        }
+                                    };
+                                    
+                                    // Parse signature back to SshSig
+                                    use russh::keys::ssh_key::SshSig;
+                                    let signature = match SshSig::from_pem(&signature_pem) {
+                                        Ok(sig) => sig,
+                                        Err(e) => {
+                                            error!("Failed to parse signature: {}", e);
+                                            break;
+                                        }
+                                    };
+                                    
+                                    // Load our own public key to verify the challenge contains our key
+                                    let our_public_key = if let Some(ref key_path) = private_key_path {
+                                        use russh::keys::load_secret_key;
+                                        use russh::keys::PublicKeyBase64;
+                                        
+                                        match load_secret_key(key_path, None) {
+                                            Ok(private_key) => private_key.public_key().public_key_base64(),
                                             Err(e) => {
-                                                error!("Failed to read known_hosts: {}", e);
-                                                false
+                                                error!("Failed to load our private key for verification: {}", e);
+                                                break;
                                             }
                                         }
+                                    } else {
+                                        error!("No private key path provided for verification");
+                                        break;
+                                    };
+                                    
+                                    // Verify the challenge format
+                                    let expected_challenge = format!("CONNECTION:{}", our_public_key);
+                                    if data.signed_data != expected_challenge {
+                                        error!("Invalid challenge format. Expected: {}, Got: {}", expected_challenge, data.signed_data);
+                                        break;
                                     }
-                                    Err(e) => {
-                                        error!("Failed to get known_hosts path: {}", e);
-                                        false
+                                    
+                                    // Verify the signature
+                                    let signature_valid = sender_public_key.verify("sessio", data.signed_data.as_bytes(), &signature).is_ok();
+                                    
+                                    if !signature_valid {
+                                        error!("Signature verification failed - connection denied");
+                                        break;
                                     }
-                                };
-                                
-                                if !is_known_host {
-                                    warn!("Connection denied: target public key {} not found in known_hosts", data.target_public_key);
-                                    error!("Holepunch failed: target not in known_hosts. Please sign the target device from the coordinator web ui.");
-                                    break;
+
+                                    let is_known_host = match dirs::home_dir()
+                                                .map(|h| h.join(".sessio/keys/known_hosts"))
+                                                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found")) {
+                                        Ok(known_hosts_path) => {
+                                            match tokio::fs::read_to_string(&known_hosts_path).await {
+                                                Ok(content) => {
+                                                    // Check if the target public key is in known_hosts
+                                                    content.lines().any(|line| {
+                                                        // Parse SSH public key format: "ssh-ed25519 <key> <comment>"
+                                                        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+                                                        if parts.len() >= 2 && parts[0] == "ssh-ed25519" {
+                                                            parts[1] == data.target_public_key
+                                                        } else {
+                                                            false
+                                                        }
+                                                    })
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to read known_hosts: {}", e);
+                                                    false
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to get known_hosts path: {}", e);
+                                            false
+                                        }
+                                    };
+                                    if !is_known_host {
+                                        warn!("Connection denied: target public key {} not found in known_hosts", data.target_public_key);
+                                        error!("Holepunch failed: target not in known_hosts. Please sign the target device from the coordinator web ui.");
+                                        break;
+                                    }
+
+                                    info!("Cryptographic signature verified successfully");
+                                } else {
+                                     error!("Holepunch failed: signature missing in connect to request. Could not verify authenticity of connecting device.");
                                 }
-                                
-                                info!("Target public key verified in known_hosts, attempting connection");
+
                                 match endpoint_clone.connect(data.target, "server").unwrap().await {
                                     Ok(conn) => {
                                         let _ = connection_sender.send(conn).await;

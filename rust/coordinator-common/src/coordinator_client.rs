@@ -191,7 +191,7 @@ impl CoordinatorClient {
     }
 
     pub async fn new_stream(&self) -> Result<ClientStream> {
-        // For HTTP/WebSocket, we create a new WebSocket connection
+        // For HTTP/WebSocket, we create a new WebSocket connection (plain ws)
         let mut ws_url = Self::construct_api_url(&self.coordinator_url, "/ws")?;
         ws_url.set_scheme("ws").map_err(|_| anyhow!("Invalid URL scheme"))?;
 
@@ -213,13 +213,14 @@ impl CoordinatorClient {
             coordinator_url,
         );
 
-        // Then establish WebSocket connection
+        // Establish WebSocket connection first (plain ws)
         let mut ws_url = Self::construct_api_url(&coordinator_url, "/ws")?;
         ws_url.set_scheme("ws").map_err(|_| anyhow!("Invalid URL scheme"))?;
 
         let (ws_stream, _) = connect_async(ws_url.clone()).await?;
         let mut stream = create_websocket_stream(ws_stream).await?;
 
+        // Authenticate after WebSocket is connected
         CoordinatorClient::handle_auth(
             &http_client,
             &coordinator_url,
@@ -449,7 +450,7 @@ impl CoordinatorClient {
             loop {
                 interval.tick().await;
 
-                // Construct authorized keys URL
+                // Construct authorized keys URL using default /api path
                 let authorized_keys_url = match coordinator_url.join("/api/authorized-keys") {
                     Ok(url) => url,
                     Err(e) => {
@@ -912,7 +913,7 @@ impl CoordinatorClient {
             loop {
                 interval.tick().await;
 
-                // Construct authorized keys URL (servers share same endpoint)
+                // Construct authorized keys URL (servers share same endpoint) using /api path
                 let authorized_keys_url = match coordinator_url.join("/api/authorized-keys") {
                     Ok(url) => url,
                     Err(e) => {

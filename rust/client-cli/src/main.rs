@@ -58,9 +58,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// List devices and active port forwards
-    List,
-
     /// Connect to interactive shell on device (ephemeral)
     Shell {
         device_id: String,
@@ -358,35 +355,62 @@ async fn show_status(client: &mut ClientIpcClient<Channel>) -> Result<(), Box<dy
                 println!("\nDevice ID:     {}", account_data.device_id);
                 println!("Coordinator:   {}", account_data.coordinator_url);
                 
-                // Fetch devices from coordinator using gRPC
-                let coord_request = tonic::Request::new(CoordinatorStatusRequest {});
-                match client.get_coordinator_status(coord_request).await {
-                    Ok(response) => {
-                        let devices = response.into_inner().devices;
-                        if !devices.is_empty() {
-                            println!("\nAvailable Devices:");
-                            let mut table = Table::new();
-                            table.add_row(row!["DEVICE ID", "OS", "STATUS", "CATEGORIES"]);
-                            
-                            for device in devices {
-                                let status = if device.is_online { "Online" } else { "Offline" };
-                                let categories = if device.categories.is_empty() {
-                                    "-".to_string()
+                // Fetch devices from coordinator directly (like the frontend)
+                match account_data.jwt_token.as_ref() {
+                    Some(jwt) => {
+                        let client_http = reqwest::Client::new();
+                        let url = format!("{}/devices", account_data.coordinator_url);
+                        match client_http
+                            .post(&url)
+                            .header("Authorization", format!("Bearer {}", jwt))
+                            .json(&serde_json::json!({}))
+                            .send()
+                            .await
+                        {
+                            Ok(resp) => {
+                                if resp.status().is_success() {
+                                    match resp.json::<serde_json::Value>().await {
+                                        Ok(json) => {
+                                            if let Some(list) = json.get("devices").and_then(|v| v.as_array()) {
+                                                if list.is_empty() {
+                                                    println!("\nNo devices found");
+                                                } else {
+                                                    println!("\nAvailable Devices:");
+                                                    let mut table = Table::new();
+                                                    table.add_row(row!["DEVICE ID", "OS", "LAST SEEN", "CATEGORIES"]);
+
+                                                    for dev in list {
+                                                        let device_id = dev.get("device_id").and_then(|v| v.as_str()).unwrap_or("-");
+                                                        let os_name = dev.get("os_name").and_then(|v| v.as_str()).unwrap_or("-");
+                                                        let last_seen = dev.get("last_seen_at").and_then(|v| v.as_str()).unwrap_or("-");
+                                                        let categories = dev.get("categories")
+                                                            .and_then(|v| v.as_array())
+                                                            .map(|arr| arr.iter()
+                                                                .filter_map(|c| c.get("name").and_then(|n| n.as_str()))
+                                                                .collect::<Vec<_>>()
+                                                                .join(", "))
+                                                            .filter(|s| !s.is_empty())
+                                                            .unwrap_or_else(|| "-".to_string());
+
+                                                        table.add_row(row![device_id, os_name, last_seen, categories]);
+                                                    }
+                                                    table.printstd();
+                                                }
+                                            } else {
+                                                eprintln!("\\nInvalid devices response from coordinator");
+                                            }
+                                        }
+                                        Err(e) => eprintln!("\\nFailed to parse coordinator response: {}", e),
+                                    }
                                 } else {
-                                    device.categories.join(", ")
-                                };
-                                
-                                table.add_row(row![device.device_id, device.os_name, status, categories]);
+                                    eprintln!("\\nCoordinator returned error: {}", resp.status());
+                                }
                             }
-                            
-                            table.printstd();
-                        }
-                        else {
-                            println!("\nNo devices found");
+                            Err(e) => eprintln!("\\nFailed to fetch devices from coordinator: {}", e),
                         }
                     }
-                    Err(e) => {
-                        eprintln!("\nFailed to fetch devices from coordinator: {}", e);
+                    None => {
+                        println!("\\nJWT token not available; cannot fetch devices list.");
                     }
                 }
             } else {
@@ -615,77 +639,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = ClientIpcClient::new(channel);
 
     match cli.command {
-        Commands::List => {
-            // Get device status from coordinator
-            let coord_request = tonic::Request::new(CoordinatorStatusRequest {});
-            let coord_response = client.get_coordinator_status(coord_request).await;
-            
-            let mut device_info: std::collections::HashMap<String, (bool, Vec<String>)> = std::collections::HashMap::new();
-
-            match coord_response {
-                Ok(response) => {
-                    // Add devices from coordinator with their online status
-                    for device in response.into_inner().devices {
-                        device_info.insert(device.device_id, (device.is_online, Vec::new()));
-                    }
-                }
-                Err(e) => {
-                    warning(&format!("Failed to get coordinator status: {}", e));
-                    warning("Showing local session data only");
-                }
-            }
-
-
-
-            // Get active sessions to show local services
-            let session_request = tonic::Request::new(SessionRequest::default());
-            let session_response = client.get_active_sessions(session_request).await?;
-
-            let session_map = session_response.into_inner();
-            let sessions = session_map.map;
-
-            // Add services per device
-            for (_session_id, session_data) in sessions {
-                let entry = device_info.entry(session_data.device_id.clone()).or_insert((false, Vec::new()));
-
-                match session_data.kind {
-                    Some(clientipc::session_data::Kind::Pty(_)) => {
-                        if session_data.active {
-                            entry.1.push("Shell".to_string());
-                        }
-                    },
-                    Some(clientipc::session_data::Kind::Sftp(_)) => {
-                        if session_data.active {
-                            entry.1.push("SFTP".to_string());
-                        }
-                    },
-                    Some(clientipc::session_data::Kind::Lpf(lpf)) => {
-                        let forward_info = format!("Forward({}->{}:{})",
-                                                  lpf.local_port, lpf.remote_host, lpf.remote_port);
-                        entry.1.push(forward_info);
-                    },
-                    None => {},
-                };
-            }
-
-            // Display devices and their services
-            println!("DEVICES:");
-            let mut device_table = Table::new();
-            device_table.add_row(row!["DEVICE ID", "STATUS", "ACTIVE SERVICES"]);
-
-            for (device_id, (is_online, services)) in device_info {
-                let status = if is_online { "Online" } else { "Offline" };
-                let services_str = if services.is_empty() {
-                    "-".to_string()
-                } else {
-                    services.join(", ")
-                };
-                device_table.add_row(row![device_id, status, services_str]);
-            }
-
-            device_table.printstd();
-        }
-        
         Commands::Shell { device_id } => {
             println!("Connecting to shell on {}...", device_id);
             let session_data = SessionData {
@@ -800,7 +753,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         
-        _ => {}
+        Commands::File { operation } => {
+            match operation {
+                FileOperation::Push { file_path, remote_path, device_id } => {
+                    warning(&format!("File push not implemented yet: {} -> {} on {}", file_path, remote_path, device_id));
+                }
+                FileOperation::Pull { remote_path, file_path, device_id } => {
+                    warning(&format!("File pull not implemented yet: {} -> {} on {}", remote_path, file_path, device_id));
+                }
+            }
+        }
     }
     
     Ok(())

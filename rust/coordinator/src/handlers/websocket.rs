@@ -263,11 +263,13 @@ async fn handle_new_session(
     client.session_ids.push(session_id.clone());
     target_device.session_ids.push(session_id.clone());
     
-    // Send connect packet to target device with client's public key
+    // Send connect packet to target device with client's public key and crypto fields
     let connect_packet = Packet::ConnectTo(ConnectTo {
         target: client_addr,
         session_id: session_id.clone(),
-        target_public_key: client_device_info.public_key.unwrap_or_default(),
+        target_public_key: data.public_key_base64.clone(), // Client's public key
+        signed_data: data.signed_data.clone(),
+        signature: data.signature.clone(),
     });
     
     let packet_json = serde_json::to_string(&connect_packet)?;
@@ -322,11 +324,13 @@ async fn handle_server_connection_request(
         client.ipv4
     };
     
-    // Send connect-to packet directly to client via WebSocket with server's public key
+    // Send connect-to packet directly to client via WebSocket with server's public key and crypto fields
     let connect_packet = Packet::ConnectTo(ConnectTo {
         target: server_addr,
         session_id: session_id.clone(),
-        target_public_key: server_device_info.public_key.unwrap_or_default(),
+        target_public_key: data.public_key_base64.clone(), // Server's public key
+        signed_data: data.signed_data.clone(),
+        signature: data.signature.clone(),
     });
     
     let packet_json = serde_json::to_string(&connect_packet)?;

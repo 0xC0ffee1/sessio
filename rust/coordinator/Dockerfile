@@ -10,26 +10,14 @@ RUN apt-get update && apt-get install -y \
 # Create app directory
 WORKDIR /app
 
-# Copy coordinator, coordinator-common, and common Cargo files for dependency caching
+# Copy workspace Cargo.toml and all crate Cargo files for dependency caching
+COPY Cargo.toml ./
 COPY coordinator/Cargo.toml ./coordinator/
 COPY coordinator-common/Cargo.toml ./coordinator-common/
 COPY common/Cargo.toml ./common/
-
-# Create a minimal workspace Cargo.toml including coordinator-common
-RUN echo '[workspace]' > Cargo.toml && \
-    echo 'members = ["coordinator", "coordinator-common", "common"]' >> Cargo.toml && \
-    echo 'resolver = "2"' >> Cargo.toml && \
-    echo '' >> Cargo.toml && \
-    echo '[workspace.package]' >> Cargo.toml && \
-    echo 'version = "0.4.0"' >> Cargo.toml && \
-    echo 'edition = "2021"' >> Cargo.toml && \
-    echo 'authors = ["Sessio Contributors"]' >> Cargo.toml && \
-    echo 'license = "MIT"' >> Cargo.toml && \
-    echo 'repository = "https://github.com/0xC0ffee1/sessio"' >> Cargo.toml && \
-    echo '' >> Cargo.toml && \
-    echo '[workspace.dependencies]' >> Cargo.toml && \
-    echo 'homedir = "=0.3.3"' >> Cargo.toml && \
-    echo 'base64ct = "=1.6.0"' >> Cargo.toml
+COPY client/Cargo.toml ./client/
+COPY server/Cargo.toml ./server/
+COPY client-cli/Cargo.toml ./client-cli/
 
 
 # Copy source files
@@ -37,11 +25,14 @@ RUN echo '[workspace]' > Cargo.toml && \
 COPY coordinator/src ./coordinator/src/
 COPY coordinator-common/src ./coordinator-common/src/
 COPY common/src ./common/src/
+COPY client/ ./client/
+COPY server/ ./server/
+COPY client-cli/ ./client-cli/
 
-# Copy only the Cargo.lock from the real workspace
+# Copy Cargo.lock for reproducible builds
 COPY Cargo.lock ./
 
-# Build the actual application (keep using the minimal workspace)
+# Build the application (exclude workspace members not copied to Docker context)
 RUN cargo build --release -p sessio-coordinator && \
     strip target/release/sessio-coordinator
 

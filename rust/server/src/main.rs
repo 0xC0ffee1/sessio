@@ -56,75 +56,13 @@ enum Commands {
     },
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RunConfig {
-    pub coordinator: Url,
-    pub id: String,
-    pub private_key: PathBuf,
-    pub config: Option<PathBuf>,
-    pub dangerously_use_http_coordinator: Option<bool>,
-}
-
-impl RunConfig {
-    pub fn from_args_and_file(
-        coordinator: Url,
-        id: String,
-        private_key: PathBuf,
-        config: Option<PathBuf>,
-    ) -> Self {
-        let mut run_config = RunConfig {
-            coordinator,
-            id,
-            private_key,
-            config,
-            dangerously_use_http_coordinator: Some(false),
-        };
-
-        if let Some(config_path) = &run_config.config {
-            let config_content =
-                fs::read_to_string(config_path).expect("Failed to read configuration file");
-            let config: RunConfig =
-                toml::from_str(&config_content).expect("Failed to parse configuration file");
-
-            // Merge configurations
-            run_config.coordinator = config.coordinator;
-            run_config.id = if run_config.id == "id_not_set" {
-                config.id
-            } else {
-                run_config.id
-            };
-            run_config.private_key = if run_config.private_key == PathBuf::from("keys/ssh_host_ed25519_key") {
-                config.private_key
-            } else {
-                run_config.private_key
-            };
-            
-            // Merge dangerously_use_http_coordinator setting
-            if config.dangerously_use_http_coordinator.is_some() {
-                run_config.dangerously_use_http_coordinator = config.dangerously_use_http_coordinator;
-            }
-        }
-        run_config
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let opt = Opt::parse();
 
     match opt.command {
-        Commands::Run { coordinator, id, private_key, config } => {
-            let mut config_manager = ServerConfigManager::new()
-                .expect("Failed to initialize configuration manager");
-            
-            let run_config = config_manager.create_run_config(
-                coordinator.map(|u| u.to_string()),
-                id,
-                private_key,
-                config
-            ).await.expect("Failed to create run configuration");
-            
-            server::run(run_config).await;
+        Commands::Run { .. } => {
+            server::run().await;
         }
         Commands::Install { install_key, coordinator, id, config } => {
             let mut config_manager = ServerConfigManager::new()
@@ -155,7 +93,8 @@ async fn install_server(install_key: String, coordinator: Url, id: String, confi
     }
     
     // Generate or load SSH key pair for this device
-    let private_key_path = PathBuf::from("keys/ssh_host_ed25519_key");
+    let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let private_key_path = home_dir.join(".sessio/keys/ssh_host_ed25519_key");
     let public_key = generate_or_load_public_key(&private_key_path)?;
     
     // Create device metadata

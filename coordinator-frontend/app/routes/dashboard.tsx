@@ -285,7 +285,6 @@ export default function Dashboard() {
       innerProps: {
         device,
         categories,
-        coordinatorUrl
       },
     });
   }, [categories]);
@@ -400,6 +399,7 @@ export default function Dashboard() {
                   innerProps: {
                     categories,
                     actionData,
+                    coordinatorUrl
                   },
                 })}
             >

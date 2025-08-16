@@ -219,70 +219,7 @@ impl ServerConfigManager {
         Ok(settings.authorized_keys_sync_interval.unwrap_or(300))
     }
 
-    /// Create server configuration from CLI args and config file
-    pub async fn create_run_config(&mut self, 
-        cli_coordinator: Option<String>, 
-        cli_device_id: Option<String>,
-        cli_private_key: Option<PathBuf>,
-        config_file: Option<PathBuf>
-    ) -> Result<crate::RunConfig> {
-        let mut settings = self.load_settings().await?;
-        let mut settings_changed = false;
-        
-        // Load from config file if provided
-        if let Some(config_path) = &config_file {
-            if config_path.exists() {
-                let config_content = std::fs::read_to_string(config_path)
-                    .context("Failed to read configuration file")?;
-                let file_settings: ServerSettings = toml::from_str(&config_content)
-                    .context("Failed to parse configuration file")?;
-                
-                // Merge file settings with current settings
-                settings.coordinator_url = file_settings.coordinator_url;
-                settings.device_id = file_settings.device_id;
-                settings.private_key_path = file_settings.private_key_path;
-                settings.dangerously_use_http_coordinator = file_settings.dangerously_use_http_coordinator;
-                settings.ssh_inactivity_timeout = file_settings.ssh_inactivity_timeout;
-                settings.auth_rejection_time = file_settings.auth_rejection_time;
-                settings.max_concurrent_connections = file_settings.max_concurrent_connections;
-                settings.authorized_keys_sync_interval = file_settings.authorized_keys_sync_interval;
-                settings.enable_sftp = file_settings.enable_sftp;
-                settings.enable_port_forwarding = file_settings.enable_port_forwarding;
-                settings_changed = true;
-            }
-        }
-        
-        // Override with CLI args ONLY if provided
-        if let Some(coordinator) = &cli_coordinator {
-            settings.coordinator_url = coordinator.clone();
-            settings_changed = true;
-        }
-        
-        if let Some(device_id) = &cli_device_id {
-            settings.device_id = device_id.clone();
-            settings_changed = true;
-        }
-        
-        if let Some(private_key) = &cli_private_key {
-            settings.private_key_path = private_key.clone();
-            settings_changed = true;
-        }
-        
-        // Save updated settings (only if we made changes)
-        if settings_changed {
-            self.save_settings(&settings).await?;
-        }
-        
-        // Convert to RunConfig
-        Ok(crate::RunConfig {
-            coordinator: Url::parse(&settings.coordinator_url)
-                .context("Invalid coordinator URL")?,
-            id: settings.device_id,
-            private_key: settings.private_key_path,
-            config: None, // Config file has already been processed
-            dangerously_use_http_coordinator: settings.dangerously_use_http_coordinator,
-        })
-    }
+
 
     /// Validate configuration files
     pub async fn validate_config_files(&self) -> Result<()> {

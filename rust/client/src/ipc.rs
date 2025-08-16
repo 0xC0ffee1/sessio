@@ -1088,17 +1088,23 @@ impl ClientIpc for ClientIpcHandler {
         
         if let Some(device_list) = devices_json["devices"].as_array() {
             for device in device_list {
+                // Extract category names from category objects if present
+                let categories: Vec<String> = device
+                    .get("categories")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|c| c.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
                 let device_info = DeviceInfo {
                     device_id: device["device_id"].as_str().unwrap_or("Unknown").to_string(),
                     os_name: device["os_name"].as_str().unwrap_or("Unknown").to_string(),
-                    is_online: device["is_online"].as_bool().unwrap_or(false),
-                    categories: if let Some(cats) = device["categories"].as_array() {
-                        cats.iter()
-                            .filter_map(|c| c.as_str().map(|s| s.to_string()))
-                            .collect()
-                    } else {
-                        Vec::new()
-                    },
+                    // Keep is_online false here; CLI will read last_seen directly from coordinator
+                    is_online: false,
+                    categories,
                 };
                 devices.push(device_info);
             }
