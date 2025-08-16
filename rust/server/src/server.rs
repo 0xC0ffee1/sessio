@@ -122,7 +122,7 @@ struct PeerChangeMsg {
     pub old_ip: SocketAddr,
 }
 
-async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchService) {
+async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchService, host_key: russh::keys::ssh_key::PrivateKey) {
     let mut receiver: Receiver<Packet> = holepuncher.c_client.subscribe_to_packets().await;
     let mut sender = holepuncher.c_client.new_packet_sender();
 
@@ -163,26 +163,85 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                         Packet::ConnectTo(data) => {
                             log::info!("connect to received");
                             
-                            // Verify target public key against authorized_keys before connecting
-                            let authorized_keys = common::utils::keygen::read_authorized_keys(None).await.unwrap_or_else(|e| {
+                            // Verify cryptographic signature
+                            if !data.target_public_key.is_empty() && !data.signed_data.is_empty() && !data.signature.is_empty() {
+                                use russh::keys::parse_public_key_base64;
+                                use russh::keys::PublicKeyBase64;
+                                
+                                // Parse the sender's public key
+                                let sender_public_key = match parse_public_key_base64(&data.target_public_key) {
+                                    Ok(key) => key,
+                                    Err(e) => {
+                                        error!("Failed to parse sender public key: {}", e);
+                                        continue;
+                                    }
+                                };
+                                
+                                // Decode the signature
+                                use base64::{Engine, engine::general_purpose};
+                                let signature_pem = match general_purpose::STANDARD.decode(&data.signature) {
+                                    Ok(bytes) => bytes,
+                                    Err(e) => {
+                                        error!("Failed to decode signature: {}", e);
+                                        continue;
+                                    }
+                                };
+                                
+                                // Parse signature back to SshSig
+                                use russh::keys::ssh_key::SshSig;
+                                let signature = match SshSig::from_pem(&signature_pem) {
+                                    Ok(sig) => sig,
+                                    Err(e) => {
+                                        error!("Failed to parse signature: {}", e);
+                                        continue;
+                                    }
+                                };
+                                
+                                // Get our public key to verify the challenge contains our key
+                                let our_public_key = host_key.public_key().public_key_base64();
+                                
+                                // Verify the challenge format
+                                let expected_challenge = format!("CONNECTION:{}", our_public_key);
+                                if data.signed_data != expected_challenge {
+                                    error!("Invalid challenge format. Expected: {}, Got: {}", expected_challenge, data.signed_data);
+                                    continue;
+                                }
+                                
+                                // Verify the signature
+                                let signature_valid = sender_public_key.verify("sessio", data.signed_data.as_bytes(), &signature).is_ok();
+                                
+                                if !signature_valid {
+                                    error!("Signature verification failed - connection denied");
+                                    continue;
+                                }
+
+                                // Then we check that the public key is authorized
+
+                                let authorized_keys = common::utils::keygen::read_authorized_keys(None).await.unwrap_or_else(|e| {
                                     error!("Failed to read authorized_keys: {}", e);
                                     Vec::new()
                                 });
-                            
-                            // Parse the target public key and check if it's authorized
-                            let is_authorized = match russh::keys::parse_public_key_base64(&data.target_public_key) {
-                                Ok(target_key) => authorized_keys.contains(&target_key),
-                                Err(e) => {
-                                    error!("Failed to parse target public key: {}", e);
-                                    false
+
+                                let is_authorized = match parse_public_key_base64(&data.target_public_key) {
+                                    Ok(target_key) => authorized_keys.contains(&target_key),
+                                    Err(e) => {
+                                        error!("Failed to parse target public key: {}", e);
+                                        false
+                                    }
+                                };
+
+                                if !is_authorized {
+                                    warn!("Connection denied: target public key {} not found in authorized_keys", data.target_public_key);
+                                    continue;
                                 }
-                            };
-                            
-                            if !is_authorized {
-                                warn!("Connection denied: target public key {} not found in authorized_keys", data.target_public_key);
+
+                                info!("Cryptographic signature verified successfully");
+                            }
+                            else {
+                                error!("Connection denied: Signature missing");
                                 continue;
                             }
-                            
+
                             info!("Target public key verified, attempting connection");
                             match endpoint.connect(data.target, "client") {
                                 Ok(_) => {
@@ -192,6 +251,41 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                                     info!("Connection failed: {}", e);
                                 }
                             }
+                            // Generate crypto fields for ServerConnectionRequest
+                            let (our_public_key_base64, signed_data, signature) = {
+                                use russh::keys::PublicKeyBase64;
+                                
+                                // Get our public key in base64 format
+                                let our_public_key_base64 = host_key.public_key().public_key_base64();
+                                
+                                // Create challenge: CONNECTION:<client_public_key>
+                                let challenge = format!("CONNECTION:{}", data.target_public_key);
+                                
+                                // Sign the challenge
+                                use russh::keys::ssh_key::HashAlg;
+                                let signature = match host_key.sign("sessio", HashAlg::default(), challenge.as_bytes()) {
+                                    Ok(sig) => sig,
+                                    Err(e) => {
+                                        error!("Failed to sign challenge: {}", e);
+                                        continue;
+                                    }
+                                };
+                                
+                                // Convert signature to base64
+                                use base64::{Engine, engine::general_purpose};
+                                use russh::keys::ssh_key::LineEnding;
+                                let signature_pem = match signature.to_pem(LineEnding::LF) {
+                                    Ok(pem) => pem,
+                                    Err(e) => {
+                                        error!("Failed to serialize signature: {}", e);
+                                        continue;
+                                    }
+                                };
+                                let signature_b64 = general_purpose::STANDARD.encode(&signature_pem);
+                                
+                                (our_public_key_base64, challenge, signature_b64)
+                            };
+                            
                             let _ = sender
                                 .send(ServerPacket {
                                     base: Some(PacketBase {
@@ -200,6 +294,9 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
                                     }),
                                     packet: Packet::ServerConnectionRequest(ServerConnectionRequest {
                                         session_id: data.session_id,
+                                        public_key_base64: our_public_key_base64,
+                                        signed_data,
+                                        signature,
                                     }),
                                 })
                                 .await;
@@ -216,7 +313,7 @@ async fn listen_to_coordinator(endpoint: Endpoint, mut holepuncher: HolepunchSer
     });
 }
 
-pub async fn run(opt: crate::RunConfig) {
+pub async fn run() {
     let mut builder = env_logger::Builder::from_default_env();
     if cfg!(debug_assertions) {
         // Debug mode
@@ -247,7 +344,9 @@ pub async fn run(opt: crate::RunConfig) {
     info!("Using device ID: {}", device_id);
     
     // Load host key from settings
-    let host_key = load_host_key(&settings.private_key_path).unwrap();
+    let host_key = load_host_key(dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".sessio").join(settings.private_key_path)).unwrap();
     
     // Get coordinator URL from settings
     let coordinator_url = config_manager.get_coordinator_url().await
@@ -269,6 +368,7 @@ pub async fn run(opt: crate::RunConfig) {
         keys: vec![host_key.clone()],
         ..Default::default()
     };
+
     let sock_v6 = UdpSocket::bind::<SocketAddr>("[::]:0".parse().unwrap())
         .await
         .unwrap();
@@ -317,7 +417,7 @@ pub async fn run(opt: crate::RunConfig) {
         jwt_token.clone(),
     ).await;
     
-    listen_to_coordinator(endpoint_v6.clone(), holepuncher).await;
+    listen_to_coordinator(endpoint_v6.clone(), holepuncher, host_key.clone()).await;
 
     let config = Arc::new(config);
 

@@ -402,8 +402,21 @@ impl Client {
             bail!("Coordinator not initialized!");
         };
 
+        // Prepare crypto parameters for authentication
+        let private_key_path = self.data_folder_path.join("keys/id_ed25519");
+        let private_key_path_str = Some(private_key_path.to_string_lossy().to_string());
+        
+        // Try to get target's public key from known_hosts
+        let target_public_key = self.get_target_public_key(&target_id).await;
+        
         coordinator
-            .attempt_holepunch(target_id.clone(), coordinator.c_client.token.clone(), conn_tx)
+            .attempt_holepunch(
+                target_id.clone(), 
+                coordinator.c_client.token.clone(), 
+                conn_tx,
+                private_key_path_str,
+                target_public_key
+            )
             .await?;
 
         Ok(true)
@@ -413,6 +426,29 @@ impl Client {
         let private_key_path = path.join("keys/id_ed25519");
         let res = load_secret_key(private_key_path, None)?;
         Ok(res)
+    }
+    
+    // Get target's public key from known_hosts
+    async fn get_target_public_key(&self, target_id: &str) -> Option<String> {
+        use common::utils::keygen::read_known_hosts_with_filter;
+            
+        // Read known_hosts for the specific target device
+        match read_known_hosts_with_filter(None, Some(target_id)).await {
+            Ok(keys) => {
+                if !keys.is_empty() {
+                    // Get the first key and convert to base64
+                    use russh::keys::PublicKeyBase64;
+                    Some(keys[0].public_key_base64())
+                } else {
+                    warn!("No known_hosts entry found for target: {}", target_id);
+                    None
+                }
+            }
+            Err(e) => {
+                warn!("Failed to read known_hosts for target {}: {}", target_id, e);
+                None
+            }
+        }
     }
 
     pub fn session_exists(&self, session_id: &str) -> bool {
@@ -538,7 +574,7 @@ impl client::Handler for ClientHandler {
     ) -> impl std::future::Future<Output = Result<bool, Self::Error>> + Send {
         async move {
         let host = &self.server_id;
-        let port = 0;
+        let port = 22;
 
         let is_known_res = check_known_hosts_path(
             host,

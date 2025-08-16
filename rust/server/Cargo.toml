@@ -36,6 +36,7 @@ homedir = "0.3.3"
 
 serde_json = "1.0.118"
 reqwest = { version = "0.11", features = ["json"] }
+base64 = "0.21"
 
 russh-sftp = "2.0.3"
 

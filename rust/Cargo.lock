@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "dirs",
@@ -4389,7 +4389,7 @@ dependencies = [
 
 [[package]]
 name = "sessio-cli"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "android_logger",
  "anyhow",
@@ -4439,7 +4439,7 @@ dependencies = [
 
 [[package]]
 name = "sessio-clientd"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "android_logger",
  "anyhow",
@@ -4480,7 +4480,7 @@ dependencies = [
 
 [[package]]
 name = "sessio-coordinator"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -4517,7 +4517,7 @@ dependencies = [
 
 [[package]]
 name = "sessio-coordinator-common"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -4529,6 +4529,7 @@ dependencies = [
  "p256",
  "quinn",
  "reqwest",
+ "russh",
  "serde",
  "serde_json",
  "sha2",
@@ -4537,15 +4538,17 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.21.0",
  "url",
+ "uuid",
  "webauthn-rs",
 ]
 
 [[package]]
 name = "sessio-server"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.21.7",
  "clap",
  "common",
  "dirs",

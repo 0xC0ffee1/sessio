@@ -61,6 +61,9 @@ pub struct UpdateIp {
 pub struct NewSession {
     pub target_id: String,
     pub session_id: String,
+    pub public_key_base64: String,
+    pub signed_data: String,
+    pub signature: String,
 }
 
 ///Client-bound
@@ -76,6 +79,9 @@ pub struct NewChannelRequest {}
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct ServerConnectionRequest {
     pub session_id: String,
+    pub public_key_base64: String,
+    pub signed_data: String,
+    pub signature: String,
 }
 
 ///Client-bound
@@ -100,6 +106,8 @@ pub struct ConnectTo {
     pub target: SocketAddr,
     pub session_id: String,
     pub target_public_key: String, // Ed25519 public key for verification
+    pub signed_data: String,
+    pub signature: String,
 }
 
 ///Client-bound
