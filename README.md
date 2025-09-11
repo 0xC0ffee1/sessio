@@ -1,6 +1,4 @@
-# Sessio - P2P SSH
-
-Cross-platform SSH 2.0 over QUIC client and server, written in Rust.
+# Sessio - P2P Shells
 
 ## Table of contents
 
