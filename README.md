@@ -53,9 +53,9 @@ Sessio requires a Coordinator server. The Coordinator provides rendezvous, devic
   - Initiate P2P SSH sessions via Sessio (client CLI or integrations). Traffic flows directly between peers; the Coordinator never relays user traffic.
 
 ### Security Model (Zero Trust)
-- The Coordinator stores device metadata and enforces authorization but is not trusted to act for devices.
 - Each device must be explicitly authorized (signed) by the account owner’s passkey before it can participate.
-- Device authorization is distrubuted as signed keys (e.g., for `authorized_keys` and known hosts) and is verified locally on each device.
+- Devices will fetch the latest signed keys from the coordinator and cryptographically verify them locally against your passkey that was stored on the device during installation.
+- Verified keys are written to the generated authorized_keys (servers) and known_hosts (clients) file, that the ssh protocol will then use for validation.
 
 ## CLI Usage
 
