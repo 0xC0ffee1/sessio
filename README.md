@@ -45,11 +45,9 @@ Sessio requires a Coordinator server. The Coordinator provides rendezvous, devic
 
 ### Setup Flow
 - **Create account:** Open the Coordinator web UI and register/sign in using your passkey (WebAuthn).
-- **Add device:** In the UI, create an install key for each device you want to connect.
-- **Install on device:** Install the Sessio components (client daemon and/or server) and provide:
-  - The Coordinator URL
-  - The install key for that device
-- **Authorize device:** In the Coordinator web UI, select the new device and “Sign” it using your passkey. This authorizes the device for use under your account.
+- **Add device:** In the UI, create the install command for each device you want to connect.
+- **Install on device:** Execute the generated command on the target device.
+- **Authorize device:** In the Coordinator web UI, select the new device and “Sign” it using your passkey. This will make other devices under your account trust the new device.
 - **Use Sessio:**
   - Devices will periodically heartbeat to the Coordinator.
   - Initiate P2P SSH sessions via Sessio (client CLI or integrations). Traffic flows directly between peers; the Coordinator never relays user traffic.
