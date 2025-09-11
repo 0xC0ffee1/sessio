@@ -1,4 +1,4 @@
-# Sessio - P2P Shells
+# Sessio
 
 ## Table of contents
 
