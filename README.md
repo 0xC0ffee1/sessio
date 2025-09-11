@@ -55,7 +55,7 @@ Sessio requires a Coordinator server. The Coordinator provides rendezvous, devic
 ### Security Model (Zero Trust)
 - Each device must be explicitly authorized (signed) by the account owner’s passkey before it can participate.
 - Devices will fetch the latest signed keys from the coordinator and cryptographically verify them locally against your passkey that was stored on the device during installation.
-- Verified keys are written to the generated authorized_keys (servers) and known_hosts (clients) file, that the ssh protocol will then use for validation.
+- Verified keys are written to the generated authorized_keys (servers) and known_hosts (clients) file, which the ssh protocol will then use.
 
 ## CLI Usage
 
